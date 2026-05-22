@@ -1,0 +1,42 @@
+Metadata-Version: 2.4
+Name: cicada-platform
+Version: 0.2.0
+Summary: Modular async runtime platform for Cicada Studio constructor
+License: MIT
+Requires-Python: >=3.12
+Description-Content-Type: text/markdown
+Requires-Dist: pydantic>=2.10
+Requires-Dist: fastapi>=0.115
+Requires-Dist: uvicorn[standard]>=0.34
+Requires-Dist: httpx>=0.28
+Requires-Dist: structlog>=24.4
+Provides-Extra: redis
+Requires-Dist: redis>=5.2; extra == "redis"
+Provides-Extra: postgres
+Requires-Dist: asyncpg>=0.30; extra == "postgres"
+Requires-Dist: sqlalchemy[asyncio]>=2.0; extra == "postgres"
+Provides-Extra: telegram
+Requires-Dist: httpx>=0.28; extra == "telegram"
+Provides-Extra: dev
+Requires-Dist: pytest>=8.3; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.25; extra == "dev"
+Requires-Dist: ruff>=0.9; extra == "dev"
+Provides-Extra: all
+Requires-Dist: cicada-platform[dev,postgres,redis,telegram]; extra == "all"
+
+# Cicada Platform
+
+Modular, event-driven runtime for the Cicada Studio visual constructor.
+
+- **Legacy runtime** (`cic-st-core/cicada/`) remains the production path until migration completes.
+- **This package** is the new architecture: DSL → AST → IR → async executor, transport plugins, sandbox workers.
+
+Quick start:
+
+```bash
+cd platform
+pip install -e ".[dev,telegram]"
+cicada-platform serve --reload
+```
+
+See `docs/ARCHITECTURE.md` for structure, execution flow, and migration plan.

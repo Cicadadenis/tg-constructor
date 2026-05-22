@@ -1,0 +1,17 @@
+issues: 16
+321 [mojibake]         Р—Р°РіСЂСѓР·РєР° Р°РґРјРёРЅРєРё...
+1333 [mojibake_emoji]         : `вњЁ AI СЃРіРµРЅРµСЂРёСЂРѕРІР°Р» СЃС…РµРјСѓ Р±РѕС‚Р°!${options.aiConfidenceLabel ? ` AI confidence: ${options.aiConfidenceLabel}` 
+2972 [mojibake_emoji]                 <div style={{ display:'inline-flex', alignItems:'center', gap:6, border:'1px solid rgba(251,191,36,0.35)', borderRadius:999,
+2974 [mojibake]                   Р—Р°РїСѓСЃС‚Рё<br/>РєСЂР°СЃРёРІРѕРіРѕ Р±РѕС‚Р°<br/><span style={{ color:'#fbbf24' }}>Р·Р° РІРµС‡РµСЂ</span>
+2980 [mojibake]                   <button className="lp-btn-gold" onClick={openRegister} style={{ borderRadius:10, padding:'11px 22px', fontSize:14 }}>РќР°С
+3136 [mojibake]               <h2 style={{ fontFamily:'Syne,system-ui', fontWeight:800, fontSize: lp ? 28 : 38, marginBottom:40, lineHeight:1.15 }}>Р—Р°РїСѓ
+3154 [mojibake]             <p style={{ color:'rgba(255,255,255,0.55)', fontSize: lp ? 13 : 15, marginBottom:40 }}>РќР°С‡РЅРё Р±РµСЃРїР»Р°С‚РЅРѕ Рё РјР°СЃС€
+3164 [mojibake]                 <button className="lp-btn-ghost" onClick={openRegister} style={{ width:'100%', marginTop:16, padding:'11px', borderRadius:9,
+3194 [mojibake]               <button className="lp-btn-gold" onClick={openRegister} style={{ borderRadius:10, padding:'14px 28px', fontSize:15 }}>РќР°С‡Р°С
+4152 [mojibake]                       Р—Р°РїСѓС‰РµРЅ Р°РІР°СЂРёР№РЅС‹Р№ СЂРµР¶РёРј (Р±РµР· AI Р»РѕРіРёРєРё)
+4263 [mojibake]                     emptyText="Р—Р°РїСѓС‰РµРЅР° Р±Р°Р·РѕРІР°СЏ РІРµСЂСЃРёСЏ СЃС†РµРЅР°СЂРёСЏ (Р±РµР· СЃР»РѕР¶РЅРѕР№ Р»РѕРіРёРєРё)."
+4492 [mojibake_emoji]                 вњЁ
+5429 [mojibake]                 aria-label="Р—Р°РєСЂС‹С‚СЊ"
+5747 [mojibake]               aria-label="Р—Р°РєСЂС‹С‚СЊ"
+5899 [mojibake]               Р—Р°РєСЂС‹С‚СЊ
+5990 [mojibake]               Р—Р°РєСЂС‹С‚СЊ

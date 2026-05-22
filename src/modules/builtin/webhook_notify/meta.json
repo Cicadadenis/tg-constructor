@@ -1,0 +1,6 @@
+{
+  "id": "webhook_notify",
+  "name": "Webhook — отправка уведомления",
+  "desc": "Отправляет событие во внешний сервис (n8n, Make, Zapier)",
+  "category": "🌐 HTTP и внешние API"
+}

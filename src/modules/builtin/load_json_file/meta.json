@@ -1,0 +1,6 @@
+{
+  "id": "load_json_file",
+  "name": "Загрузка JSON-файла",
+  "desc": "Читает JSON-файл с диска в переменную",
+  "category": "📁 Файлы и JSON"
+}

@@ -1,0 +1,1725 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <title>ESPHome Конструктор Для Интеграции с Home Assistant – 2026</title>
+  
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-okaidia.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="dashboard.css" />
+  <link rel="stylesheet" href="/flash/flash-dialog.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script>
+  (function () {
+    var rt = location.pathname + location.search;
+    var login = '/?login=1&returnTo=' + encodeURIComponent(rt);
+    fetch('/api/auth/oauth-bootstrap', { credentials: 'same-origin', cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { if (!d || !d.ok) location.replace(login); })
+      .catch(function () { location.replace(login); });
+  })();
+  </script>
+  <script src="studio-subscription.js" defer></script>
+  <script src="esp-access.js" defer></script>
+  <script src="firmware-tools.js" defer></script>
+  <script src="build-progress.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+</head>
+<body data-theme="dark">
+<div class="cicada-ambient" aria-hidden="true">
+  <div class="glow glow-amber"></div>
+  <div class="glow glow-blue"></div>
+  <div class="glow glow-purple"></div>
+</div>
+
+<div class="app-shell">
+  <header class="app-bar">
+    <a class="btn-cicada" href="/" title="Cicada Studio" data-cicada-studio-home>
+      <i data-lucide="arrow-left-circle"></i>
+      <span>◈ Cicada Studio</span>
+    </a>
+    <div class="app-bar__right">
+      <a class="btn-jammer premium-locked has-premium-lock" id="jammerFlashLink" href="/flash/jammer/" rel="noopener noreferrer" title="Требуется подписка PRO от 14 дней" data-premium-kind="jammer" onclick="if(window.CicadaEspAccess){CicadaEspAccess.handlePremiumClick(event,'jammer');}return false;">
+        <i data-lucide="radio-tower"></i>
+        <span>Прошить ESP8266 · Глушилка</span>
+        <span class="premium-lock-badge" aria-hidden="true"><i data-lucide="lock"></i></span>
+      </a>
+      <div class="app-bar__brand">
+        <div class="app-bar__logo"><i data-lucide="cpu"></i></div>
+        <span>ESPHome <span style="opacity:.55;font-weight:500">Конструктор</span></span>
+      </div>
+    </div>
+  </header>
+
+  <header class="status-header" id="statusHeader">
+    <div class="status-card">
+      <div class="status-card__icon status-card__icon--offline" id="statusOnlineIcon"><i data-lucide="wifi-off"></i></div>
+      <div>
+        <p class="status-card__label">Статус</p>
+        <p class="status-card__value" id="statusOnline">Не в сети</p>
+        <p class="status-card__sub">Превью конфигурации</p>
+      </div>
+    </div>
+    <div class="status-card">
+      <div class="status-card__icon"><i data-lucide="clock"></i></div>
+      <div>
+        <p class="status-card__label">Uptime</p>
+        <p class="status-card__value" id="statusUptime">0с</p>
+        <p class="status-card__sub">Сессия конструктора</p>
+      </div>
+    </div>
+    <div class="status-card">
+      <div class="status-card__icon"><i data-lucide="wifi"></i></div>
+      <div style="flex:1;min-width:0">
+        <p class="status-card__label">Wi‑Fi</p>
+        <p class="status-card__value" id="statusWifiLabel" style="font-size:14px">Не настроено</p>
+        <div class="progress-bar"><div class="progress-bar__fill" id="statusWifiBar" style="width:0%"></div></div>
+      </div>
+    </div>
+  </header>
+
+  <main class="dashboard">
+    <!-- DEVICE STATUS -->
+    <section class="dash-section" id="section-device">
+      <div class="dash-section__head"><i data-lucide="activity"></i><h2>Устройство</h2></div>
+      <div class="dash-grid">
+        <div class="glass-card col-8">
+          <h3 class="glass-card__title"><i data-lucide="settings"></i> Основные настройки</h3>
+          <div class="board-layout">
+            <div>
+              <div class="field">
+                <label for="devName">Имя устройства *</label>
+                <input type="text" id="devName" name="devName" value="" inputmode="latin" autocomplete="off" oninput="sanitizeDeviceName()" />
+                <p class="hint">a-z, 0-9, дефис, подчёркивание</p>
+              </div>
+              <div class="field">
+                <label for="board">Плата</label>
+                <select id="board" name="board" onchange="updatePins()">
+                  <option value="nodemcuv2" selected>NodeMCU v2 (ESP8266)</option>
+                  <option value="d1_mini">Wemos D1 mini</option>
+                  <option value="esp32dev" data-esp32="true">ESP32 DevKit</option>
+                </select>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label for="ssid">Wi‑Fi SSID *</label>
+                  <input type="text" id="ssid" name="ssid" value="" autocomplete="off" />
+                </div>
+                <div class="field">
+                  <label for="wifiPass">Wi‑Fi пароль *</label>
+                  <input type="password" id="wifiPass" name="wifiPass" value="" autocomplete="off" />
+                </div>
+              </div>
+              <p class="hint hint--wifi">Только Wi‑Fi <strong>2,4&nbsp;GHz</strong>. Сети 5&nbsp;GHz не поддерживаются.</p>
+              <label class="check-field"><input type="checkbox" id="useOta" name="useOta" onchange="toggleOtaFields()"> OTA-обновления</label>
+              <div id="otaFields" class="field"><label for="otaPass">Пароль OTA *</label><input type="password" id="otaPass" name="otaPass" value="" autocomplete="new-password" /></div>
+              <label class="check-field"><input type="checkbox" id="useMqtt" name="useMqtt" onchange="toggleMqttFields()"> MQTT</label>
+              <div id="mqttFields">
+                <div class="field"><label for="mqttHost">Адрес MQTT *</label><input type="text" id="mqttHost" name="mqttHost" placeholder="192.168.1.100" autocomplete="off" /></div>
+                <div class="field-row">
+                  <div class="field"><label for="mqttPort">Порт</label><input type="text" id="mqttPort" name="mqttPort" value="1883" inputmode="numeric" /></div>
+                  <div class="field"><label for="mqttUsername">Логин *</label><input type="text" id="mqttUsername" name="mqttUsername" value="" autocomplete="username" /></div>
+                </div>
+                <div class="field"><label for="mqttPassword">Пароль *</label><input type="password" id="mqttPassword" name="mqttPassword" value="" autocomplete="off" /></div>
+              </div>
+              <label class="check-field"><input type="checkbox" id="useWebServer" name="useWebServer" checked onchange="toggleWebFields()"> Веб-интерфейс</label>
+              <div id="webFields">
+                <div class="field-row">
+                  <div class="field"><label for="webPort">Порт</label><input type="number" id="webPort" name="webPort" value="80" min="1" max="65535" /></div>
+                  <div class="field"><label for="webTheme">Тема</label>
+                    <select id="webTheme" name="webTheme" onchange="toggleWebTheme()">
+                      <option value="default">Стандарт</option>
+                      <option value="cicada_dark">Cicada Dark</option>
+                      <option value="cicada_light">Cicada Light</option>
+                    </select>
+                  </div>
+                </div>
+                <div id="webCssNote" style="display:none;margin-top:12px;padding:12px;border-radius:8px;border:1px solid var(--glass-border)">
+                  <label for="webCssUrl">CSS URL для <code>css_url</code></label>
+                  <input type="url" id="webCssUrl" name="webCssUrl" value="http://homeassistant.local:8123/local/cicada_web.css" autocomplete="off" />
+                  <button type="button" class="btn btn-secondary btn-small" onclick="downloadWebCss()" style="margin-top:8px"><i data-lucide="palette"></i> Скачать CSS</button>
+                </div>
+              </div>
+            </div>
+            <div class="glass-card" style="padding:12px">
+              <h3 class="glass-card__title" style="font-size:14px"><i data-lucide="circuit-board"></i> Распиновка</h3>
+              <p class="hint" id="pinoutCaption">NodeMCU v2</p>
+              <div class="pinout-frame"><img id="boardPinoutImage" alt="Распиновка" /></div>
+              <a id="boardDriverLink" class="btn btn-secondary btn-small" style="margin-top:8px;width:100%" href="#" target="_blank" rel="noopener"><i data-lucide="download"></i> <span id="boardDriverText">Драйвер</span></a>
+              <p class="hint" id="boardDriverNote"></p>
+            </div>
+          </div>
+        </div>
+        <div class="glass-card col-4">
+          <h3 class="glass-card__title"><i data-lucide="network"></i> Шины & GPIO</h3>
+          <div class="chips" id="busStatus"></div>
+          <div class="metric-row" id="busMetrics"></div>
+          <div class="status-box" id="busDetails"></div>
+          <div class="chips" id="gpioHealth" style="margin-top:12px"></div>
+          <div class="status-box" id="gpioWarnings"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SENSORS -->
+    <section class="dash-section" id="section-sensors">
+      <div class="dash-section__head"><i data-lucide="gauge"></i><h2>Датчики</h2></div>
+      <div class="dash-grid">
+        <div class="glass-card col-4">
+          <h3 class="glass-card__title"><i data-lucide="plus-circle"></i> Добавить датчик</h3>
+          <div class="sensor-toolbar">
+            <label class="field-label-sr" for="sensorSearch">Поиск датчиков</label>
+            <div class="sensor-search">
+              <i data-lucide="search"></i>
+              <input type="search" id="sensorSearch" name="sensorSearch" placeholder="Поиск..." autocomplete="off" />
+            </div>
+            <label class="toggle-chip"><input type="checkbox" id="onlyCompatible" name="onlyCompatible" /> <span>Совместимые</span></label>
+          </div>
+          <div class="sensor-picker">
+            <label class="field-label-sr" for="compType">Каталог датчиков</label>
+            <select id="compType" name="compType" size="8"></select>
+          </div>
+          <p class="hint sensor-count" id="sensorCountHint"></p>
+          <div class="pin-panel">
+            <span class="pin-panel__title"><i data-lucide="plug"></i> Пины</span>
+            <div id="pinSelectors" class="pin-selectors"></div>
+          </div>
+          <p class="hint pin-hint" id="pinHint"></p>
+          <div class="inline-actions">
+            <button type="button" class="btn btn-secondary btn-small" onclick="autoPickPin()">Авто-пин</button>
+            <button type="button" class="btn btn-primary" onclick="addComponent()">Добавить</button>
+          </div>
+        </div>
+        <div class="glass-card col-8">
+          <h3 class="glass-card__title"><i data-lucide="layers"></i> Назначенные датчики</h3>
+          <div id="assigned"></div>
+          <h3 class="glass-card__title" style="margin-top:20px"><i data-lucide="grid-3x3"></i> GPIO карта</h3>
+          <p class="hint">Зелёный — занят, оранжевый — boot, серый — свободен</p>
+          <div id="fritzingView" class="pin-board"></div>
+        </div>
+      </div>
+    </section>
+
+    <div id="esp-premium-banner" class="esp-premium-banner" hidden aria-live="polite"></div>
+
+    <!-- CONTROLS -->
+    <section class="dash-section" id="section-controls">
+      <div class="dash-section__head"><i data-lucide="sliders-horizontal"></i><h2>Действия</h2></div>
+      <div class="dash-grid">
+        <div class="glass-card col-12">
+          <div class="actions-bar">
+            <button type="button" class="btn btn-primary" onclick="generate()"><i data-lucide="refresh-cw"></i> Сгенерировать YAML</button>
+            <button type="button" class="btn btn-secondary" onclick="download()"><i data-lucide="download"></i> Скачать</button>
+            <button type="button" class="btn btn-build premium-locked has-premium-lock" id="buildBinBtn" onclick="buildFirmwareBin()" title="Требуется подписка PRO от 14 дней"><i data-lucide="package"></i> Собрать bin<span class="premium-lock-badge" aria-hidden="true"><i data-lucide="lock"></i></span></button>
+            <button type="button" class="btn btn-flash" id="flashBtn" onclick="flashBoard()"><i data-lucide="cpu"></i> Прошить ESP</button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- LOGS -->
+    <section class="dash-section" id="section-logs">
+      <div class="dash-section__head"><i data-lucide="scroll-text"></i><h2>Журнал</h2></div>
+      <div class="dash-grid">
+        <div class="glass-card col-6">
+          <h3 class="glass-card__title"><i data-lucide="terminal"></i> События</h3>
+          <div class="log-stream" id="activityLog"></div>
+        </div>
+        <div class="glass-card col-6" id="yamlCard" style="display:none">
+          <div class="yaml-head">
+            <h3 class="glass-card__title"><i data-lucide="file-code"></i> YAML</h3>
+            <button type="button" class="btn btn-secondary btn-small" id="copyYamlBtn" onclick="copyYaml()"><i data-lucide="copy"></i></button>
+          </div>
+          <pre><code id="yaml" class="language-yaml"></code></pre>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="author-footer">
+    Автор: <a class="author-link" href="https://github.com/Cicadadenis" target="_blank" rel="noopener">꧁༺𝓒𝓲𝓬𝓪𝓭𝓪3301༻꧂</a>
+  </footer>
+</div>
+
+
+<div class="build-progress-overlay flash-overlay" id="buildProgressOverlay" hidden aria-hidden="true">
+  <div class="flash-dialog" id="buildProgressModal" data-accent="green" role="dialog" aria-modal="true" aria-labelledby="buildProgressTitle" data-state="running">
+    <header class="flash-dialog__head">
+      <h2 id="buildProgressTitle">Сборка прошивки</h2>
+      <span class="build-dialog__chip" id="buildProgressChip">ESPHome</span>
+    </header>
+    <div class="flash-dialog__body">
+      <p class="build-dialog__hint" id="buildProgressHint">Не закрывайте вкладку до завершения.</p>
+      <div id="buildProgressRingBlock">
+        <div class="flash-ring-wrap">
+          <svg class="flash-ring" viewBox="0 0 120 120" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="buildProgressBar">
+            <circle class="flash-ring__orbit" cx="60" cy="60" r="54" />
+            <circle class="flash-ring__track" cx="60" cy="60" r="52" />
+            <circle class="flash-ring__glow" id="buildProgressGlow" cx="60" cy="60" r="52" />
+            <circle class="flash-ring__fill" id="buildProgressRing" cx="60" cy="60" r="52" />
+          </svg>
+          <div class="flash-ring__center">
+            <span class="flash-ring__pct" id="buildProgressPct">0%</span>
+            <span class="flash-ring__stage" id="buildProgressStage">Подготовка…</span>
+          </div>
+        </div>
+      </div>
+      <ul class="build-dialog__steps" id="buildProgressSteps">
+        <li data-step="upload"><span class="build-step__dot"></span>Отправка YAML на сервер</li>
+        <li data-step="validate"><span class="build-step__dot"></span>Валидация конфигурации</li>
+        <li data-step="compile"><span class="build-step__dot"></span>Компиляция (PlatformIO)</li>
+        <li data-step="publish"><span class="build-step__dot"></span>Публикация firmware.bin</li>
+      </ul>
+      <div class="build-progress-terminal esptool-terminal" id="buildProgressTerminal" aria-live="polite" aria-label="Лог сборки"></div>
+    </div>
+    <footer class="flash-dialog__foot build-dialog__foot" id="buildProgressActions" hidden>
+      <button type="button" id="buildProgressCloseBtn" hidden>Закрыть</button>
+      <button type="button" id="buildProgressDownloadBtn" hidden><i data-lucide="download"></i> Скачать bin</button>
+      <button type="button" class="flash-btn--primary" id="buildProgressFlashBtn" hidden><i data-lucide="cpu"></i> Прошить</button>
+    </footer>
+  </div>
+</div>
+
+<div class="premium-overlay" id="premiumOverlay" aria-hidden="true">
+  <div class="premium-modal" role="dialog" aria-modal="true" aria-labelledby="premiumModalTitle">
+    <div class="premium-modal__icon" aria-hidden="true"><i data-lucide="lock"></i></div>
+    <h3 class="premium-modal__title" id="premiumModalTitle">Нужна подписка PRO</h3>
+    <p class="premium-modal__text" id="premiumModalText"></p>
+    <div class="premium-modal__actions">
+      <button type="button" class="btn btn-secondary btn-small" onclick="CicadaEspAccess.closePremiumModal()">Закрыть</button>
+      <a class="btn btn-primary btn-small" id="premiumModalBuyBtn" href="/" target="_blank" rel="noopener noreferrer">Купить</a>
+    </div>
+  </div>
+</div>
+
+<div class="notice-overlay" id="noticeOverlay" onclick="if(event.target===this) closeNotice()">
+  <div class="notice-modal" role="dialog" aria-modal="true" aria-labelledby="noticeTitle">
+    <h3 class="notice-title" id="noticeTitle">Внимание</h3>
+    <ul class="notice-list" id="noticeList"></ul>
+    <div class="notice-actions">
+      <button type="button" class="btn-secondary btn-small notice-close" onclick="closeNotice()">ОК</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function toggleMqttFields() {
+  const useMqtt = document.getElementById("useMqtt");
+  const mqttFields = document.getElementById("mqttFields");
+  mqttFields.style.display = useMqtt.checked ? "block" : "none";
+}
+
+function toggleWebFields() {
+  const useWeb = document.getElementById("useWebServer");
+  const webFields = document.getElementById("webFields");
+  webFields.style.display = useWeb.checked ? "block" : "none";
+  if (!useWeb.checked) {
+    const note = document.getElementById("webCssNote");
+    if (note) note.style.display = "none";
+  }
+}
+
+function toggleWebTheme() {
+  const theme = document.getElementById("webTheme")?.value;
+  const note = document.getElementById("webCssNote");
+  if (note) note.style.display = (theme && theme !== "default") ? "block" : "none";
+}
+
+function generateWebCss(theme) {
+  const dark = theme !== "cicada_light";
+  const bg   = dark ? "linear-gradient(145deg,#081018 0%,#0d171e 50%,#121b22 100%)" : "linear-gradient(140deg,#d9e5dd 0%,#dce9e0 45%,#e5ece7 100%)";
+  const fg   = dark ? "#e5f3ea" : "#102218";
+  const h    = dark ? "#c8f5d6" : "#14532d";
+  const card = dark ? "rgba(16,27,24,0.88)" : "rgba(232,240,234,0.9)";
+  const brd  = dark ? "#30413a" : "rgba(174,191,177,0.9)";
+  const sh   = dark ? "rgba(0,0,0,0.3)" : "rgba(15,23,42,0.08)";
+  const g1   = dark ? "#22c55e" : "#16a34a";
+  const g2   = dark ? "#15803d" : "#166534";
+  const inp  = dark ? "rgba(12,22,20,0.94)" : "rgba(243,247,244,0.95)";
+  const nav  = dark ? "rgba(8,16,24,0.96)" : "rgba(228,237,231,0.92)";
+  const val  = dark ? "#86efac" : "#15803d";
+  const lnk  = dark ? "#38bdf8" : "#0284c7";
+  const pre  = dark ? "#050b14" : "#f1f5f0";
+  const preFg= dark ? "#86efac" : "#166534";
+  const scT  = dark ? "#0d1a14" : "#dde8df";
+  const label= dark ? "Cicada Dark" : "Cicada Light";
+  return [
+    "/* ===========================================",
+    "   " + label + " Theme for ESPHome Web Server",
+    "   Generated by ESPHome Constructor",
+    "   Author: Cicada3301 | github.com/Cicadadenis",
+    "   =========================================== */",
+    "",
+    "@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Space+Grotesk:wght@500;700&display=swap');",
+    "",
+    "*,*::before,*::after{box-sizing:border-box;}",
+    "",
+    "body{",
+    "  background:" + bg + " !important;",
+    "  color:" + fg + " !important;",
+    "  font-family:'Manrope','Segoe UI',sans-serif !important;",
+    "  margin:0 !important;",
+    "  min-height:100vh;",
+    "}",
+    "",
+    "h1,h2,h3,.title{",
+    "  font-family:'Space Grotesk',sans-serif !important;",
+    "  color:" + h + " !important;",
+    "}",
+    "",
+    "/* Cards / entity rows */",
+    ".card,.entity-row,.component-row,.row-entity,",
+    "div[class*='entity'],div[class*='row'],li.entity{",
+    "  background:" + card + " !important;",
+    "  border:1px solid " + brd + " !important;",
+    "  border-radius:14px !important;",
+    "  box-shadow:0 8px 24px " + sh + " !important;",
+    "  margin:8px 0 !important;",
+    "  padding:14px 16px !important;",
+    "  color:" + fg + " !important;",
+    "}",
+    "",
+    "/* Buttons */",
+    "button,.btn,input[type='button'],input[type='submit']{",
+    "  background:linear-gradient(135deg," + g1 + "," + g2 + ") !important;",
+    "  color:#fff !important;",
+    "  border:none !important;",
+    "  border-radius:10px !important;",
+    "  padding:10px 18px !important;",
+    "  font-family:'Space Grotesk',sans-serif !important;",
+    "  font-weight:700 !important;",
+    "  cursor:pointer !important;",
+    "  transition:transform .15s ease,opacity .15s ease !important;",
+    "}",
+    "button:hover{transform:translateY(-1px) !important;opacity:.9 !important;}",
+    "button.off-btn,button[class*='off'],button[data-active='false']{",
+    "  background:" + (dark ? "#162028" : "#e2e8f0") + " !important;",
+    "  color:" + (dark ? "#a0adb6" : "#334155") + " !important;",
+    "  border:1px solid " + brd + " !important;",
+    "}",
+    "",
+    "/* Inputs */",
+    "input[type='text'],input[type='number'],input[type='password'],select,textarea{",
+    "  background:" + inp + " !important;",
+    "  color:" + fg + " !important;",
+    "  border:1px solid " + brd + " !important;",
+    "  border-radius:10px !important;",
+    "  padding:8px 12px !important;",
+    "}",
+    "input[type='range']{accent-color:" + g1 + " !important;}",
+    "",
+    "/* Navbar */",
+    "nav,header,.navbar,.header,.topbar,.app-toolbar{",
+    "  background:" + nav + " !important;",
+    "  border-bottom:1px solid " + brd + " !important;",
+    "  padding:12px 20px !important;",
+    "  color:" + fg + " !important;",
+    "}",
+    "",
+    "/* Sensor values */",
+    ".value,.sensor-value,.state-value,.reading{",
+    "  color:" + val + " !important;",
+    "  font-weight:700 !important;",
+    "  font-size:1.05rem !important;",
+    "}",
+    "",
+    "/* Links */",
+    "a,a:visited{color:" + lnk + " !important;}",
+    "a:hover{color:" + (dark ? "#7dd3fc" : "#0369a1") + " !important;}",
+    "",
+    "/* Log / pre */",
+    "pre,.log,.console,code{",
+    "  background:" + pre + " !important;",
+    "  color:" + preFg + " !important;",
+    "  border:1px solid " + (dark ? "#1f3028" : "#bcc9bf") + " !important;",
+    "  border-radius:10px !important;",
+    "  padding:12px !important;",
+    "  font-size:.88rem !important;",
+    "  font-family:'Courier New',monospace !important;",
+    "}",
+    "",
+    "/* Scrollbars */",
+    "::-webkit-scrollbar{width:6px;height:6px;}",
+    "::-webkit-scrollbar-track{background:" + scT + ";}",
+    "::-webkit-scrollbar-thumb{background:" + g1 + ";border-radius:4px;}",
+    "::-webkit-scrollbar-thumb:hover{background:" + g2 + ";}"
+  ].join("\n");
+}
+
+function downloadWebCss() {
+  const theme = document.getElementById("webTheme")?.value || "cicada_dark";
+  const css = generateWebCss(theme);
+  const blob = new Blob([css], {type: "text/css"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "cicada_web.css";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function toggleOtaFields() {
+  const useOta = document.getElementById("useOta");
+  const otaFields = document.getElementById("otaFields");
+  otaFields.style.display = useOta.checked ? "block" : "none";
+}
+
+function sanitizeDeviceName() {
+  const input = document.getElementById("devName");
+  if (!input) return;
+
+  const cleaned = input.value
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[^a-z0-9_-]/g, "");
+
+  if (input.value !== cleaned) {
+    input.value = cleaned;
+  }
+}
+
+function applyTheme(theme) {
+  document.body.dataset.theme = "dark";
+  localStorage.setItem("esphomeTheme", "dark");
+}
+
+function toggleTheme() {
+  applyTheme("dark");
+}
+
+let noticeConfirmAction = null;
+
+function showNotice(title, message, options = {}) {
+  if (typeof appendDashboardLog === "function") appendDashboardLog(title + ": " + (typeof message === "string" ? message.split("\n")[0] : ""), "warn");
+  const overlay = document.getElementById("noticeOverlay");
+  const titleEl = document.getElementById("noticeTitle");
+  const listEl = document.getElementById("noticeList");
+  if (!overlay || !titleEl || !listEl) return;
+
+  noticeConfirmAction = typeof options.onConfirm === "function" ? options.onConfirm : null;
+
+  titleEl.textContent = title || "Внимание";
+  const lines = Array.isArray(message)
+    ? message
+    : String(message || "")
+        .split("\n")
+        .map(s => s.trim())
+        .filter(Boolean);
+
+  listEl.innerHTML = "";
+  if (!lines.length) {
+    const li = document.createElement("li");
+    li.textContent = "Проверьте введённые данные.";
+    listEl.appendChild(li);
+  } else {
+    lines.forEach(line => {
+      const li = document.createElement("li");
+      li.textContent = line.replace(/^•\s*/, "");
+      listEl.appendChild(li);
+    });
+  }
+
+  overlay.classList.add("open");
+}
+
+function closeNotice(confirmed = false) {
+  const overlay = document.getElementById("noticeOverlay");
+  if (overlay) overlay.classList.remove("open");
+
+  const action = confirmed ? noticeConfirmAction : null;
+  noticeConfirmAction = null;
+  if (action) action();
+}
+
+const components = [
+  {name:"Реле / Выключатель", type:"relay", category:"Реле и питание", icon:"power-socket-eu", protocol:"gpio", pinCount:1, pinLabels:["PIN"]},
+  {name:"Реле 2-канальное", type:"relay2", category:"Реле и питание", icon:"power-plug-battery", protocol:"gpio", pinCount:2, pinLabels:["CH1", "CH2"], template:`switch:\n  - platform: gpio\n    pin: {{pin1}}\n    name: "{{name}} CH1"\n  - platform: gpio\n    pin: {{pin2}}\n    name: "{{name}} CH2"`},
+  {name:"Реле 4-канальное", type:"relay4", category:"Реле и питание", icon:"power-plug-multiple", protocol:"gpio", pinCount:3, pinLabels:["CH1", "CH2", "CH3"], template:`switch:\n  - platform: gpio\n    pin: {{pin1}}\n    name: "{{name}} CH1"\n  - platform: gpio\n    pin: {{pin2}}\n    name: "{{name}} CH2"\n  - platform: gpio\n    pin: {{pin3}}\n    name: "{{name}} CH3"`},
+  {name:"MOSFET ключ", type:"mosfet", category:"Реле и питание", icon:"flash", protocol:"gpio", pinCount:1, pinLabels:["GATE"], template:`switch:\n  - platform: gpio\n    pin: {{pin}}\n    name: "{{name}}"`},
+  {name:"SSR Реле", type:"ssr", category:"Реле и питание", icon:"toggle-switch", protocol:"gpio", pinCount:1, pinLabels:["IN"], template:`switch:\n  - platform: gpio\n    pin: {{pin}}\n    name: "{{name}}"`},
+
+  {name:"DHT22 Темп+Влажность", type:"dht22", category:"Климат", icon:"home-thermometer", protocol:"gpio", pinCount:2, pinLabels:["DATA", "PWR_CTRL"]},
+  {name:"DHT11 Темп+Влажность", type:"dht11", category:"Климат", icon:"thermometer", protocol:"gpio", pinCount:1, pinLabels:["DATA"], template:`sensor:\n  - platform: dht\n    pin: {{pin}}\n    model: DHT11\n    temperature:\n      name: "{{name}} Температура"\n    humidity:\n      name: "{{name}} Влажность"\n    update_interval: 30s`},
+  {name:"DS18B20 Температура", type:"ds18b20", category:"Климат", icon:"thermometer", protocol:"onewire", pinCount:1, pinLabels:["DATA"]},
+  {name:"SHT3x Темп+Влажность", type:"sht3x", category:"Климат", icon:"water-percent", protocol:"i2c", pinCount:0, pinLabels:[]},
+  {name:"SHT4x Темп+Влажность", type:"sht4x", category:"Климат", icon:"water-thermometer", protocol:"i2c", pinCount:0, pinLabels:[]},
+  {name:"AHT10 Темп+Влажность", type:"aht10", category:"Климат", icon:"thermometer-water", protocol:"i2c", pinCount:0, pinLabels:[]},
+  {name:"AHT20 Темп+Влажность", type:"aht20", category:"Климат", icon:"water-check", protocol:"i2c", pinCount:0, pinLabels:[]},
+  {name:"BME280 Темп+Вл+Давление", type:"bme280", category:"Климат", icon:"weather-partly-snowy", protocol:"i2c", pinCount:0, pinLabels:[]},
+  {name:"BMP280 Давление+Темп", type:"bmp280", category:"Климат", icon:"gauge", protocol:"i2c", pinCount:0, pinLabels:[]},
+  {name:"BME680 (IAQ)", type:"bme680", category:"Климат", icon:"air-purifier", protocol:"i2c", pinCount:0, pinLabels:[]},
+  {name:"MCP9808 Температура", type:"mcp9808", category:"Климат", icon:"thermometer-lines", protocol:"i2c", pinCount:0, pinLabels:[]},
+  {name:"HDC2010 Темп+Влажность", type:"hdc2010", category:"Климат", icon:"thermometer-lines", protocol:"i2c", pinCount:0, pinLabels:[]},
+
+  {name:"MQ-4 Метан (ADC)", type:"mq4", category:"Газы и качество воздуха", icon:"gas-cylinder", protocol:"gpio", pinCount:1, pinLabels:["AOUT"]},
+  {name:"MQ-135 Воздух (ADC)", type:"mq135", category:"Газы и качество воздуха", icon:"air-filter", protocol:"gpio", pinCount:1, pinLabels:["AOUT"]},
+  {name:"SGP30 TVOC + eCO2", type:"sgp30", category:"Газы и качество воздуха", icon:"molecule", protocol:"i2c", pinCount:0, pinLabels:[]},
+  {name:"CCS811 VOC + eCO2", type:"ccs811", category:"Газы и качество воздуха", icon:"air-filter", protocol:"i2c", pinCount:0, pinLabels:[]},
+  {name:"SCD40/SCD41 CO2", type:"scd4x", category:"Газы и качество воздуха", icon:"molecule-co2", protocol:"i2c", pinCount:0, pinLabels:[]},
+  {name:"SCD30 CO2", type:"scd30", category:"Газы и качество воздуха", icon:"molecule-co2", protocol:"i2c", pinCount:0, pinLabels:[]},
+  {name:"MH-Z19 CO2", type:"mhz19", category:"Газы и качество воздуха", icon:"molecule-co2", protocol:"uart", pinCount:0, pinLabels:[]},
+  {name:"PMSx003 PM2.5/PM10", type:"pmsx003", category:"Газы и качество воздуха", icon:"weather-dust", protocol:"uart", pinCount:0, pinLabels:[]},
+  {name:"AQI с PM", type:"aqi", category:"Газы и качество воздуха", icon:"air-quality", protocol:"uart", pinCount:0, pinLabels:[]},
+
+  {name:"BH1750 Освещенность", type:"bh1750", category:"Свет и оптика", icon:"white-balance-sunny", protocol:"i2c", pinCount:0, pinLabels:[]},
+  {name:"VEML7700 Освещенность", type:"veml7700", category:"Свет и оптика", icon:"brightness-6", protocol:"i2c", pinCount:0, pinLabels:[]},
+  {name:"TSL2561 Освещенность", type:"tsl2561", category:"Свет и оптика", icon:"brightness-5", protocol:"i2c", pinCount:0, pinLabels:[]},
+  {name:"TSL2591 Освещенность", type:"tsl2591", category:"Свет и оптика", icon:"brightness-7", protocol:"i2c", pinCount:0, pinLabels:[]},
+  {name:"VL53L0X Расстояние (ToF)", type:"vl53l0x", category:"Свет и оптика", icon:"ruler", protocol:"i2c", pinCount:0, pinLabels:[]},
+  {name:"MAX30102 Пульс + SpO2", type:"max30102", category:"Свет и оптика", icon:"heart-pulse", protocol:"i2c", pinCount:0, pinLabels:[]},
+
+  {name:"PIR Движение", type:"pir", category:"Безопасность", icon:"walk", protocol:"gpio", pinCount:1, pinLabels:["OUT"]},
+  {name:"Дверной/магнитный", type:"door", category:"Безопасность", icon:"door", protocol:"gpio", pinCount:1, pinLabels:["IN"]},
+  {name:"Вибрация / Наклон", type:"vibration", category:"Безопасность", icon:"vibrate", protocol:"gpio", pinCount:1, pinLabels:["IN"]},
+  {name:"Кнопка", type:"button", category:"Безопасность", icon:"gesture-tap", protocol:"gpio", pinCount:1, pinLabels:["IN"]},
+  {name:"Концевик", type:"limit_switch", category:"Безопасность", icon:"toggle-switch-outline", protocol:"gpio", pinCount:1, pinLabels:["IN"], template:`binary_sensor:\n  - platform: gpio\n    pin: {{pin}}\n    name: "{{name}}"`},
+  {name:"Датчик протечки", type:"water_leak", category:"Безопасность", icon:"water-alert", protocol:"gpio", pinCount:1, pinLabels:["IN"], template:`binary_sensor:\n  - platform: gpio\n    pin: {{pin}}\n    name: "{{name}}"\n    device_class: moisture`},
+  {name:"Датчик дыма", type:"smoke", category:"Безопасность", icon:"smoke-detector", protocol:"gpio", pinCount:1, pinLabels:["IN"], template:`binary_sensor:\n  - platform: gpio\n    pin: {{pin}}\n    name: "{{name}}"\n    device_class: smoke`},
+
+  {name:"HC-SR04 Расстояние", type:"ultrasonic", category:"Дистанция и уровень", icon:"ruler", protocol:"gpio", pinCount:2, pinLabels:["TRIG", "ECHO"]},
+  {name:"JSN-SR04T Ультразвук", type:"ultrasonic_jsn", category:"Дистанция и уровень", icon:"waves-arrow-up", protocol:"gpio", pinCount:2, pinLabels:["TRIG", "ECHO"], template:`sensor:\n  - platform: ultrasonic\n    trigger_pin: {{pin1}}\n    echo_pin: {{pin2}}\n    name: "{{name}}"\n    update_interval: 15s`},
+  {name:"Уровень воды (аналог)", type:"water_level", category:"Дистанция и уровень", icon:"cup-water", protocol:"gpio", pinCount:1, pinLabels:["AOUT"], template:`sensor:\n  - platform: adc\n    pin: {{pin}}\n    name: "{{name}}"\n    update_interval: 10s`},
+  {name:"Влажность почвы", type:"soil", category:"Дистанция и уровень", icon:"water", protocol:"gpio", pinCount:1, pinLabels:["AOUT"]},
+
+  {name:"INA219 Ток+Напряжение", type:"ina219", category:"Энергомониторинг", icon:"current-ac", protocol:"i2c", pinCount:0, pinLabels:[]},
+  {name:"INA226 Ток+Напряжение", type:"ina226", category:"Энергомониторинг", icon:"sine-wave", protocol:"i2c", pinCount:0, pinLabels:[]},
+  {name:"PZEM-004T (AC)", type:"pzemac", category:"Энергомониторинг", icon:"transmission-tower", protocol:"uart", pinCount:0, pinLabels:[]},
+  {name:"PZEM-017 (DC)", type:"pzemdc", category:"Энергомониторинг", icon:"current-dc", protocol:"uart", pinCount:0, pinLabels:[]},
+  {name:"HLW8012 Мощность", type:"hlw8012", category:"Энергомониторинг", icon:"flash-triangle", protocol:"gpio", pinCount:3, pinLabels:["SEL", "CF", "CF1"], template:`sensor:\n  - platform: hlw8012\n    sel_pin:\n      number: {{pin1}}\n    cf_pin: {{pin2}}\n    cf1_pin: {{pin3}}\n    current:\n      name: "{{name}} Ток"\n    voltage:\n      name: "{{name}} Напряжение"\n    power:\n      name: "{{name}} Мощность"`},
+
+  {name:"LED PWM (димер)", type:"pwmled", category:"Свет и исполнительные", icon:"lightbulb-outline", protocol:"gpio", pinCount:1, pinLabels:["PWM"]},
+  {name:"WS2812B Адресная лента", type:"ws2812", category:"Свет и исполнительные", icon:"led-strip", protocol:"gpio", pinCount:1, pinLabels:["DIN"], template:`light:\n  - platform: neopixelbus\n    type: GRB\n    variant: WS2812\n    pin: {{pin}}\n    num_leds: 30\n    name: "{{name}}"`},
+  {name:"Сирена/Зуммер", type:"buzzer", category:"Свет и исполнительные", icon:"bullhorn", protocol:"gpio", pinCount:1, pinLabels:["SIG"], template:`output:\n  - platform: gpio\n    pin: {{pin}}\n    id: buzzer_out\n\nswitch:\n  - platform: output\n    output: buzzer_out\n    name: "{{name}}"`},
+  {name:"Серво SG90", type:"servo", category:"Свет и исполнительные", icon:"robot-industrial", protocol:"gpio", pinCount:1, pinLabels:["PWM"], template:`output:\n  - platform: {{pwm_platform}}\n    pin: {{pin}}\n    id: servo_pwm\n\nservo:\n  - id: my_servo\n    output: servo_pwm`},
+
+  {name:"MCP3221 ADC", type:"mcp3221", category:"Прочие", icon:"current-dc", protocol:"i2c", pinCount:0, pinLabels:[]},
+  {name:"ADS1115 ADC", type:"ads1115", category:"Прочие", icon:"chart-bell-curve", protocol:"i2c", pinCount:0, pinLabels:[]},
+  {name:"PCF8574 IO Expander", type:"pcf8574", category:"Прочие", icon:"expansion-card", protocol:"i2c", pinCount:0, pinLabels:[], template:`pcf8574:\n  - id: pcf_hub\n    address: 0x20`},
+  {name:"GPS NEO-6M", type:"gps", category:"Прочие", icon:"crosshairs-gps", protocol:"uart", pinCount:0, pinLabels:[]}
+];
+
+let assigned = [];
+let currentPins = [];
+
+const pinMapping = {
+  "GPIO0":  "GPIO0 (D3)",
+  "GPIO2":  "GPIO2 (D4)",
+  "GPIO4":  "GPIO4 (D2)",
+  "GPIO5":  "GPIO5 (D1)",
+  "GPIO12": "GPIO12 (D6)",
+  "GPIO13": "GPIO13 (D7)",
+  "GPIO14": "GPIO14 (D5)",
+  "GPIO15": "GPIO15 (D8)",
+  "GPIO16": "GPIO16 (D0)",
+  "GPIO17": "GPIO17 (A0)"
+};
+
+const boardPinoutTitles = {
+  nodemcuv2: "NodeMCU v2 (ESP8266)",
+  d1_mini: "Wemos D1 mini",
+  esp32dev: "ESP32 DevKit"
+};
+
+const boardDriverLinks = {
+  nodemcuv2: {
+    text: "Скачать драйвер CH340/CH341",
+    note: "Обычно используется USB-UART чип CH340.",
+    url: "https://www.wch-ic.com/downloads/CH341SER_EXE.html"
+  },
+  d1_mini: {
+    text: "Скачать драйвер CH340/CH341",
+    note: "Для большинства Wemos D1 mini нужен драйвер CH340.",
+    url: "https://www.wch-ic.com/downloads/CH341SER_EXE.html"
+  },
+  esp32dev: {
+    text: "Скачать драйвер CP210x",
+    note: "Для ESP32 DevKit чаще всего используется CP2102/CP210x.",
+    url: "https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers"
+  }
+};
+
+const boardPinoutDiagrams = {
+  nodemcuv2: createBoardPinoutSvg({
+    title: "NodeMCU v2",
+    subtitle: "ESP8266 / ESP-12E",
+    leftPins: ["A0", "G", "VU", "GPIO10", "GPIO9", "MOSI", "CS", "MISO", "SCLK", "GND", "3.3V", "EN", "RST", "GND", "VIN"],
+    rightPins: ["GPIO16", "GPIO5", "GPIO4", "GPIO0", "GPIO2", "3.3V", "GND", "GPIO14", "GPIO12", "GPIO13", "GPIO15", "GPIO3", "GPIO1", "GND", "3.3V"],
+    chipLabel: "ESP-12E"
+  }),
+  d1_mini: createBoardPinoutSvg({
+    title: "Wemos D1 mini",
+    subtitle: "ESP8266",
+    leftPins: ["RST", "A0", "GPIO16", "GPIO14", "GPIO12", "GPIO13", "GPIO15", "3.3V"],
+    rightPins: ["GPIO1", "GPIO3", "GPIO5", "GPIO4", "GPIO0", "GPIO2", "GND", "5V"],
+    chipLabel: "ESP-12F"
+  }),
+  esp32dev: createBoardPinoutSvg({
+    title: "ESP32 DevKit",
+    subtitle: "ESP-WROOM-32",
+    leftPins: ["EN", "GPIO36", "GPIO39", "GPIO34", "GPIO35", "GPIO32", "GPIO33", "GPIO25", "GPIO26", "GPIO27", "GPIO14", "GPIO12", "GPIO13", "GND", "VIN"],
+    rightPins: ["GPIO23", "GPIO22", "GPIO1", "GPIO3", "GPIO21", "GPIO19", "GPIO18", "GPIO5", "GPIO17", "GPIO16", "GPIO4", "GPIO2", "GPIO15", "GND", "3.3V"],
+    chipLabel: "ESP32"
+  })
+};
+
+function createBoardPinoutSvg({title, subtitle, leftPins, rightPins, chipLabel}) {
+  const rows = Math.max(leftPins.length, rightPins.length);
+  const pinStep = 20;
+  const startY = 70;
+  const boardTop = 36;
+  const boardHeight = Math.max(250, rows * pinStep + 36);
+  const boardBottom = boardTop + boardHeight;
+  const viewBoxHeight = boardBottom + 36;
+  const boardX = 150;
+  const boardWidth = 160;
+  const leftTextX = 12;
+  const leftPinX1 = 110;
+  const leftPinX2 = 150;
+  const rightPinX1 = 310;
+  const rightPinX2 = 350;
+  const rightTextX = 356;
+
+  const left = leftPins.map((pin, index) => {
+    const y = startY + index * pinStep;
+    return `
+      <text x="${leftTextX}" y="${y + 4}" font-size="11" fill="#2b4c35" font-family="Verdana, sans-serif">${pin}</text>
+      <line x1="${leftPinX1}" y1="${y}" x2="${leftPinX2}" y2="${y}" stroke="#5f7466" stroke-width="2"/>
+      <circle cx="${leftPinX2}" cy="${y}" r="3.2" fill="#d9b95c"/>
+    `;
+  }).join("");
+
+  const right = rightPins.map((pin, index) => {
+    const y = startY + index * pinStep;
+    return `
+      <circle cx="${rightPinX1}" cy="${y}" r="3.2" fill="#d9b95c"/>
+      <line x1="${rightPinX1}" y1="${y}" x2="${rightPinX2}" y2="${y}" stroke="#5f7466" stroke-width="2"/>
+      <text x="${rightTextX}" y="${y + 4}" font-size="11" fill="#0f766e" font-family="Verdana, sans-serif">${pin}</text>
+    `;
+  }).join("");
+
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 ${viewBoxHeight}">
+      <rect width="480" height="${viewBoxHeight}" rx="24" fill="#eef3ef"/>
+      <rect x="${boardX}" y="${boardTop}" width="${boardWidth}" height="${boardHeight}" rx="20" fill="#1f2327" stroke="#4b5563" stroke-width="3"/>
+      <rect x="185" y="64" width="90" height="92" rx="8" fill="#d4af37"/>
+      <rect x="195" y="74" width="70" height="72" rx="6" fill="#2f3b3a"/>
+      <text x="230" y="112" text-anchor="middle" font-size="15" fill="#f8fafc" font-family="Verdana, sans-serif">${chipLabel}</text>
+      <text x="230" y="26" text-anchor="middle" font-size="18" font-weight="700" fill="#14532d" font-family="Verdana, sans-serif">${title}</text>
+      <text x="230" y="44" text-anchor="middle" font-size="11" fill="#64748b" font-family="Verdana, sans-serif">${subtitle}</text>
+      <rect x="205" y="${boardBottom - 50}" width="50" height="34" rx="6" fill="#cbd5e1"/>
+      <rect x="219" y="${boardBottom - 39}" width="22" height="18" rx="2" fill="#9ca3af"/>
+      ${left}
+      ${right}
+    </svg>
+  `;
+
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+
+function renderBoardPinout() {
+  const board = document.getElementById("board").value;
+  const img = document.getElementById("boardPinoutImage");
+  const caption = document.getElementById("pinoutCaption");
+  const driverLink = document.getElementById("boardDriverLink");
+  const driverText = document.getElementById("boardDriverText");
+  const driverNote = document.getElementById("boardDriverNote");
+  if (!img || !caption) return;
+
+  img.src = boardPinoutDiagrams[board] || boardPinoutDiagrams.nodemcuv2;
+  caption.textContent = `Выбранная плата: ${boardPinoutTitles[board] || board}`;
+
+  const driver = boardDriverLinks[board] || boardDriverLinks.nodemcuv2;
+  if (driverLink && driverText && driverNote) {
+    driverLink.href = driver.url;
+    driverText.textContent = driver.text;
+    driverNote.textContent = driver.note;
+  }
+}
+
+function getBoardInfo() {
+  const board = document.getElementById("board").value;
+  const isESP32 = document.querySelector(`#board option[value="${board}"]`).dataset.esp32 === "true";
+  const pins = isESP32
+    ? ["GPIO4","GPIO5","GPIO18","GPIO19","GPIO21","GPIO22","GPIO23","GPIO25","GPIO26","GPIO27","GPIO32","GPIO33","GPIO34","GPIO35","GPIO36","GPIO39"]
+    : ["GPIO0","GPIO2","GPIO4","GPIO5","GPIO12","GPIO13","GPIO14","GPIO15","GPIO16","GPIO17"];
+
+  const defaults = isESP32
+    ? {i2cSda:"GPIO21", i2cScl:"GPIO22", uartTx:"GPIO17", uartRx:"GPIO16", oneWire:"GPIO4"}
+    : {i2cSda:"GPIO4", i2cScl:"GPIO5", uartTx:"GPIO1", uartRx:"GPIO3", oneWire:"GPIO2"};
+
+  const reserved = isESP32
+    ? {
+        "GPIO34":"только вход (input only)",
+        "GPIO35":"только вход (input only)",
+        "GPIO36":"только вход (input only)",
+        "GPIO39":"только вход (input only)"
+      }
+    : {
+        "GPIO0":"boot-пин, влияет на загрузку",
+        "GPIO2":"boot-пин, влияет на загрузку",
+        "GPIO15":"boot-пин, влияет на загрузку"
+      };
+
+  const bootPins = isESP32 ? [] : ["GPIO0", "GPIO2", "GPIO15"];
+
+  return {board, isESP32, pins, defaults, reserved, bootPins};
+}
+
+function listAllComponents() {
+  return components;
+}
+
+function isCompatibleWithCurrentBoard(component) {
+  const boardInfo = getBoardInfo();
+  const pinCount = component.pinCount || 0;
+  if (!pinCount) return true;
+
+  const safePins = boardInfo.pins.filter(p => !boardInfo.bootPins.includes(p));
+  return pinCount <= safePins.length;
+}
+
+function populateComponentSelect() {
+  const compSelect = document.getElementById("compType");
+  const search = document.getElementById("sensorSearch");
+  const onlyCompatible = document.getElementById("onlyCompatible")?.checked;
+  const countHint = document.getElementById("sensorCountHint");
+  const prev = compSelect.value;
+  const query = (search?.value || "").trim().toLowerCase();
+
+  compSelect.innerHTML = "";
+
+  const grouped = new Map();
+  listAllComponents().forEach(c => {
+    if (onlyCompatible && !isCompatibleWithCurrentBoard(c)) return;
+
+    const haystack = `${c.name} ${c.type} ${c.category || ""}`.toLowerCase();
+    if (query && !haystack.includes(query)) return;
+
+    const key = c.category || "Прочие";
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(c);
+  });
+
+  [...grouped.keys()].sort((a, b) => a.localeCompare(b, "ru")).forEach(category => {
+    const group = document.createElement("optgroup");
+    group.label = category;
+
+    grouped.get(category)
+      .sort((a, b) => a.name.localeCompare(b.name, "ru"))
+      .forEach(c => {
+        const opt = document.createElement("option");
+        opt.value = c.type;
+        opt.textContent = `${c.name} (${c.protocol.toUpperCase()})`;
+        group.appendChild(opt);
+      });
+
+    compSelect.appendChild(group);
+  });
+
+  if ([...compSelect.options].some(o => o.value === prev)) {
+    compSelect.value = prev;
+  } else if (compSelect.options.length) {
+    compSelect.selectedIndex = 0;
+  }
+
+  if (countHint) {
+    countHint.textContent = `Найдено устройств: ${compSelect.options.length}. Категорий: ${grouped.size}.`;
+  }
+
+  refreshPinDropdown();
+  updatePinHint();
+}
+
+function updatePins() {
+  const {isESP32, pins} = getBoardInfo();
+  currentPins = pins.map(g => ({
+    gpio: g,
+    display: isESP32 ? g : (pinMapping[g] || g)
+  }));
+
+  renderBoardPinout();
+  populateComponentSelect();
+  refreshPinDropdown();
+  refreshDiagnostics();
+}
+
+function selectedComponent() {
+  const type = document.getElementById("compType").value;
+  return listAllComponents().find(c => c.type === type);
+}
+
+function updatePinHint() {
+  const comp = selectedComponent();
+  const hint = document.getElementById("pinHint");
+  if (!comp) return;
+  if (!comp.pinCount) {
+    hint.textContent = `Для ${comp.name} GPIO не обязателен: используется ${comp.protocol.toUpperCase()}.`;
+  } else {
+    hint.textContent = `Для ${comp.name} нужно выбрать ${comp.pinCount} пин(а).`;
+  }
+}
+
+function refreshPinDropdown() {
+  const host = document.getElementById("pinSelectors");
+  const comp = selectedComponent();
+  const {reserved} = getBoardInfo();
+  if (!comp) return;
+
+  const prevPins = getSelectedPinsFromUi();
+  host.innerHTML = "";
+  if (!comp.pinCount) {
+    const sel = document.createElement("select");
+    sel.id = "pinSelectNone";
+    sel.name = "pinSelectNone";
+    sel.className = "pin-select-item";
+    sel.disabled = true;
+    sel.setAttribute("aria-label", "Пины не требуются для этого датчика");
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "Пины не требуются для этого датчика";
+    sel.add(opt);
+    host.appendChild(sel);
+    return;
+  }
+
+  const usedPins = getUsedPins();
+
+  for (let i = 0; i < comp.pinCount; i++) {
+    const pinId = `pinSelect${i}`;
+    const label = document.createElement("label");
+    label.setAttribute("for", pinId);
+    label.textContent = comp.pinLabels?.[i] || `PIN ${i + 1}`;
+    host.appendChild(label);
+
+    const sel = document.createElement("select");
+    sel.id = pinId;
+    sel.name = pinId;
+    sel.className = "pin-select-item";
+    sel.dataset.index = String(i);
+
+    const allowedPins = filterPinsForComponent(comp, currentPins);
+    allowedPins.forEach(p => {
+      const alreadyChosen = prevPins.filter((v, idx) => idx !== i).includes(p.gpio);
+      const alreadyUsedAssigned = usedPins.has(p.gpio);
+      if (alreadyChosen || alreadyUsedAssigned) return;
+
+      const opt = document.createElement("option");
+      opt.value = p.gpio;
+      opt.textContent = p.display + (reserved[p.gpio] ? " (осторожно)" : "");
+      sel.add(opt);
+    });
+
+    if (!sel.options.length) {
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "Нет доступных пинов";
+      sel.add(opt);
+    } else if (prevPins[i] && [...sel.options].some(o => o.value === prevPins[i])) {
+      sel.value = prevPins[i];
+    }
+
+    sel.addEventListener("change", () => {
+      refreshPinDropdown();
+      refreshDiagnostics();
+    });
+    host.appendChild(sel);
+  }
+}
+
+function getUsedPins() {
+  const usedPins = new Set();
+  assigned.forEach(a => {
+    (a.pins || []).forEach(p => {
+      if (p.gpio) usedPins.add(p.gpio);
+    });
+  });
+  return usedPins;
+}
+
+function getSelectedPinsFromUi() {
+  return [...document.querySelectorAll(".pin-select-item")].map(s => s.value);
+}
+
+function autoPickPin() {
+  const comp = selectedComponent();
+  if (!comp || !comp.pinCount) {
+    showNotice("Авто-пин", "Для выбранного датчика пин не требуется.");
+    return;
+  }
+
+  const {reserved, bootPins} = getBoardInfo();
+  const used = getUsedPins();
+  const totalAvailable = currentPins.filter(p => !used.has(p.gpio) && !bootPins.includes(p.gpio)).length;
+  if (totalAvailable < comp.pinCount) {
+    showNotice("Недостаточно пинов", `Нужно ${comp.pinCount}, доступно ${totalAvailable}.`);
+    return;
+  }
+
+  const selects = [...document.querySelectorAll(".pin-select-item")];
+  if (!selects.length) {
+    showNotice("Авто-пин", "Свободных пинов не осталось.");
+    return;
+  }
+
+  // Резервируем выбранные пины по мере прохода, чтобы исключить дубликаты.
+  const taken = new Set(used);
+  selects.forEach((sel, idx) => {
+    const localOptions = [...sel.options].map(o => o.value).filter(Boolean);
+    let available = localOptions.filter(v => !taken.has(v) && !bootPins.includes(v));
+    const comp = selectedComponent();
+    if (comp && isOutputComponentType(comp.type)) {
+      available = available.filter(v => !ESP8266_BOOT_PINS.includes(v));
+    }
+    if (comp && isAdcComponentType(comp.type)) {
+      const board = getBoardInfo();
+      if (!board.isESP32) available = available.filter(v => v === ESP8266_ADC_PIN);
+    }
+    const preferred = available.find(v => !reserved[v]) || available[0] || "";
+
+    if (preferred) {
+      sel.value = preferred;
+      taken.add(preferred);
+    } else {
+      sel.value = "";
+    }
+  });
+
+  refreshPinDropdown();
+  refreshDiagnostics();
+}
+
+function addComponent() {
+  const comp = selectedComponent();
+  if (!comp) return;
+
+  let pins = [];
+  let display = "без GPIO";
+  if (comp.pinCount > 0) {
+    const selects = [...document.querySelectorAll(".pin-select-item")];
+    if (selects.length < comp.pinCount) {
+      showNotice("Ошибка выбора пинов", "Недостаточно полей для выбора пинов.");
+      return;
+    }
+
+    const selected = selects.map((s, i) => ({
+      gpio: s.value,
+      display: s.selectedOptions[0]?.textContent || s.value,
+      label: comp.pinLabels?.[i] || `PIN ${i + 1}`
+    }));
+
+    if (selected.some(p => !p.gpio)) {
+      showNotice("Пины не выбраны", `Для ${comp.name} нужно выбрать ${comp.pinCount} пин(а).`);
+      return;
+    }
+
+    const board = getBoardInfo();
+    for (const p of selected) {
+      if (!board.isESP32 && isOutputComponentType(comp.type) && ESP8266_BOOT_PINS.includes(p.gpio)) {
+        showNotice("Boot-пин ESP8266", `${p.gpio} нельзя использовать для выходов (${comp.name}).`);
+        return;
+      }
+      if (!board.isESP32 && isAdcComponentType(comp.type) && p.gpio !== ESP8266_ADC_PIN) {
+        showNotice("ADC ESP8266", `Для ${comp.name} на ESP8266 доступен только ${ESP8266_ADC_PIN} (A0).`);
+        return;
+      }
+    }
+
+    const unique = new Set(selected.map(p => p.gpio));
+    if (unique.size !== selected.length) {
+      showNotice("Ошибка выбора пинов", "Нельзя выбрать один и тот же пин дважды для одного датчика.");
+      return;
+    }
+
+    pins = selected;
+    display = selected.map(p => `${p.label}:${p.gpio}`).join(", ");
+  }
+
+  assigned.push({
+    name: comp.name,
+    type: comp.type,
+    pins,
+    display,
+    protocol: comp.protocol,
+    plugin: !!comp.plugin,
+    template: comp.template || ""
+  });
+  renderAssigned();
+  refreshPinDropdown();
+  refreshDiagnostics();
+  if (typeof appendDashboardLog === "function") appendDashboardLog("Добавлен: " + comp.name, "ok");
+}
+
+function renderAssigned() {
+  if (typeof renderSensorDashboardCards === "function") {
+    renderSensorDashboardCards(assigned);
+    if (typeof updateStatusHeader === "function") updateStatusHeader();
+    return;
+  }
+  const cont = document.getElementById("assigned");
+  cont.innerHTML = "";
+  assigned.forEach((item, i) => {
+    const div = document.createElement("div");
+    div.className = "assigned-item";
+    const proto = item.protocol ? ` [${item.protocol.toUpperCase()}]` : "";
+    div.innerHTML = `${item.name}${proto} → ${item.display} <button class="remove-btn" onclick="removeComp(${i})">×</button>`;
+    cont.appendChild(div);
+  });
+}
+
+function removeComp(i) {
+  assigned.splice(i, 1);
+  renderAssigned();
+  refreshPinDropdown();
+  refreshDiagnostics();
+}
+
+function analyzeBuses() {
+  const {defaults} = getBoardInfo();
+  const needI2C = assigned.some(a => a.protocol === "i2c");
+  const needUart = assigned.some(a => a.protocol === "uart");
+  const oneWireDevice = assigned.find(a => a.protocol === "onewire");
+
+  return {
+    needI2C,
+    needUart,
+    needOneWire: !!oneWireDevice,
+    i2c: {sda: defaults.i2cSda, scl: defaults.i2cScl},
+    uart: {tx: defaults.uartTx, rx: defaults.uartRx},
+    oneWirePin: oneWireDevice?.pins?.[0]?.gpio || defaults.oneWire
+  };
+}
+
+function refreshDiagnostics() {
+  renderBusStatus();
+  renderGpioStatus();
+  renderFritzingView();
+  if (typeof renderBusMetrics === "function") renderBusMetrics();
+  if (typeof updateStatusHeader === "function") updateStatusHeader();
+}
+
+function renderBusStatus() {
+  const busStatus = document.getElementById("busStatus");
+  const busDetails = document.getElementById("busDetails");
+  const bus = analyzeBuses();
+  const chips = [];
+
+  chips.push(`<span class="chip ${bus.needI2C ? "ok" : ""}">I2C: ${bus.needI2C ? "включен" : "не используется"}</span>`);
+  chips.push(`<span class="chip ${bus.needUart ? "ok" : ""}">UART: ${bus.needUart ? "включен" : "не используется"}</span>`);
+  chips.push(`<span class="chip ${bus.needOneWire ? "ok" : ""}">OneWire: ${bus.needOneWire ? "включен" : "не используется"}</span>`);
+  busStatus.innerHTML = chips.join("");
+
+  const lines = [];
+  if (bus.needI2C) lines.push(`I2C: SDA ${bus.i2c.sda}, SCL ${bus.i2c.scl}`);
+  if (bus.needUart) lines.push(`UART: TX ${bus.uart.tx}, RX ${bus.uart.rx}`);
+  if (bus.needOneWire) lines.push(`OneWire: DATA ${bus.oneWirePin}`);
+  if (!lines.length) lines.push("Выберите датчики, чтобы включилась автоконфигурация шин.");
+
+  busDetails.innerHTML = lines.map(t => `<div>${t}</div>`).join("");
+}
+
+function renderGpioStatus() {
+  const gpioHealth = document.getElementById("gpioHealth");
+  const gpioWarnings = document.getElementById("gpioWarnings");
+  const {reserved} = getBoardInfo();
+  const buses = analyzeBuses();
+
+  const usedPins = [...getUsedPins()];
+  const unique = new Set(usedPins);
+  const duplicateCount = usedPins.length - unique.size;
+  const risky = assigned.flatMap(a => (a.pins || []).filter(p => reserved[p.gpio]).map(p => ({name:a.name, pin:p.gpio})));
+  const busConflicts = [];
+
+  if (buses.needI2C) {
+    assigned.forEach(a => {
+      (a.pins || []).forEach(p => {
+        if (a.protocol === "gpio" && (p.gpio === buses.i2c.sda || p.gpio === buses.i2c.scl)) {
+          busConflicts.push(`${a.name}: ${p.gpio} пересекается с I2C`);
+        }
+      });
+    });
+  }
+  if (buses.needUart) {
+    assigned.forEach(a => {
+      (a.pins || []).forEach(p => {
+        if (p.gpio && (p.gpio === buses.uart.tx || p.gpio === buses.uart.rx)) {
+          busConflicts.push(`${a.name}: ${p.gpio} пересекается с UART`);
+        }
+      });
+    });
+  }
+
+  const chips = [];
+  chips.push(`<span class="chip ok">Назначено пинов: ${unique.size}</span>`);
+  chips.push(`<span class="chip ${duplicateCount ? "bad" : "ok"}">Конфликтов: ${duplicateCount}</span>`);
+  chips.push(`<span class="chip ${risky.length ? "warn" : "ok"}">Рисковых пинов: ${risky.length}</span>`);
+  chips.push(`<span class="chip ${busConflicts.length ? "bad" : "ok"}">Конфликтов с шинами: ${busConflicts.length}</span>`);
+  gpioHealth.innerHTML = chips.join("");
+
+  const notes = [];
+  if (duplicateCount) notes.push("Найдены дубли пинов. Удалите повторяющиеся назначения.");
+  risky.forEach(r => notes.push(`${r.pin}: ${reserved[r.pin]} (${r.name})`));
+  busConflicts.forEach(c => notes.push(c));
+  if (!notes.length) notes.push("GPIO-конфигурация выглядит корректно.");
+  gpioWarnings.innerHTML = notes.map(n => `<div>${n}</div>`).join("");
+}
+
+function renderFritzingView() {
+  const target = document.getElementById("fritzingView");
+  const {reserved} = getBoardInfo();
+  target.innerHTML = "";
+
+  currentPins.forEach(p => {
+    const used = assigned.find(a => (a.pins || []).some(pp => pp.gpio === p.gpio));
+    const node = document.createElement("div");
+    node.className = "pin-node" + (used ? " used" : "") + (!used && reserved[p.gpio] ? " reserved" : "");
+    node.innerHTML = `<span class="pin-title">${p.display}</span>${used ? `Подключено: ${used.name}` : (reserved[p.gpio] ? `Ограничение: ${reserved[p.gpio]}` : "Свободен")}`;
+    target.appendChild(node);
+  });
+}
+
+let cachedApiEncryptionKey = '';
+let cachedFallbackApPass = '';
+
+function generateApiKey() {
+  const array = new Uint8Array(32);
+  crypto.getRandomValues(array);
+  return btoa(String.fromCharCode(...array));
+}
+
+function getOrCreateApiEncryptionKey() {
+  if (cachedApiEncryptionKey) return cachedApiEncryptionKey;
+  try {
+    const stored = localStorage.getItem('cicada_esp_api_encryption_key');
+    if (stored) {
+      cachedApiEncryptionKey = stored;
+      return cachedApiEncryptionKey;
+    }
+  } catch { /* ignore */ }
+  cachedApiEncryptionKey = generateApiKey();
+  try { localStorage.setItem('cicada_esp_api_encryption_key', cachedApiEncryptionKey); } catch { /* ignore */ }
+  return cachedApiEncryptionKey;
+}
+
+function getOrCreateFallbackApPassword() {
+  if (cachedFallbackApPass) return cachedFallbackApPass;
+  const chars = 'abcdefghijkmnpqrstuvwxyz23456789';
+  let pass = '';
+  const bytes = new Uint8Array(10);
+  crypto.getRandomValues(bytes);
+  for (let i = 0; i < bytes.length; i++) pass += chars[bytes[i] % chars.length];
+  cachedFallbackApPass = pass;
+  return cachedFallbackApPass;
+}
+
+const ESP8266_BOOT_PINS = ['GPIO0', 'GPIO2', 'GPIO15'];
+const ESP8266_ADC_PIN = 'GPIO17';
+const OUTPUT_COMPONENT_TYPES = new Set([
+  'relay', 'relay2', 'relay4', 'mosfet', 'ssr', 'pwmled', 'ws2812', 'buzzer', 'servo', 'hlw8012',
+]);
+const ADC_COMPONENT_TYPES = new Set(['mq4', 'mq135', 'soil', 'water_level']);
+
+function isOutputComponentType(type) {
+  return OUTPUT_COMPONENT_TYPES.has(type);
+}
+
+function isAdcComponentType(type) {
+  return ADC_COMPONENT_TYPES.has(type);
+}
+
+function filterPinsForComponent(comp, pins) {
+  const board = getBoardInfo();
+  let list = pins;
+  if (!board.isESP32 && isAdcComponentType(comp.type)) {
+    list = list.filter((p) => p.gpio === ESP8266_ADC_PIN);
+  }
+  if (!board.isESP32 && isOutputComponentType(comp.type)) {
+    list = list.filter((p) => !ESP8266_BOOT_PINS.includes(p.gpio));
+  }
+  return list;
+}
+
+const SENSOR_PLATFORM_TEMPLATES = {
+  sht3x: (c) => `sensor:\n  - platform: sht3xd\n    temperature:\n      name: "${c.name} T"\n    humidity:\n      name: "${c.name} H"\n`,
+  sht4x: (c) => `sensor:\n  - platform: sht4x\n    temperature:\n      name: "${c.name} T"\n    humidity:\n      name: "${c.name} H"\n`,
+  aht10: (c) => `sensor:\n  - platform: aht10\n    temperature:\n      name: "${c.name} T"\n    humidity:\n      name: "${c.name} H"\n`,
+  aht20: (c) => `sensor:\n  - platform: aht20\n    temperature:\n      name: "${c.name} T"\n    humidity:\n      name: "${c.name} H"\n`,
+  bme280: (c) => `sensor:\n  - platform: bme280\n    temperature:\n      name: "${c.name} T"\n    pressure:\n      name: "${c.name} P"\n    humidity:\n      name: "${c.name} H"\n`,
+  bmp280: (c) => `sensor:\n  - platform: bmp280\n    temperature:\n      name: "${c.name} T"\n    pressure:\n      name: "${c.name} P"\n`,
+  bme680: (c) => `sensor:\n  - platform: bme680\n    temperature:\n      name: "${c.name} T"\n    pressure:\n      name: "${c.name} P"\n    humidity:\n      name: "${c.name} H"\n    gas_resistance:\n      name: "${c.name} Gas"\n`,
+  mcp9808: (c) => `sensor:\n  - platform: mcp9808\n    name: "${c.name}"\n`,
+  hdc2010: (c) => `sensor:\n  - platform: hdc2010\n    temperature:\n      name: "${c.name} T"\n    humidity:\n      name: "${c.name} H"\n`,
+  sgp30: (c) => `sensor:\n  - platform: sgp30\n    eco2:\n      name: "${c.name} eCO2"\n    tvoc:\n      name: "${c.name} TVOC"\n`,
+  ccs811: (c) => `sensor:\n  - platform: ccs811\n    eco2:\n      name: "${c.name} eCO2"\n    tvoc:\n      name: "${c.name} TVOC"\n`,
+  scd4x: (c) => `sensor:\n  - platform: scd4x\n    co2:\n      name: "${c.name} CO2"\n    temperature:\n      name: "${c.name} T"\n    humidity:\n      name: "${c.name} H"\n`,
+  scd30: (c) => `sensor:\n  - platform: scd30\n    co2:\n      name: "${c.name} CO2"\n    temperature:\n      name: "${c.name} T"\n    humidity:\n      name: "${c.name} H"\n`,
+  bh1750: (c) => `sensor:\n  - platform: bh1750\n    name: "${c.name}"\n`,
+  veml7700: (c) => `sensor:\n  - platform: veml7700\n    name: "${c.name}"\n`,
+  tsl2561: (c) => `sensor:\n  - platform: tsl2561\n    name: "${c.name}"\n`,
+  tsl2591: (c) => `sensor:\n  - platform: tsl2591\n    ambient_light:\n      name: "${c.name}"\n`,
+  vl53l0x: (c) => `sensor:\n  - platform: vl53l0x\n    name: "${c.name}"\n`,
+  max30102: (c) => `sensor:\n  - platform: max30102\n    red:\n      name: "${c.name} Red"\n`,
+  ina219: (c) => `sensor:\n  - platform: ina219\n    shunt_resistance: 0.1 ohm\n    max_current: 3.2A\n    current:\n      name: "${c.name} I"\n    power:\n      name: "${c.name} P"\n    bus_voltage:\n      name: "${c.name} V"\n`,
+  ina226: (c) => `sensor:\n  - platform: ina226\n    shunt_resistance: 0.1 ohm\n    max_current: 3.2A\n    current:\n      name: "${c.name} I"\n    power:\n      name: "${c.name} P"\n    bus_voltage:\n      name: "${c.name} V"\n`,
+  mcp3221: (c) => `sensor:\n  - platform: mcp3221\n    name: "${c.name}"\n`,
+  ads1115: (c) => `sensor:\n  - platform: ads1115\n    multiplexer: 'A0_GND'\n    gain: 6.144\n    name: "${c.name}"\n`,
+  mhz19: (c) => `sensor:\n  - platform: mhz19\n    uart_id: ${c.uartId}\n    co2:\n      name: "${c.name} CO2"\n    temperature:\n      name: "${c.name} T"\n`,
+  pmsx003: (c) => `sensor:\n  - platform: pmsx003\n    uart_id: ${c.uartId}\n    pm_2_5:\n      name: "${c.name} PM2.5"\n    pm_10_0:\n      name: "${c.name} PM10"\n`,
+  aqi: (c) => `sensor:\n  - platform: pmsx003\n    uart_id: ${c.uartId}\n    pm_2_5:\n      name: "${c.name} PM2.5"\n`,
+  pzemac: (c) => `sensor:\n  - platform: pzemac\n    uart_id: ${c.uartId}\n    current:\n      name: "${c.name} I"\n    voltage:\n      name: "${c.name} V"\n    power:\n      name: "${c.name} P"\n    energy:\n      name: "${c.name} E"\n`,
+  pzemdc: (c) => `sensor:\n  - platform: pzemdc\n    uart_id: ${c.uartId}\n    current:\n      name: "${c.name} I"\n    voltage:\n      name: "${c.name} V"\n    power:\n      name: "${c.name} P"\n`,
+  gps: (c) => `gps:\n  - uart_id: ${c.uartId}\n`,
+  vibration: (c) => `binary_sensor:\n  - platform: gpio\n    pin: ${c.pins?.[0]?.gpio || ''}\n    name: "${c.name}"\n    device_class: vibration\n`,
+};
+
+function assignUartIds() {
+  const uartItems = assigned.filter((a) => a.protocol === 'uart');
+  const { isESP32, defaults } = getBoardInfo();
+  const esp32Pairs = [
+    { tx: 'GPIO17', rx: 'GPIO16' },
+    { tx: 'GPIO21', rx: 'GPIO22' },
+    { tx: 'GPIO18', rx: 'GPIO19' },
+  ];
+  uartItems.forEach((item, index) => {
+    const pair = isESP32 ? (esp32Pairs[index] || esp32Pairs[0]) : { tx: defaults.uartTx, rx: defaults.uartRx };
+    item.uartId = `uart_${item.type}_${index}`;
+    item.uartPair = pair;
+  });
+  return uartItems;
+}
+
+function buildUartYamlBlocks() {
+  const uartItems = assignUartIds();
+  if (!uartItems.length) return '';
+  return uartItems.map((item) => `
+uart:
+  - id: ${item.uartId}
+    tx_pin: ${item.uartPair.tx}
+    rx_pin: ${item.uartPair.rx}
+    baud_rate: 9600
+`).join('');
+}
+
+function collectGenerateValidationErrors() {
+  const errors = [];
+  const board = getBoardInfo();
+  const buses = analyzeBuses();
+  const uartCount = assigned.filter((a) => a.protocol === 'uart').length;
+  if (!board.isESP32 && uartCount > 1) {
+    errors.push('На ESP8266 поддерживается не более одного UART-устройства.');
+  }
+  assigned.forEach((a) => {
+    (a.pins || []).forEach((p) => {
+      if (!board.isESP32 && isOutputComponentType(a.type) && ESP8266_BOOT_PINS.includes(p.gpio)) {
+        errors.push(`${a.name}: ${p.gpio} — boot-пин ESP8266, нельзя для выходов.`);
+      }
+      if (!board.isESP32 && isAdcComponentType(a.type) && p.gpio !== ESP8266_ADC_PIN) {
+        errors.push(`${a.name}: на ESP8266 ADC только ${ESP8266_ADC_PIN} (A0).`);
+      }
+    });
+  });
+  if (buses.needI2C) {
+    assigned.forEach((a) => {
+      (a.pins || []).forEach((p) => {
+        if (a.protocol === 'gpio' && (p.gpio === buses.i2c.sda || p.gpio === buses.i2c.scl)) {
+          errors.push(`${a.name}: ${p.gpio} пересекается с I2C.`);
+        }
+      });
+    });
+  }
+  const usedPins = [...getUsedPins()];
+  if (usedPins.length !== new Set(usedPins).size) {
+    errors.push('Найдены дубли GPIO между устройствами.');
+  }
+  return errors;
+}
+
+function mergeYamlSections(sectionStrings) {
+  const keyOrder = [];
+  const keyContents = new Map();
+
+  for (const section of sectionStrings) {
+    if (!section || !section.trim()) continue;
+    const lines = section.split('\n');
+    let currentKey = null;
+    let contentLines = [];
+
+    const flush = () => {
+      if (currentKey !== null) {
+        while (contentLines.length && !contentLines[contentLines.length - 1].trim()) {
+          contentLines.pop();
+        }
+        if (contentLines.length > 0) {
+          if (!keyContents.has(currentKey)) {
+            keyOrder.push(currentKey);
+            keyContents.set(currentKey, []);
+          }
+          keyContents.get(currentKey).push(contentLines.join('\n'));
+        }
+        contentLines = [];
+        currentKey = null;
+      }
+    };
+
+    for (const line of lines) {
+      if (/^[a-z_]+:\s*$/.test(line)) {
+        flush();
+        currentKey = line.replace(/:\s*$/, '');
+      } else {
+        contentLines.push(line);
+      }
+    }
+    flush();
+  }
+
+  let result = '';
+  for (const key of keyOrder) {
+    result += `\n${key}:\n`;
+    for (const content of keyContents.get(key)) {
+      result += content + '\n';
+    }
+  }
+  return result;
+}
+
+function renderSensorSection(c) {
+  const pinAt = (idx) => c.pins?.[idx]?.gpio || "";
+  const p = pinAt(0);
+  const {isESP32} = getBoardInfo();
+  if (SENSOR_PLATFORM_TEMPLATES[c.type]) {
+    return SENSOR_PLATFORM_TEMPLATES[c.type](c).trim() + "\n";
+  }
+
+  if (c.template) {
+    let rendered = c.template.replaceAll("{{name}}", c.name);
+    rendered = rendered.replaceAll("{{pin}}", p || "");
+    rendered = rendered.replaceAll("{{pwm_platform}}", isESP32 ? "ledc" : "esp8266_pwm");
+    (c.pins || []).forEach((pinObj, i) => {
+      rendered = rendered.replaceAll(`{{pin${i + 1}}}`, pinObj.gpio || "");
+    });
+    return rendered
+      .replaceAll("{{name}}", c.name)
+      .trim() + "\n";
+  }
+
+  switch(c.type) {
+    case "relay":
+      return `switch:\n  - platform: gpio\n    pin: ${p}\n    name: "${c.name}"\n`;
+    case "dht22": {
+      const powerPin = pinAt(1);
+      const powerBlock = powerPin
+        ? `\nswitch:\n  - platform: gpio\n    pin: ${powerPin}\n    id: dht22_power_${p.toLowerCase()}\n    restore_mode: ALWAYS_ON\n    name: "${c.name} Питание"\n`
+        : "";
+      return `sensor:\n  - platform: dht\n    pin: ${p}\n    model: DHT22\n    temperature:\n      name: "${c.name} Температура"\n    humidity:\n      name: "${c.name} Влажность"\n    update_interval: 30s\n${powerBlock}`;
+    }
+    case "door":
+      return `binary_sensor:\n  - platform: gpio\n    pin: ${p}\n    name: "${c.name}"\n    device_class: door\n`;
+    case "button":
+      return `binary_sensor:\n  - platform: gpio\n    pin: ${p}\n    name: "${c.name}"\n    device_class: power\n`;
+    case "pir":
+      return `binary_sensor:\n  - platform: gpio\n    pin: ${p}\n    name: "${c.name}"\n    device_class: motion\n`;
+    case "mq4":
+    case "mq135":
+    case "soil":
+      return `sensor:\n  - platform: adc\n    pin: ${p}\n    name: "${c.name}"\n    update_interval: 10s\n`;
+    case "ds18b20":
+      return `sensor:\n  - platform: dallas_temp\n    one_wire_id: onewire_bus\n    name: "${c.name}"\n    update_interval: 10s\n`;
+    case "pwmled":
+      return `output:\n  - platform: ${isESP32 ? "ledc" : "esp8266_pwm"}\n    pin: ${p}\n    id: pwm_${p.toLowerCase()}\n\nlight:\n  - platform: monochromatic\n    output: pwm_${p.toLowerCase()}\n    name: "${c.name}"\n`;
+    case "ultrasonic":
+      return `sensor:\n  - platform: ultrasonic\n    trigger_pin: ${pinAt(0)}\n    echo_pin: ${pinAt(1)}\n    name: "${c.name}"\n    update_interval: 10s\n`;
+    default:
+      return `sensor:\n  - platform: ${c.type}\n    name: "${c.name}"\n`;
+  }
+}
+
+function generate() {
+  sanitizeDeviceName();
+  const devName     = document.getElementById("devName").value.trim();
+  const ssid        = document.getElementById("ssid").value.trim();
+  const wifiPass    = document.getElementById("wifiPass").value.trim();
+  const useOta      = document.getElementById("useOta").checked;
+  const otaPass     = document.getElementById("otaPass").value.trim();
+  const useMqtt     = document.getElementById("useMqtt").checked;
+  const mqttHost    = document.getElementById("mqttHost").value.trim();
+  const mqttPort    = document.getElementById("mqttPort").value.trim() || "1883";
+  const mqttUser    = document.getElementById("mqttUsername").value.trim();
+  const mqttPass    = document.getElementById("mqttPassword").value.trim();
+  const useWebServer = document.getElementById("useWebServer").checked;
+  const webPortRaw  = parseInt(document.getElementById("webPort")?.value || "80", 10);
+  const webPort     = (!isNaN(webPortRaw) && webPortRaw >= 1 && webPortRaw <= 65535) ? webPortRaw : 80;
+  const webTheme    = document.getElementById("webTheme")?.value || "default";
+
+  let errorMsg = "";
+  if (!devName)    errorMsg += "• Имя устройства не заполнено\n";
+  if (!ssid)       errorMsg += "• Wi-Fi SSID не заполнен\n";
+  if (!wifiPass)   errorMsg += "• Wi-Fi пароль не заполнен\n";
+  if (useOta && !otaPass) errorMsg += "• Пароль OTA не заполнен\n";
+  if (useMqtt) {
+    if (!mqttHost) errorMsg += "• Адрес MQTT не заполнен\n";
+    if (!mqttUser) errorMsg += "• MQTT Логин не заполнен\n";
+    if (!mqttPass) errorMsg += "• MQTT Пароль не заполнен\n";
+  }
+  if (errorMsg) {
+    showNotice("Не все обязательные поля заполнены", errorMsg);
+    return;
+  }
+
+  const validationErrors = collectGenerateValidationErrors();
+  if (validationErrors.length) {
+    showNotice("Ошибки конфигурации", validationErrors.map((e) => `• ${e}`).join("\n"));
+    return;
+  }
+
+  const {board, isESP32} = getBoardInfo();
+  const apiEncryptionKey = getOrCreateApiEncryptionKey();
+  const fallbackApPass = getOrCreateFallbackApPassword();
+  const buses = analyzeBuses();
+  assignUartIds();
+
+  let yaml = `esphome:
+  name: ${devName}
+  friendly_name: ${devName}
+
+${isESP32 ? "esp32:" : "esp8266:"}
+  board: ${board}
+
+wifi:
+  ssid: "${ssid}"
+  password: "${wifiPass}"
+  min_auth_mode: WPA2
+
+  ap:
+    ssid: "${devName} Fallback"
+    password: "${fallbackApPass}"
+
+logger:
+api:
+  encryption:
+    key: "${apiEncryptionKey}"
+
+`;
+
+  if (useWebServer) {
+    yaml += `
+web_server:
+  port: ${webPort}`;
+    if (webTheme !== "default") {
+      const cssUrl = (document.getElementById("webCssUrl")?.value.trim()) || "http://homeassistant.local:8123/local/cicada_web.css";
+      yaml += `
+  version: 2
+  css_url: "${cssUrl}"`;
+    }
+    yaml += `
+`;
+  }
+
+  if (useOta) {
+    yaml += `
+ota:
+  - platform: esphome
+    password: "${otaPass}"
+`;
+  }
+
+  if (useMqtt) {
+    yaml += `
+mqtt:
+  broker: "${mqttHost}"
+  port: ${mqttPort}
+  username: "${mqttUser}"
+  password: "${mqttPass}"
+  id: mqtt_client
+  discovery: true
+`;
+  }
+
+  if (buses.needI2C) {
+    yaml += `
+i2c:
+  sda: ${buses.i2c.sda}
+  scl: ${buses.i2c.scl}
+  scan: true
+`;
+  }
+
+  if (buses.needUart) {
+    yaml += `
+uart:
+  tx_pin: ${buses.uart.tx}
+  rx_pin: ${buses.uart.rx}
+  baud_rate: 9600
+`;
+  }
+
+  if (buses.needOneWire) {
+    yaml += `
+one_wire:
+  - platform: gpio
+    pin: ${buses.oneWirePin}
+    id: onewire_bus
+`;
+  }
+
+  yaml += buildUartYamlBlocks();
+  yaml += mergeYamlSections(assigned.map(c => renderSensorSection(c)));
+
+  const code = document.getElementById("yaml");
+  code.textContent = yaml;
+  document.getElementById("yamlCard").style.display = "block";
+  if (typeof appendDashboardLog === "function") appendDashboardLog("YAML сгенерирован", "ok");
+  Prism.highlightElement(code);
+}
+
+async function buildFirmwareBin() {
+  if (window.CicadaEspAccess) {
+    const allowed = await CicadaEspAccess.ensureAllowedAsync('build');
+    if (!allowed) return;
+  }
+  const btn = document.getElementById("buildBinBtn");
+  if (!document.getElementById("yaml").textContent.trim()) {
+    generate();
+  }
+  if (btn) btn.disabled = true;
+  if (typeof BuildProgress !== "undefined") BuildProgress.open();
+  try {
+    const data = await EspFirmwareTools.buildBin({
+      onProgress: (job) => {
+        if (typeof BuildProgress !== 'undefined' && BuildProgress.onPollUpdate) {
+          BuildProgress.onPollUpdate(job);
+        }
+      },
+    });
+    if (typeof BuildProgress !== "undefined") {
+      BuildProgress.complete(data);
+    } else {
+      showNotice("Сборка завершена", [
+        `Устройство: ${data.meta?.deviceName || EspFirmwareTools.resolveDeviceName()}`,
+        `Версия: ${data.meta?.version || "—"}`,
+        "Используйте «Скачать bin» или «Прошить» в окне сборки."
+      ]);
+    }
+  } catch (e) {
+    if (typeof BuildProgress !== "undefined") {
+      BuildProgress.fail(e);
+    } else {
+      const lines = [e.message || "Ошибка сборки"];
+      if (e.hint) lines.push(e.hint);
+      if (e.log) lines.push("", e.log.slice(-1200));
+      if (String(e.message || "").includes("401") || String(e.message || "").includes("Сессия")) {
+        lines.push("", "Войдите в Cicada Studio в этом браузере и повторите.");
+      }
+      showNotice("Ошибка сборки", lines);
+    }
+  } finally {
+    if (btn) btn.disabled = false;
+    if (typeof lucide !== "undefined") lucide.createIcons();
+  }
+}
+
+async function flashBoard() {
+  const btn = document.getElementById("flashBtn");
+  if (btn) btn.disabled = true;
+  try {
+    if (typeof appendDashboardLog === "function") {
+      appendDashboardLog("Открытие страницы прошивки…", "info");
+    }
+    await EspFirmwareTools.openFlash();
+  } catch (e) {
+    showNotice("Прошивка ESP", [
+      e.message || "Не удалось открыть прошивку",
+      "Войдите в Cicada Studio или соберите bin перед прошивкой."
+    ]);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function download() {
+  const yaml = document.getElementById("yaml").textContent;
+  if (!yaml) {
+    showNotice("Скачивание YAML", "Сначала сгенерируйте YAML.");
+    return;
+  }
+  const blob = new Blob([yaml], {type:"text/yaml"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = (document.getElementById("devName").value.trim() || "device") + ".yaml";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function copyYaml() {
+  const yaml = document.getElementById("yaml").textContent;
+  if (!yaml) {
+    showNotice("Копирование YAML", "Сначала сгенерируйте YAML.");
+    return;
+  }
+
+  const btn = document.getElementById("copyYamlBtn");
+  try {
+    await navigator.clipboard.writeText(yaml);
+    const icon = btn.querySelector(".mdi");
+    const oldClass = icon.className;
+    btn.title = "Скопировано";
+    btn.setAttribute("aria-label", "Скопировано");
+    icon.className = "mdi mdi-check-bold";
+    setTimeout(() => {
+      icon.className = oldClass;
+      btn.title = "Скопировать код";
+      btn.setAttribute("aria-label", "Скопировать код");
+    }, 1600);
+  } catch (error) {
+    showNotice("Копирование YAML", "Не удалось скопировать автоматически. Попробуйте вручную.");
+  }
+}
+
+document.getElementById("compType").addEventListener("change", () => {
+  updatePinHint();
+  refreshPinDropdown();
+});
+
+document.getElementById("sensorSearch").addEventListener("input", () => {
+  populateComponentSelect();
+});
+
+document.getElementById("onlyCompatible").addEventListener("change", () => {
+  populateComponentSelect();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    closeNotice();
+  }
+});
+
+applyTheme(localStorage.getItem("esphomeTheme") || "dark");
+toggleOtaFields();
+sanitizeDeviceName();
+
+populateComponentSelect();
+updatePins();
+</script>
+<script src="dashboard-ui.js"></script>
+<script>
+if (typeof initDashboardUi === "function") initDashboardUi();
+if (window.CicadaEspAccess && CicadaEspAccess.init) CicadaEspAccess.init();
+if (window.lucide) lucide.createIcons();
+(function () {
+  var home = document.querySelector("[data-cicada-studio-home]");
+  if (!home) return;
+  home.addEventListener("click", function () {
+    try {
+      sessionStorage.removeItem("cicada_return_to");
+      localStorage.removeItem("cicada_return_to");
+    } catch (e) { /* ignore */ }
+  });
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,6 @@
+{
+  "id": "tg_check_sub",
+  "name": "Проверка подписки на канал",
+  "desc": "Проверяет подписку через getChatMember API",
+  "category": "📡 Telegram расширения"
+}

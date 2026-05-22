@@ -1,0 +1,200 @@
+{
+  "nodes": [
+    {
+      "id": "n_bot",
+      "type": "cicada",
+      "position": {
+        "x": 0,
+        "y": 20
+      },
+      "data": {
+        "type": "bot",
+        "props": {
+          "token": "YOUR_BOT_TOKEN"
+        }
+      }
+    },
+    {
+      "id": "n_start",
+      "type": "cicada",
+      "position": {
+        "x": 260,
+        "y": 440
+      },
+      "data": {
+        "type": "start",
+        "props": {}
+      }
+    },
+    {
+      "id": "n_inline",
+      "type": "cicada",
+      "position": {
+        "x": 260,
+        "y": 540
+      },
+      "data": {
+        "type": "inline",
+        "props": {
+          "buttons": "Запустить → run_demo\nОтмена → cancel_demo"
+        }
+      }
+    },
+    {
+      "id": "n_msg",
+      "type": "cicada",
+      "position": {
+        "x": 260,
+        "y": 640
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "Inline + явные callback handlers:"
+        }
+      }
+    },
+    {
+      "id": "n_cb_run",
+      "type": "cicada",
+      "position": {
+        "x": 520,
+        "y": 760
+      },
+      "data": {
+        "type": "callback",
+        "props": {
+          "callbackPrefix": "run_"
+        }
+      }
+    },
+    {
+      "id": "n_run_msg",
+      "type": "cicada",
+      "position": {
+        "x": 520,
+        "y": 860
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "▶️ run_* handler"
+        }
+      }
+    },
+    {
+      "id": "n_cb_cancel",
+      "type": "cicada",
+      "position": {
+        "x": 780,
+        "y": 1080
+      },
+      "data": {
+        "type": "callback",
+        "props": {
+          "callbackPrefix": "cancel_"
+        }
+      }
+    },
+    {
+      "id": "n_cancel_msg",
+      "type": "cicada",
+      "position": {
+        "x": 780,
+        "y": 1180
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "❌ cancel_* handler"
+        }
+      }
+    },
+    {
+      "id": "n_cb_ok",
+      "type": "cicada",
+      "position": {
+        "x": 1040,
+        "y": 1400
+      },
+      "data": {
+        "type": "callback",
+        "props": {
+          "label": "OK"
+        }
+      }
+    },
+    {
+      "id": "n_ok_msg",
+      "type": "cicada",
+      "position": {
+        "x": 1040,
+        "y": 1500
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "Reply OK"
+        }
+      }
+    },
+    {
+      "id": "n_ok_kb",
+      "type": "cicada",
+      "position": {
+        "x": 1040,
+        "y": 1600
+      },
+      "data": {
+        "type": "buttons",
+        "props": {
+          "rows": "OK"
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_c1_1",
+      "source": "n_start",
+      "target": "n_inline",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c1_2",
+      "source": "n_inline",
+      "target": "n_msg",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c2_1",
+      "source": "n_cb_run",
+      "target": "n_run_msg",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c3_1",
+      "source": "n_cb_cancel",
+      "target": "n_cancel_msg",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c4_1",
+      "source": "n_cb_ok",
+      "target": "n_ok_msg",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c4_2",
+      "source": "n_ok_msg",
+      "target": "n_ok_kb",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    }
+  ]
+}

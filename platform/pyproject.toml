@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cicada-platform"
+version = "0.2.0"
+description = "Modular async runtime platform for Cicada Studio constructor"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+  "pydantic>=2.10",
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.34",
+  "httpx>=0.28",
+  "structlog>=24.4",
+]
+
+[project.optional-dependencies]
+redis = ["redis>=5.2"]
+postgres = ["asyncpg>=0.30", "sqlalchemy[asyncio]>=2.0"]
+telegram = ["httpx>=0.28"]
+dev = ["pytest>=8.3", "pytest-asyncio>=0.25", "ruff>=0.9"]
+all = ["cicada-platform[redis,postgres,telegram,dev]"]
+
+[project.scripts]
+cicada-platform = "cicada_platform.api.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

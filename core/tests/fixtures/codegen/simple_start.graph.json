@@ -1,0 +1,26 @@
+{
+  "nodes": [
+    {
+      "id": "n_bot",
+      "type": "cicada",
+      "position": { "x": 0, "y": 0 },
+      "data": { "type": "bot", "props": { "token": "TEST_TOKEN" } }
+    },
+    {
+      "id": "n_start",
+      "type": "cicada",
+      "position": { "x": 0, "y": 120 },
+      "data": { "type": "start", "props": {} }
+    },
+    {
+      "id": "n_msg",
+      "type": "cicada",
+      "position": { "x": 0, "y": 232 },
+      "data": { "type": "message", "props": { "text": "Привет!" } }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "n_bot", "target": "n_start" },
+    { "id": "e2", "source": "n_start", "target": "n_msg" }
+  ]
+}

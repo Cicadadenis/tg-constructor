@@ -1,0 +1,6 @@
+{
+  "id": "http_post_json",
+  "name": "HTTP POST с JSON-телом",
+  "desc": "Отправить JSON-данные в API через переменную",
+  "category": "🌐 HTTP и внешние API"
+}

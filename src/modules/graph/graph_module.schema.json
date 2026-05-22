@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Cicada Graph Module Manifest",
+  "type": "object",
+  "required": ["id", "version", "dependencies", "graph", "mergeStrategy"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+    "version": { "type": "integer", "minimum": 1 },
+    "name": { "type": "string" },
+    "category": { "type": "string" },
+    "dependencies": { "type": "array", "items": { "type": "string" } },
+    "capabilities": { "type": "array", "items": { "type": "string" } },
+    "globals": { "type": "array", "items": { "type": "string" } },
+    "callbacks": { "type": "array", "items": { "type": "string" } },
+    "commands": { "type": "array", "items": { "type": "string" } },
+    "imports": { "type": "array", "items": { "type": "string" } },
+    "exports": { "type": "object", "additionalProperties": { "type": "string" } },
+    "mergeStrategy": {
+      "type": "object",
+      "properties": {
+        "dedupeBot": { "type": "boolean" },
+        "dedupeStart": { "type": "boolean" },
+        "mergeGlobals": { "enum": ["first_wins", "reuse", "merge", "warn"] },
+        "mergeMenus": { "type": "boolean" },
+        "placement": { "enum": ["foundation", "fragment"] }
+      }
+    },
+    "graph": {
+      "type": "object",
+      "required": ["nodes", "edges"],
+      "properties": {
+        "nodes": { "type": "array" },
+        "edges": { "type": "array" }
+      }
+    }
+  },
+  "examples": [
+    {
+      "id": "admin_panel",
+      "version": 2,
+      "dependencies": ["admin_by_id"],
+      "capabilities": ["admin_menu"],
+      "globals": ["ADMIN_ID"],
+      "callbacks": ["mod_admin:panel", "mod_admin:stats"],
+      "mergeStrategy": {
+        "dedupeBot": true,
+        "dedupeStart": true,
+        "mergeGlobals": "reuse",
+        "mergeMenus": true,
+        "placement": "fragment"
+      },
+      "graph": {
+        "nodes": [],
+        "edges": []
+      }
+    }
+  ]
+}

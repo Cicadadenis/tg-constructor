@@ -1,0 +1,6 @@
+{
+  "id": "http_patch",
+  "name": "HTTP PATCH — частичное обновление",
+  "desc": "Обновляет часть ресурса через PATCH-запрос",
+  "category": "🌐 HTTP и внешние API"
+}

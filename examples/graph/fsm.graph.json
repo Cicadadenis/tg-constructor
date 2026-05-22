@@ -1,0 +1,142 @@
+{
+  "nodes": [
+    {
+      "id": "n_bot",
+      "type": "cicada",
+      "position": {
+        "x": 0,
+        "y": 20
+      },
+      "data": {
+        "type": "bot",
+        "props": {
+          "token": "YOUR_BOT_TOKEN"
+        }
+      }
+    },
+    {
+      "id": "n_start",
+      "type": "cicada",
+      "position": {
+        "x": 260,
+        "y": 440
+      },
+      "data": {
+        "type": "command",
+        "props": {
+          "cmd": "profile"
+        }
+      }
+    },
+    {
+      "id": "n_ask1",
+      "type": "cicada",
+      "position": {
+        "x": 260,
+        "y": 540
+      },
+      "data": {
+        "type": "ask",
+        "props": {
+          "question": "Как вас зовут?",
+          "varname": "name"
+        }
+      }
+    },
+    {
+      "id": "n_ask2",
+      "type": "cicada",
+      "position": {
+        "x": 260,
+        "y": 640
+      },
+      "data": {
+        "type": "ask",
+        "props": {
+          "question": "Город?",
+          "varname": "city"
+        }
+      }
+    },
+    {
+      "id": "n_save",
+      "type": "cicada",
+      "position": {
+        "x": 260,
+        "y": 740
+      },
+      "data": {
+        "type": "save",
+        "props": {
+          "key": "profile_name",
+          "varname": "name"
+        }
+      }
+    },
+    {
+      "id": "n_done",
+      "type": "cicada",
+      "position": {
+        "x": 260,
+        "y": 840
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "✅ {name}, {city}"
+        }
+      }
+    },
+    {
+      "id": "n_done_kb",
+      "type": "cicada",
+      "position": {
+        "x": 260,
+        "y": 940
+      },
+      "data": {
+        "type": "buttons",
+        "props": {
+          "rows": "/profile"
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_c1_1",
+      "source": "n_start",
+      "target": "n_ask1",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c1_2",
+      "source": "n_ask1",
+      "target": "n_ask2",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c1_3",
+      "source": "n_ask2",
+      "target": "n_save",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c1_4",
+      "source": "n_save",
+      "target": "n_done",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c1_5",
+      "source": "n_done",
+      "target": "n_done_kb",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    }
+  ]
+}

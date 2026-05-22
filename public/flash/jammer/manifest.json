@@ -1,0 +1,13 @@
+{
+  "name": "Cicada ESP8266 Глушилка",
+  "version": "deauther",
+  "new_install_prompt_erase": true,
+  "new_install_improv_wait_time": 0,
+  "builds": [
+    {
+      "chipFamily": "ESP8266",
+      "improv": false,
+      "parts": [{ "path": "esp8266_deauther.bin", "offset": 0 }]
+    }
+  ]
+}

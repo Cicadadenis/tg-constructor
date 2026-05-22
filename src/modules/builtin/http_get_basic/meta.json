@@ -1,0 +1,6 @@
+{
+  "id": "http_get_basic",
+  "name": "HTTP GET запрос",
+  "desc": "Получить данные от внешнего API",
+  "category": "🌐 HTTP и внешние API"
+}

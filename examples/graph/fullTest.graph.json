@@ -1,0 +1,349 @@
+{
+  "nodes": [
+    {
+      "id": "n_bot",
+      "type": "cicada",
+      "position": {
+        "x": 0,
+        "y": 20
+      },
+      "data": {
+        "type": "bot",
+        "props": {
+          "token": "YOUR_BOT_TOKEN"
+        }
+      }
+    },
+    {
+      "id": "n_cmds",
+      "type": "cicada",
+      "position": {
+        "x": 260,
+        "y": 340
+      },
+      "data": {
+        "type": "commands",
+        "props": {
+          "commands": "/start - 🧪\n/help - ❓\n/profile - 👤\n/media - 🖼"
+        }
+      }
+    },
+    {
+      "id": "n_start",
+      "type": "cicada",
+      "position": {
+        "x": 520,
+        "y": 760
+      },
+      "data": {
+        "type": "start",
+        "props": {}
+      }
+    },
+    {
+      "id": "n_start_msg",
+      "type": "cicada",
+      "position": {
+        "x": 520,
+        "y": 860
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "🧪 Full Test AST-first"
+        }
+      }
+    },
+    {
+      "id": "n_start_kb",
+      "type": "cicada",
+      "position": {
+        "x": 520,
+        "y": 960
+      },
+      "data": {
+        "type": "buttons",
+        "props": {
+          "rows": "👤 Профиль, 🖼 Медиа"
+        }
+      }
+    },
+    {
+      "id": "n_help",
+      "type": "cicada",
+      "position": {
+        "x": 780,
+        "y": 1080
+      },
+      "data": {
+        "type": "command",
+        "props": {
+          "cmd": "help"
+        }
+      }
+    },
+    {
+      "id": "n_help_inl",
+      "type": "cicada",
+      "position": {
+        "x": 780,
+        "y": 1180
+      },
+      "data": {
+        "type": "inline",
+        "props": {
+          "buttons": "Профиль → go_profile"
+        }
+      }
+    },
+    {
+      "id": "n_help_msg",
+      "type": "cicada",
+      "position": {
+        "x": 780,
+        "y": 1280
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "/profile, /media"
+        }
+      }
+    },
+    {
+      "id": "n_cb_prof",
+      "type": "cicada",
+      "position": {
+        "x": 1040,
+        "y": 1400
+      },
+      "data": {
+        "type": "callback",
+        "props": {
+          "callbackPrefix": "go_"
+        }
+      }
+    },
+    {
+      "id": "n_goto_prof",
+      "type": "cicada",
+      "position": {
+        "x": 1040,
+        "y": 1500
+      },
+      "data": {
+        "type": "goto",
+        "props": {
+          "target": "profile"
+        }
+      }
+    },
+    {
+      "id": "n_prof",
+      "type": "cicada",
+      "position": {
+        "x": 1300,
+        "y": 1720
+      },
+      "data": {
+        "type": "command",
+        "props": {
+          "cmd": "profile"
+        }
+      }
+    },
+    {
+      "id": "n_ask1",
+      "type": "cicada",
+      "position": {
+        "x": 1300,
+        "y": 1820
+      },
+      "data": {
+        "type": "ask",
+        "props": {
+          "question": "Имя?",
+          "varname": "name"
+        }
+      }
+    },
+    {
+      "id": "n_ask2",
+      "type": "cicada",
+      "position": {
+        "x": 1300,
+        "y": 1920
+      },
+      "data": {
+        "type": "ask",
+        "props": {
+          "question": "Город?",
+          "varname": "city"
+        }
+      }
+    },
+    {
+      "id": "n_prof_done",
+      "type": "cicada",
+      "position": {
+        "x": 1300,
+        "y": 2020
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "✅ {name}, {city}"
+        }
+      }
+    },
+    {
+      "id": "n_media",
+      "type": "cicada",
+      "position": {
+        "x": 1560,
+        "y": 2040
+      },
+      "data": {
+        "type": "command",
+        "props": {
+          "cmd": "media"
+        }
+      }
+    },
+    {
+      "id": "n_media_msg",
+      "type": "cicada",
+      "position": {
+        "x": 1560,
+        "y": 2140
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "Фото:"
+        }
+      }
+    },
+    {
+      "id": "n_photo",
+      "type": "cicada",
+      "position": {
+        "x": 1560,
+        "y": 2240
+      },
+      "data": {
+        "type": "photo",
+        "props": {
+          "url": "https://picsum.photos/480/320"
+        }
+      }
+    },
+    {
+      "id": "n_cb_media",
+      "type": "cicada",
+      "position": {
+        "x": 1820,
+        "y": 2360
+      },
+      "data": {
+        "type": "callback",
+        "props": {
+          "label": "🖼 Медиа"
+        }
+      }
+    },
+    {
+      "id": "n_cb_media_msg",
+      "type": "cicada",
+      "position": {
+        "x": 1820,
+        "y": 2460
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "Команда /media"
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_c2_1",
+      "source": "n_start",
+      "target": "n_start_msg",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c2_2",
+      "source": "n_start_msg",
+      "target": "n_start_kb",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c3_1",
+      "source": "n_help",
+      "target": "n_help_inl",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c3_2",
+      "source": "n_help_inl",
+      "target": "n_help_msg",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c4_1",
+      "source": "n_cb_prof",
+      "target": "n_goto_prof",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c5_1",
+      "source": "n_prof",
+      "target": "n_ask1",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c5_2",
+      "source": "n_ask1",
+      "target": "n_ask2",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c5_3",
+      "source": "n_ask2",
+      "target": "n_prof_done",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c6_1",
+      "source": "n_media",
+      "target": "n_media_msg",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c6_2",
+      "source": "n_media_msg",
+      "target": "n_photo",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c7_1",
+      "source": "n_cb_media",
+      "target": "n_cb_media_msg",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "id": "http_delete",
+  "name": "HTTP DELETE — удаление",
+  "desc": "Удаляет ресурс через DELETE-запрос",
+  "category": "🌐 HTTP и внешние API"
+}

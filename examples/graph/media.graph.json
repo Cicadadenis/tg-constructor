@@ -1,0 +1,186 @@
+{
+  "nodes": [
+    {
+      "id": "n_bot",
+      "type": "cicada",
+      "position": {
+        "x": 0,
+        "y": 20
+      },
+      "data": {
+        "type": "bot",
+        "props": {
+          "token": "YOUR_BOT_TOKEN"
+        }
+      }
+    },
+    {
+      "id": "n_cmds",
+      "type": "cicada",
+      "position": {
+        "x": 260,
+        "y": 340
+      },
+      "data": {
+        "type": "commands",
+        "props": {
+          "commands": "/media - 🖼 Медиа"
+        }
+      }
+    },
+    {
+      "id": "n_media",
+      "type": "cicada",
+      "position": {
+        "x": 520,
+        "y": 760
+      },
+      "data": {
+        "type": "command",
+        "props": {
+          "cmd": "media"
+        }
+      }
+    },
+    {
+      "id": "n_cap",
+      "type": "cicada",
+      "position": {
+        "x": 520,
+        "y": 860
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "🖼 Медиа-демо:"
+        }
+      }
+    },
+    {
+      "id": "n_photo",
+      "type": "cicada",
+      "position": {
+        "x": 520,
+        "y": 960
+      },
+      "data": {
+        "type": "photo",
+        "props": {
+          "url": "https://picsum.photos/640/360"
+        }
+      }
+    },
+    {
+      "id": "n_video",
+      "type": "cicada",
+      "position": {
+        "x": 520,
+        "y": 1060
+      },
+      "data": {
+        "type": "video",
+        "props": {
+          "url": "https://samplelib.com/lib/preview/mp4/sample-5s.mp4"
+        }
+      }
+    },
+    {
+      "id": "n_doc",
+      "type": "cicada",
+      "position": {
+        "x": 520,
+        "y": 1160
+      },
+      "data": {
+        "type": "document",
+        "props": {
+          "url": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+        }
+      }
+    },
+    {
+      "id": "n_done",
+      "type": "cicada",
+      "position": {
+        "x": 520,
+        "y": 1260
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "✅ Готово."
+        }
+      }
+    },
+    {
+      "id": "n_on_photo",
+      "type": "cicada",
+      "position": {
+        "x": 780,
+        "y": 1080
+      },
+      "data": {
+        "type": "on_photo",
+        "props": {}
+      }
+    },
+    {
+      "id": "n_photo_ack",
+      "type": "cicada",
+      "position": {
+        "x": 780,
+        "y": 1180
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "📷 Фото получено"
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_c2_1",
+      "source": "n_media",
+      "target": "n_cap",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c2_2",
+      "source": "n_cap",
+      "target": "n_photo",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c2_3",
+      "source": "n_photo",
+      "target": "n_video",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c2_4",
+      "source": "n_video",
+      "target": "n_doc",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c2_5",
+      "source": "n_doc",
+      "target": "n_done",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c3_1",
+      "source": "n_on_photo",
+      "target": "n_photo_ack",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    }
+  ]
+}

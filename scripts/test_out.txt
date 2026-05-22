@@ -1,0 +1,3 @@
+﻿repr: 'тЬи Studio ╨┤╨╗╤П Telegram-╨▒╨╛╤В╨╛╨▓'
+cp1251->utf8: ╟ряєёЄш
+cp1251->utf8: fail 'charmap' codec can't encode character '\u2728' in position 256: character maps to <undefined>

@@ -1,0 +1,6 @@
+{
+  "id": "tg_inline_router",
+  "name": "Inline-меню с роутером callback",
+  "desc": "Одним обработчиком разбирает callback_data по префиксам",
+  "category": "📡 Telegram расширения"
+}

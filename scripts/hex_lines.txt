@@ -1,0 +1,36 @@
+
+=== 2965 ===
+                <p style={{ color:'rgba(255,255,255,0.7)', fontSize: lp ? 12 : 15, lineHeight:1.5, maxWidth:500, marginBottom: lp ? 10 : 16 }}>
+repr snippet: '5, lineHeight:1.5, maxWidth:500, marginBottom: lp ? 10 : 16 }}>'
+
+=== 2966 ===
+                  Собирай Telegram-бота блоками, проверяй сценарий и запускай в пару кликов. Без длинной настройки и без ручного кода в начале.
+repr snippet: 'пару кликов. Без длинной настройки и без ручного кода в начале.'
+
+=== 2968 ===
+                <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'center', marginBottom:14 }}>
+repr snippet: "s:'center', marginBottom:14 }}>"
+
+=== 2969 ===
+                  <button className="lp-btn-gold" onClick={openRegister} style={{ borderRadius:10, padding:'11px 22px', fontSize:14 }}>РќР°С‡Р°С‚СЊ Р±РµСЃРїР»Р°С‚РЅРѕ в†’</button>
+repr snippet: "{ borderRadius:10, padding:'11px 22px', fontSize:14 }}>РќР°С‡Р°С‚СЊ Р±РµСЃРїР»Р°С‚РЅРѕ в†’</button>"
+
+=== 2973 ===
+                  <span style={{ width:7, height:7, borderRadius:'50%', background:'#3ecf8e', boxShadow:'0 0 6px #3ecf8e', display:'inline-block' }} />
+repr snippet: "nd:'#3ecf8e', boxShadow:'0 0 6px #3ecf8e', display:'inline-block' }} />"
+
+=== 2974 ===
+                  Бесплатно навсегда для одного проекта
+repr snippet: '                  Бесплатно навсегда для одного проекта'
+
+=== 2943 ===
+                >
+repr snippet: '                >'
+
+=== 2944 ===
+                  <span className="pill-icon">{icon}</span>\n                  {label}\n                </button>\n              ))}\n            </div>\n          )}\n          {/* Right actions */}\n          <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0 }}>\n            <button onClick={openLogin} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.82)', fontSize:13, fontWeight:600, cursor:'pointer', padding: lp ? '7px 10px' : '7px 18px', borderRadius:8, fontFamily:'system-ui,sans-serif', transition:'color .2s' }}\n              onMouseEnter={e=>e.currentTarget.style.color='#fff'}\n              onMouseLeave={e=>e.currentTarget.style.color='rgba(255,255,255,0.82)'}\n            >  U ! Q</button>\n            <button className="lp-btn-gold" onClick={openRegister} style={{ borderRadius:9, padding: lp ? '8px 14px' : '9px 20px', fontSize:13, display:'flex', alignItems:'center', gap:6 }}>
+repr snippet: 'label}\\n                </button>\\n              ))}\\n            </div>\\n          )}\\n          {/* Right actions */}\\'
+
+=== 197 ===
+  { id: 'features', label: 'Р’РѕР·РјРѕР¶РЅРѕСЃС‚Рё', icon: '2Z', clr: 'rgba(251,191,36,0.45)' },
+repr snippet: ",191,36,0.45)' },"

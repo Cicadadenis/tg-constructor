@@ -1,0 +1,6 @@
+{
+  "id": "tg_user_lang",
+  "name": "Язык пользователя из Telegram",
+  "desc": "Автоопределение языка интерфейса пользователя в Telegram",
+  "category": "📡 Telegram расширения"
+}

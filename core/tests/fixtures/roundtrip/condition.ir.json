@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 2,
+  "kind": "wrappedChain",
+  "wrap": {
+    "version": "1.0",
+    "bot": "0:dummy",
+    "command": "/t"
+  },
+  "blocks": [
+    {
+      "indent": 0,
+      "block": {
+        "type": "condition",
+        "props": {
+          "cond": "текст == \"да\""
+        }
+      }
+    },
+    {
+      "indent": 1,
+      "block": {
+        "type": "message",
+        "props": {
+          "text": "ok"
+        }
+      }
+    }
+  ]
+}

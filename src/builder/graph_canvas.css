@@ -1,0 +1,44 @@
+/* Canvas interaction fixes — nodes above edges; edges don't steal node clicks */
+
+.react-flow {
+  position: relative;
+  z-index: 1;
+}
+
+.react-flow__edges {
+  z-index: 0 !important;
+}
+
+.react-flow__nodes {
+  z-index: 2 !important;
+}
+
+.react-flow__edge,
+.react-flow__connectionline {
+  pointer-events: none !important;
+}
+
+.react-flow__edge-interaction {
+  pointer-events: none !important;
+}
+
+.react-flow__node.cicada-node {
+  pointer-events: all !important;
+}
+
+.react-flow__node.cicada-node .cicada-node-hit {
+  pointer-events: all !important;
+  cursor: grab;
+}
+
+.react-flow__node.cicada-node.selected .cicada-node-hit {
+  cursor: grabbing;
+}
+
+.react-flow__node.cicada-node .cicada-node-controls {
+  pointer-events: all !important;
+}
+
+.react-flow__pane {
+  touch-action: none;
+}

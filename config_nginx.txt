@@ -1,0 +1,128 @@
+nano /etc/nginx/sites-enabled/cicada
+
+# Для админки / логов: реальный IP клиента (иначе Node видит 127.0.0.1 / ::1)
+# proxy_set_header X-Real-IP $remote_addr;
+# proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+# proxy_set_header X-Forwarded-Proto $scheme;
+
+server {
+    server_name xn--80aaa5crh.site;
+
+    root /var/www/cicada/dist;
+    index index.html;
+
+    location = /satana {
+        proxy_pass http://localhost:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location = /satana.html {
+        return 301 /satana;
+    }
+
+    # Clean URLs: убрать .html из адресной строки (301)
+    location = /index.html {
+        return 301 /$is_args$args;
+    }
+
+    location ~ ^(/(?:esphome|flash(?:/jammer)?))/index\.html$ {
+        return 301 $1/$is_args$args;
+    }
+
+    location ~ ^(/(?!api|firmware)[^?]*?)\.html$ {
+        return 301 $1$is_args$args;
+    }
+
+    location / {
+        try_files $uri $uri/ $uri.html /index.html;
+    }
+
+    # Сборка ESPHome — долгие запросы (резерв, если клиент без polling)
+    location /api/firmware/build {
+        client_max_body_size 100M;
+        proxy_pass http://localhost:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 900s;
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 900s;
+    }
+
+    # Прошивка ESP: manifest/bin с Node (не из dist / index.html)
+    location /firmware/ {
+        proxy_pass http://localhost:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Flash (страницы + flash-i18n.js): Node (^~ важнее location / try_files)
+    location ^~ /flash/ {
+        proxy_pass http://localhost:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Jammer: дублирует /flash/ (можно оставить для явности)
+    location ^~ /flash/jammer/ {
+        proxy_pass http://localhost:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /api/ {
+        proxy_pass http://localhost:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        proxy_read_timeout 120s;
+    }
+
+    location /run {
+        proxy_pass http://localhost:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    listen 443 ssl;
+    ssl_certificate /etc/letsencrypt/live/xn--80aaa5crh.site/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/xn--80aaa5crh.site/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+}
+
+server {
+    if ($host = xn--80aaa5crh.site) {
+        return 301 https://$host$request_uri;
+    }
+
+    listen 80;
+    server_name xn--80aaa5crh.site;
+    return 404;
+}

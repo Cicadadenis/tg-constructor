@@ -1,0 +1,6 @@
+{
+  "id": "tg_member_role",
+  "name": "Роль участника в группе/канале",
+  "desc": "Получает статус пользователя в чате: creator/admin/member/left",
+  "category": "📡 Telegram расширения"
+}

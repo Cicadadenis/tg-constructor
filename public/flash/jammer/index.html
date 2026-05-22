@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>ESP8266 Глушилка — прошивка</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #12141a;
+      --panel: #1a1d26;
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #e8eaef;
+      --muted: #8b93a7;
+      --accent: #fb923c;
+      --accent-dim: rgba(251, 146, 60, 0.14);
+      --danger: #f87171;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Syne', system-ui, sans-serif;
+      background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(251, 146, 60, 0.14), transparent), var(--bg);
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      width: 100%;
+      max-width: 460px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 28px 24px 24px;
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+    }
+    .card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--accent);
+      background: var(--accent-dim);
+      border-radius: 999px;
+      padding: 4px 10px;
+    }
+    button.exit-btn {
+      flex-shrink: 0;
+      padding: 6px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      font-family: inherit;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button.exit-btn:hover {
+      color: var(--text);
+      border-color: rgba(248, 113, 113, 0.45);
+      background: rgba(248, 113, 113, 0.08);
+    }
+    h1 { margin: 0 0 8px; font-size: 1.45rem; font-weight: 700; }
+    .info {
+      margin: 0 0 20px;
+      padding: 14px 16px;
+      border-radius: 12px;
+      border: 1px solid rgba(251, 146, 60, 0.25);
+      background: rgba(251, 146, 60, 0.08);
+      font-size: 0.88rem;
+      line-height: 1.55;
+      color: var(--text);
+    }
+    .info code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.82rem;
+      background: rgba(0, 0, 0, 0.25);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .info ul { margin: 10px 0 0; padding-left: 1.2rem; }
+    .info li { margin: 6px 0; }
+    .actions { margin-top: 8px; }
+    .hint {
+      margin-top: 16px;
+      font-size: 0.78rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .hint code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      background: rgba(255, 255, 255, 0.06);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .status { margin-top: 14px; font-size: 0.8rem; min-height: 1.2em; white-space: pre-wrap; }
+    .status.err { color: var(--danger); }
+    .status.ok { color: #4ade80; }
+    button.primary {
+      width: 100%;
+      padding: 12px 16px;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #fb923c, #ea580c);
+      color: #1c0a00;
+      font-family: inherit;
+      font-weight: 700;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+    button.primary:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    button.primary.is-busy {
+      background: linear-gradient(135deg, #9a3412, #7c2d12);
+      color: #fde68a;
+    }
+
+  </style>
+  <link rel="stylesheet" href="../flash-dialog.css" />
+</head>
+<body>
+  <div class="card">
+    <div class="card-top">
+      <span class="badge">ESP8266 · Глушилка</span>
+      <button type="button" class="exit-btn" id="exit-btn">Выход</button>
+    </div>
+    <h1>Прошивка ESP8266</h1>
+    <div class="info">
+      <p>После прошивки на устройстве появится Wi‑Fi сеть:</p>
+      <ul>
+        <li>Имя сети: <code>cicada3301</code></li>
+        <li>На странице входа пароль: <code>cicada3301</code></li>
+      </ul>
+    </div>
+    <div class="actions" id="flash-actions">
+      <button type="button" class="primary" id="flash-btn" disabled>Прошить</button>
+    </div>
+    <p class="hint">
+      Подключите плату по USB и нажмите <strong>Прошить</strong>. Выберите COM‑порт (CP210x / CH340) в окне Chrome или Edge.
+      Рекомендуется <strong>стереть flash</strong> перед записью. Нужен <code>HTTPS</code> или <code>localhost</code>.
+      Запись занимает 1–3 минуты.
+    </p>
+    <p class="status" id="flash-status"></p>
+  </div>
+
+  <div id="flash-overlay" class="flash-overlay" hidden aria-hidden="true">
+    <div class="flash-dialog" id="flash-dialog" data-accent="orange" role="dialog" aria-modal="true" aria-labelledby="flash-dialog-title" data-state="confirm">
+      <header class="flash-dialog__head">
+        <h2 id="flash-dialog-title">Установка прошивки</h2>
+        <button type="button" class="flash-dialog__close" id="flash-dialog-close" aria-label="Закрыть">×</button>
+      </header>
+      <div class="flash-dialog__body" id="flash-dialog-body">
+        <p id="flash-dialog-text">
+          Стереть память перед установкой <strong>Cicada ESP8266 Глушилка</strong>?
+          Все данные на устройстве будут удалены.
+        </p>
+        <label class="flash-check" id="flash-erase-wrap">
+          <input type="checkbox" id="flash-erase-check" checked />
+          <span>Стереть flash перед записью</span>
+        </label>
+                <div id="flash-progress-block" hidden>
+          <div class="flash-ring-wrap">
+            <svg class="flash-ring" viewBox="0 0 120 120" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="flash-progress-bar">
+              <circle class="flash-ring__orbit" cx="60" cy="60" r="54" />
+              <circle class="flash-ring__track" cx="60" cy="60" r="52" />
+              <circle class="flash-ring__glow" id="flash-progress-glow" cx="60" cy="60" r="52" />
+              <circle class="flash-ring__fill" id="flash-progress-ring" cx="60" cy="60" r="52" />
+            </svg>
+            <div class="flash-ring__center">
+              <span class="flash-ring__pct" id="flash-progress-pct">0%</span>
+              <span class="flash-ring__stage" id="flash-progress-stage">Подготовка…</span>
+            </div>
+          </div>
+</div>
+      </div>
+      <footer class="flash-dialog__foot">
+        <button type="button" id="flash-dialog-back">Назад</button>
+        <button type="button" class="flash-btn--primary" id="flash-dialog-next">Далее</button>
+      </footer>
+    </div>
+  </div>
+
+  <script src="serial-cleanup.js"></script>
+  <script src="/esphome/studio-subscription.js" defer></script>
+  <script type="module" src="jammer.js"></script>
+</body>
+</html>

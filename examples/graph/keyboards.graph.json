@@ -1,0 +1,256 @@
+{
+  "nodes": [
+    {
+      "id": "n_bot",
+      "type": "cicada",
+      "position": {
+        "x": 0,
+        "y": 20
+      },
+      "data": {
+        "type": "bot",
+        "props": {
+          "token": "YOUR_BOT_TOKEN"
+        }
+      }
+    },
+    {
+      "id": "n_start",
+      "type": "cicada",
+      "position": {
+        "x": 260,
+        "y": 440
+      },
+      "data": {
+        "type": "start",
+        "props": {}
+      }
+    },
+    {
+      "id": "n_intro",
+      "type": "cicada",
+      "position": {
+        "x": 260,
+        "y": 540
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "Reply-клавиатура на этом сообщении:"
+        }
+      }
+    },
+    {
+      "id": "n_reply_kb",
+      "type": "cicada",
+      "position": {
+        "x": 260,
+        "y": 640
+      },
+      "data": {
+        "type": "buttons",
+        "props": {
+          "rows": "Да, Нет"
+        }
+      }
+    },
+    {
+      "id": "n_cmd",
+      "type": "cicada",
+      "position": {
+        "x": 520,
+        "y": 760
+      },
+      "data": {
+        "type": "command",
+        "props": {
+          "cmd": "inline"
+        }
+      }
+    },
+    {
+      "id": "n_inline",
+      "type": "cicada",
+      "position": {
+        "x": 520,
+        "y": 860
+      },
+      "data": {
+        "type": "inline",
+        "props": {
+          "buttons": "Подробнее → more_info\nЗакрыть → close_panel"
+        }
+      }
+    },
+    {
+      "id": "n_inline_msg",
+      "type": "cicada",
+      "position": {
+        "x": 520,
+        "y": 960
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "Inline привязан к сообщению (AST bind)."
+        }
+      }
+    },
+    {
+      "id": "n_cb_more",
+      "type": "cicada",
+      "position": {
+        "x": 780,
+        "y": 1080
+      },
+      "data": {
+        "type": "callback",
+        "props": {
+          "callbackPrefix": "more_"
+        }
+      }
+    },
+    {
+      "id": "n_more_msg",
+      "type": "cicada",
+      "position": {
+        "x": 780,
+        "y": 1180
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "Подробнее (callback_query prefix more_)"
+        }
+      }
+    },
+    {
+      "id": "n_cb_close",
+      "type": "cicada",
+      "position": {
+        "x": 1040,
+        "y": 1400
+      },
+      "data": {
+        "type": "callback",
+        "props": {
+          "callbackPrefix": "close_"
+        }
+      }
+    },
+    {
+      "id": "n_close_msg",
+      "type": "cicada",
+      "position": {
+        "x": 1040,
+        "y": 1500
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "Панель закрыта."
+        }
+      }
+    },
+    {
+      "id": "n_cb_ok",
+      "type": "cicada",
+      "position": {
+        "x": 1300,
+        "y": 1720
+      },
+      "data": {
+        "type": "callback",
+        "props": {
+          "label": "OK"
+        }
+      }
+    },
+    {
+      "id": "n_ok_msg",
+      "type": "cicada",
+      "position": {
+        "x": 1300,
+        "y": 1820
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "Reply OK → F.text handler"
+        }
+      }
+    },
+    {
+      "id": "n_ok_kb",
+      "type": "cicada",
+      "position": {
+        "x": 1300,
+        "y": 1920
+      },
+      "data": {
+        "type": "buttons",
+        "props": {
+          "rows": "OK"
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_c1_1",
+      "source": "n_start",
+      "target": "n_intro",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c1_2",
+      "source": "n_intro",
+      "target": "n_reply_kb",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c2_1",
+      "source": "n_cmd",
+      "target": "n_inline",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c2_2",
+      "source": "n_inline",
+      "target": "n_inline_msg",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c3_1",
+      "source": "n_cb_more",
+      "target": "n_more_msg",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c4_1",
+      "source": "n_cb_close",
+      "target": "n_close_msg",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c5_1",
+      "source": "n_cb_ok",
+      "target": "n_ok_msg",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c5_2",
+      "source": "n_ok_msg",
+      "target": "n_ok_kb",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    }
+  ]
+}

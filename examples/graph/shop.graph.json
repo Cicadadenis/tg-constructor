@@ -1,0 +1,341 @@
+{
+  "nodes": [
+    {
+      "id": "n_bot",
+      "type": "cicada",
+      "position": {
+        "x": 0,
+        "y": 20
+      },
+      "data": {
+        "type": "bot",
+        "props": {
+          "token": "YOUR_BOT_TOKEN"
+        }
+      }
+    },
+    {
+      "id": "n_ver",
+      "type": "cicada",
+      "position": {
+        "x": 260,
+        "y": 340
+      },
+      "data": {
+        "type": "version",
+        "props": {
+          "version": "1.0"
+        }
+      }
+    },
+    {
+      "id": "n_global",
+      "type": "cicada",
+      "position": {
+        "x": 520,
+        "y": 660
+      },
+      "data": {
+        "type": "global",
+        "props": {
+          "varname": "shop_open",
+          "value": "true"
+        }
+      }
+    },
+    {
+      "id": "n_cmds",
+      "type": "cicada",
+      "position": {
+        "x": 780,
+        "y": 980
+      },
+      "data": {
+        "type": "commands",
+        "props": {
+          "commands": "/start - 🚀 Магазин\n/catalog - 📦 Каталог\n/cart - 🛒 Корзина"
+        }
+      }
+    },
+    {
+      "id": "n_start",
+      "type": "cicada",
+      "position": {
+        "x": 1040,
+        "y": 1400
+      },
+      "data": {
+        "type": "start",
+        "props": {}
+      }
+    },
+    {
+      "id": "n_welcome",
+      "type": "cicada",
+      "position": {
+        "x": 1040,
+        "y": 1500
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "👋 Добро пожаловать в магазин 🛍️"
+        }
+      }
+    },
+    {
+      "id": "n_welcome_kb",
+      "type": "cicada",
+      "position": {
+        "x": 1040,
+        "y": 1600
+      },
+      "data": {
+        "type": "buttons",
+        "props": {
+          "rows": "📦 Каталог, 🛒 Корзина\n❓ Помощь"
+        }
+      }
+    },
+    {
+      "id": "n_cat",
+      "type": "cicada",
+      "position": {
+        "x": 1300,
+        "y": 1720
+      },
+      "data": {
+        "type": "command",
+        "props": {
+          "cmd": "catalog"
+        }
+      }
+    },
+    {
+      "id": "n_cat_msg",
+      "type": "cicada",
+      "position": {
+        "x": 1300,
+        "y": 1820
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "📦 Каталог:\n🍎 Яблоки — 100₽"
+        }
+      }
+    },
+    {
+      "id": "n_cat_kb",
+      "type": "cicada",
+      "position": {
+        "x": 1300,
+        "y": 1920
+      },
+      "data": {
+        "type": "buttons",
+        "props": {
+          "rows": "🍎 Яблоки — 100₽\n🏠 Главная"
+        }
+      }
+    },
+    {
+      "id": "n_cart",
+      "type": "cicada",
+      "position": {
+        "x": 1560,
+        "y": 2040
+      },
+      "data": {
+        "type": "command",
+        "props": {
+          "cmd": "cart"
+        }
+      }
+    },
+    {
+      "id": "n_cart_msg",
+      "type": "cicada",
+      "position": {
+        "x": 1560,
+        "y": 2140
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "🛒 Корзина пуста."
+        }
+      }
+    },
+    {
+      "id": "n_cart_kb",
+      "type": "cicada",
+      "position": {
+        "x": 1560,
+        "y": 2240
+      },
+      "data": {
+        "type": "buttons",
+        "props": {
+          "rows": "📦 Каталог, 🏠 Главная"
+        }
+      }
+    },
+    {
+      "id": "n_cb_home",
+      "type": "cicada",
+      "position": {
+        "x": 1820,
+        "y": 2360
+      },
+      "data": {
+        "type": "callback",
+        "props": {
+          "label": "🏠 Главная"
+        }
+      }
+    },
+    {
+      "id": "n_home_msg",
+      "type": "cicada",
+      "position": {
+        "x": 1820,
+        "y": 2460
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "🏠 Главное меню"
+        }
+      }
+    },
+    {
+      "id": "n_home_kb",
+      "type": "cicada",
+      "position": {
+        "x": 1820,
+        "y": 2560
+      },
+      "data": {
+        "type": "buttons",
+        "props": {
+          "rows": "📦 Каталог, 🛒 Корзина"
+        }
+      }
+    },
+    {
+      "id": "n_cb_apple",
+      "type": "cicada",
+      "position": {
+        "x": 2080,
+        "y": 2680
+      },
+      "data": {
+        "type": "callback",
+        "props": {
+          "label": "🍎 Яблоки — 100₽"
+        }
+      }
+    },
+    {
+      "id": "n_apple_msg",
+      "type": "cicada",
+      "position": {
+        "x": 2080,
+        "y": 2780
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "🍎 Добавлено в корзину!"
+        }
+      }
+    },
+    {
+      "id": "n_apple_kb",
+      "type": "cicada",
+      "position": {
+        "x": 2080,
+        "y": 2880
+      },
+      "data": {
+        "type": "buttons",
+        "props": {
+          "rows": "🛒 Корзина, 📦 Каталог"
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_c4_1",
+      "source": "n_start",
+      "target": "n_welcome",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c4_2",
+      "source": "n_welcome",
+      "target": "n_welcome_kb",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c5_1",
+      "source": "n_cat",
+      "target": "n_cat_msg",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c5_2",
+      "source": "n_cat_msg",
+      "target": "n_cat_kb",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c6_1",
+      "source": "n_cart",
+      "target": "n_cart_msg",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c6_2",
+      "source": "n_cart_msg",
+      "target": "n_cart_kb",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c7_1",
+      "source": "n_cb_home",
+      "target": "n_home_msg",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c7_2",
+      "source": "n_home_msg",
+      "target": "n_home_kb",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c8_1",
+      "source": "n_cb_apple",
+      "target": "n_apple_msg",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c8_2",
+      "source": "n_apple_msg",
+      "target": "n_apple_kb",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    }
+  ]
+}

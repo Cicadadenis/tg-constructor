@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 2,
+  "kind": "emitBlock",
+  "indent": 1,
+  "block": {
+    "type": "message",
+    "props": {
+      "text": "Hello"
+    }
+  }
+}

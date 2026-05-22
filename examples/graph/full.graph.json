@@ -1,0 +1,325 @@
+{
+  "nodes": [
+    {
+      "id": "n_bot",
+      "type": "cicada",
+      "position": {
+        "x": 0,
+        "y": 20
+      },
+      "data": {
+        "type": "bot",
+        "props": {
+          "token": "YOUR_BOT_TOKEN"
+        }
+      }
+    },
+    {
+      "id": "n_global",
+      "type": "cicada",
+      "position": {
+        "x": 260,
+        "y": 340
+      },
+      "data": {
+        "type": "global",
+        "props": {
+          "varname": "demo_enabled",
+          "value": "true"
+        }
+      }
+    },
+    {
+      "id": "n_cmds",
+      "type": "cicada",
+      "position": {
+        "x": 520,
+        "y": 660
+      },
+      "data": {
+        "type": "commands",
+        "props": {
+          "commands": "/start - 🚀\n/help - ❓\n/settings - ⚙️"
+        }
+      }
+    },
+    {
+      "id": "n_start",
+      "type": "cicada",
+      "position": {
+        "x": 780,
+        "y": 1080
+      },
+      "data": {
+        "type": "start",
+        "props": {}
+      }
+    },
+    {
+      "id": "n_cond",
+      "type": "cicada",
+      "position": {
+        "x": 780,
+        "y": 1180
+      },
+      "data": {
+        "type": "condition",
+        "props": {
+          "cond": "demo_enabled == True"
+        }
+      }
+    },
+    {
+      "id": "n_welcome",
+      "type": "cicada",
+      "position": {
+        "x": 780,
+        "y": 1280
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "👋 Добро пожаловать!"
+        }
+      }
+    },
+    {
+      "id": "n_menu_kb",
+      "type": "cicada",
+      "position": {
+        "x": 780,
+        "y": 1380
+      },
+      "data": {
+        "type": "buttons",
+        "props": {
+          "rows": "❓ Помощь, ⚙️ Настройки"
+        }
+      }
+    },
+    {
+      "id": "n_else",
+      "type": "cicada",
+      "position": {
+        "x": 780,
+        "y": 1480
+      },
+      "data": {
+        "type": "else",
+        "props": {}
+      }
+    },
+    {
+      "id": "n_off",
+      "type": "cicada",
+      "position": {
+        "x": 780,
+        "y": 1580
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "⛔ Демо выключено."
+        }
+      }
+    },
+    {
+      "id": "n_help",
+      "type": "cicada",
+      "position": {
+        "x": 1040,
+        "y": 1400
+      },
+      "data": {
+        "type": "command",
+        "props": {
+          "cmd": "help"
+        }
+      }
+    },
+    {
+      "id": "n_help_msg",
+      "type": "cicada",
+      "position": {
+        "x": 1040,
+        "y": 1500
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "Команды: /start, /help, /settings"
+        }
+      }
+    },
+    {
+      "id": "n_settings",
+      "type": "cicada",
+      "position": {
+        "x": 1300,
+        "y": 1720
+      },
+      "data": {
+        "type": "command",
+        "props": {
+          "cmd": "settings"
+        }
+      }
+    },
+    {
+      "id": "n_set_inline",
+      "type": "cicada",
+      "position": {
+        "x": 1300,
+        "y": 1820
+      },
+      "data": {
+        "type": "inline",
+        "props": {
+          "buttons": "RU → lang_ru\nEN → lang_en"
+        }
+      }
+    },
+    {
+      "id": "n_set_msg",
+      "type": "cicada",
+      "position": {
+        "x": 1300,
+        "y": 1920
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "⚙️ Настройки"
+        }
+      }
+    },
+    {
+      "id": "n_cb_lang",
+      "type": "cicada",
+      "position": {
+        "x": 1560,
+        "y": 2040
+      },
+      "data": {
+        "type": "callback",
+        "props": {
+          "callbackPrefix": "lang_"
+        }
+      }
+    },
+    {
+      "id": "n_lang_msg",
+      "type": "cicada",
+      "position": {
+        "x": 1560,
+        "y": 2140
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "🌐 lang_* handler"
+        }
+      }
+    },
+    {
+      "id": "n_cb_help",
+      "type": "cicada",
+      "position": {
+        "x": 1820,
+        "y": 2360
+      },
+      "data": {
+        "type": "callback",
+        "props": {
+          "label": "❓ Помощь"
+        }
+      }
+    },
+    {
+      "id": "n_cb_help_msg",
+      "type": "cicada",
+      "position": {
+        "x": 1820,
+        "y": 2460
+      },
+      "data": {
+        "type": "message",
+        "props": {
+          "text": "Справка по командам."
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_c3_1",
+      "source": "n_start",
+      "target": "n_cond",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c3_2",
+      "source": "n_cond",
+      "target": "n_welcome",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c3_3",
+      "source": "n_welcome",
+      "target": "n_menu_kb",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c3_4",
+      "source": "n_menu_kb",
+      "target": "n_else",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c3_5",
+      "source": "n_else",
+      "target": "n_off",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c4_1",
+      "source": "n_help",
+      "target": "n_help_msg",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c5_1",
+      "source": "n_settings",
+      "target": "n_set_inline",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c5_2",
+      "source": "n_set_inline",
+      "target": "n_set_msg",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c6_1",
+      "source": "n_cb_lang",
+      "target": "n_lang_msg",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    },
+    {
+      "id": "e_c7_1",
+      "source": "n_cb_help",
+      "target": "n_cb_help_msg",
+      "sourceHandle": "flow",
+      "targetHandle": "flow"
+    }
+  ]
+}

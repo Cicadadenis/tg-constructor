@@ -1,0 +1,55 @@
+                    e.currentTarget.style.borderColor = clr;
+                    e.currentTarget.style.boxShadow = `0 0 14px ${clr.replace('0.45', '0.18')}, 0 2px 8px rgba(0,0,0,0.25)`;
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
+                  <span className="pill-icon">{icon}</span>\n                  {label}\n                </button>\n              ))}\n            </div>\n          )}\n          {/* Right actions */}\n          <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0 }}>\n            <button onClick={openLogin} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.82)', fontSize:13, fontWeight:600, cursor:'pointer', padding: lp ? '7px 10px' : '7px 18px', borderRadius:8, fontFamily:'system-ui,sans-serif', transition:'color .2s' }}\n              onMouseEnter={e=>e.currentTarget.style.color='#fff'}\n              onMouseLeave={e=>e.currentTarget.style.color='rgba(255,255,255,0.82)'}\n            >  U ! Q</button>\n            <button className="lp-btn-gold" onClick={openRegister} style={{ borderRadius:9, padding: lp ? '8px 14px' : '9px 20px', fontSize:13, display:'flex', alignItems:'center', gap:6 }}>
+              {lp ? 'в†’' : 'РќР°С‡Р°С‚СЊ Р±РµСЃРїР»Р°С‚РЅРѕ в†’'}
+            </button>
+          </div>
+        </nav>
+
+        <div style={{ position:'relative' }}>
+          {landingInfoPage && LANDING_PAGE_CONTENT[landingInfoPage] && (
+            <LandingInfoModal page={landingInfoPage} onClose={() => setLandingInfoPage(null)} isMobile={lp} />
+          )}
+
+          {/* в”Ђв”Ђ HERO в”Ђв”Ђ */}
+          <div style={{ maxWidth:1220, margin:'0 auto', padding: lp ? '24px 16px 16px' : '36px 40px 40px' }}>
+            <div style={{ display:'grid', gridTemplateColumns: lp ? '1fr' : '1fr 1.05fr', gap: lp ? 24 : 40, alignItems:'flex-start', width:'100%' }}>
+
+              {/* Left */}
+              <div className="lp-fadeup">
+                <div style={{ display:'inline-flex', alignItems:'center', gap:6, border:'1px solid rgba(251,191,36,0.35)', borderRadius:999, padding:'5px 12px', fontSize:11, color:'#fde68a', background:'rgba(251,191,36,0.1)', marginBottom: lp ? 10 : 16 }}>вњЁ Studio РґР»СЏ Telegram-Р±РѕС‚РѕРІ</div>
+                <h1 style={{ fontFamily:'Syne,system-ui', fontWeight:800, fontSize: lp ? 32 : 48, lineHeight: lp ? 1.05 : 1.0, letterSpacing:'-0.02em', marginBottom: lp ? 8 : 12 }}>
+                  Р—Р°РїСѓСЃС‚Рё<br/>РєСЂР°СЃРёРІРѕРіРѕ Р±РѕС‚Р°<br/><span style={{ color:'#fbbf24' }}>Р·Р° РІРµС‡РµСЂ</span>
+                </h1>
+                <p style={{ color:'rgba(255,255,255,0.7)', fontSize: lp ? 12 : 15, lineHeight:1.5, maxWidth:500, marginBottom: lp ? 10 : 16 }}>
+                  Собирай Telegram-бота блоками, проверяй сценарий и запускай в пару кликов. Без длинной настройки и без ручного кода в начале.
+                </p>
+                <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'center', marginBottom:14 }}>
+                  <button className="lp-btn-gold" onClick={openRegister} style={{ borderRadius:10, padding:'11px 22px', fontSize:14 }}>РќР°С‡Р°С‚СЊ Р±РµСЃРїР»Р°С‚РЅРѕ в†’</button>
+
+                </div>
+                <div style={{ marginTop:10, fontSize:11, color:'rgba(255,255,255,0.45)', display:'flex', alignItems:'center', gap:6 }}>
+                  <span style={{ width:7, height:7, borderRadius:'50%', background:'#3ecf8e', boxShadow:'0 0 6px #3ecf8e', display:'inline-block' }} />
+                  Бесплатно навсегда для одного проекта
+                </div>
+              </div>
+
+              {/* Right вЂ” mockup */}
+              {!lp && (
+                <div style={{ position:'relative', animation:'panelFloat 5.8s ease-in-out infinite', paddingTop:28, overflow:'visible' }} className="lp-fadeup">
+                  {/* Glow arc вЂ” РєР°Рє РЅР° СЃРєСЂРёРЅС€РѕС‚Рµ */}
+                  <svg style={{ position:'absolute', top:'0%', right:'-14%', width:'135%', height:'120%', pointerEvents:'none', zIndex:0 }} viewBox="0 0 500 420" fill="none">
+                    <path d="M420 400 Q490 210 380 65 Q295 -15 155 25" stroke="url(#arcGrad)" strokeWidth="1.5" strokeDasharray="820" strokeDashoffset="820" style={{ animation:'glowArc 2.8s 0.3s ease forwards' }} opacity="0.7"/>
+                    <defs>
+                      <linearGradient id="arcGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#7c6ef2" stopOpacity="0"/>
+                        <stop offset="35%" stopColor="#7c6ef2" stopOpacity="0.9"/>
+                        <stop offset="65%" stopColor="#ffd700" stopOpacity="0.7"/>
+                        <stop offset="100%" stopColor="#ffd700" stopOpacity="0"/>
+                      </linearGradient>

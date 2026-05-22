@@ -1,0 +1,27 @@
+# Dependencies & build
+node_modules/
+dist/
+.cache/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv*/
+.venv-*/
+
+# Secrets & local deploy
+.env
+.env.*
+env_cicada
+bot.py
+*.pem
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+*.log
+npm-debug.log*
+
+# Large optional tooling
+.venv-esphome/

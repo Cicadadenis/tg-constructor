@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>Прошивка ESP — Cicada Studio</title>
+  <script>
+  (function () {
+    var rt = location.pathname + location.search;
+    var login = '/?login=1&returnTo=' + encodeURIComponent(rt);
+    fetch('/api/auth/oauth-bootstrap', { credentials: 'same-origin', cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { if (!d || !d.ok) location.replace(login); })
+      .catch(function () { location.replace(login); });
+  })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #12141a;
+      --panel: #1a1d26;
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #e8eaef;
+      --muted: #8b93a7;
+      --accent: #4ade80;
+      --accent-dim: rgba(74, 222, 128, 0.15);
+      --danger: #f87171;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Syne', system-ui, sans-serif;
+      background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(74, 222, 128, 0.12), transparent), var(--bg);
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      width: 100%;
+      max-width: 440px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 28px 24px 24px;
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+      position: relative;
+    }
+    .card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 4px;
+    }
+    .card-top .badge { margin-bottom: 0; }
+    button.exit-btn {
+      flex-shrink: 0;
+      padding: 6px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      font-family: inherit;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button.exit-btn:hover {
+      color: var(--text);
+      border-color: rgba(248, 113, 113, 0.45);
+      background: rgba(248, 113, 113, 0.08);
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--accent);
+      background: var(--accent-dim);
+      border-radius: 999px;
+      padding: 4px 10px;
+      margin-bottom: 12px;
+    }
+    h1 { margin: 0 0 6px; font-size: 1.45rem; font-weight: 700; }
+    .sub {
+      margin: 0 0 22px;
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.45;
+    }
+    .device-name {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.82rem;
+      color: var(--accent);
+      margin-bottom: 16px;
+      word-break: break-word;
+    }
+    .field { margin-bottom: 14px; }
+    label,
+    .field-caption {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .file-row {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .file-name {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--muted);
+      word-break: break-all;
+      line-height: 1.4;
+    }
+    .file-name.is-local { color: #7dd3fc; }
+    select {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.92rem;
+    }
+    select:focus {
+      outline: none;
+      border-color: rgba(74, 222, 128, 0.45);
+    }
+    .actions { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+    .hint {
+      margin-top: 18px;
+      font-size: 0.78rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .hint code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      background: rgba(255, 255, 255, 0.06);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .status { margin-top: 14px; font-size: 0.8rem; min-height: 1.2em; white-space: pre-wrap; }
+    .status.err { color: var(--danger); }
+    .status.ok { color: var(--accent); }
+    button.primary {
+      width: 100%;
+      padding: 12px 16px;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      color: #052e16;
+      font-family: inherit;
+      font-weight: 700;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+    button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.primary.is-busy {
+      background: linear-gradient(135deg, #15803d, #166534);
+      color: #bbf7d0;
+    }
+    button.secondary {
+      width: 100%;
+      padding: 12px 16px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text);
+      font-family: inherit;
+      font-weight: 600;
+      font-size: 0.92rem;
+      cursor: pointer;
+    }
+    button.secondary:hover {
+      border-color: rgba(56, 189, 248, 0.45);
+      background: rgba(56, 189, 248, 0.08);
+    }
+    .key-row {
+      display: flex;
+      gap: 8px;
+      align-items: stretch;
+    }
+    .key-value {
+      flex: 1;
+      min-width: 0;
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: #a5f3fc;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      line-height: 1.4;
+      word-break: break-all;
+    }
+    .key-value.is-empty { color: var(--muted); font-style: italic; }
+    .key-value[readonly] { cursor: default; }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    button.copy-btn {
+      flex-shrink: 0;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button.copy-btn:hover {
+      border-color: rgba(74, 222, 128, 0.45);
+      background: var(--accent-dim);
+    }
+    .key-hint {
+      margin: 6px 0 0;
+      font-size: 0.72rem;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+  </style>
+  <link rel="stylesheet" href="flash-dialog.css" />
+</head>
+<body>
+  <div class="card">
+    <div class="card-top">
+      <div class="badge">⚡ ESP Web Tools</div>
+      <button type="button" class="exit-btn" id="exit-btn">Выход</button>
+    </div>
+    <h1>Прошивка ESP</h1>
+    <p class="sub">Выберите файл <code>.bin</code> или прошейте последнюю сборку с сервера. Chrome / Edge, USB.</p>
+    <div class="device-name" id="device-label"></div>
+
+    <div class="field" id="encryption-key-field">
+      <label for="encryption-key-value">Ключ шифрования API</label>
+      <div class="key-row">
+        <input class="key-value is-empty" id="encryption-key-value" name="encryption-key-value" type="text" readonly aria-readonly="true" autocomplete="off" value="Загрузка…" />
+        <button type="button" class="copy-btn" id="copy-key-btn" disabled>Копировать</button>
+      </div>
+      <p class="key-hint">Для Home Assistant: Настройки → Устройства → Добавить → ESPHome → вставьте ключ.</p>
+    </div>
+
+    <div class="field">
+      <label for="bin-file-input">Файл прошивки</label>
+      <div class="file-row">
+        <input type="file" id="bin-file-input" name="bin-file-input" class="sr-only" accept=".bin,.ota.bin,application/octet-stream" />
+        <button type="button" class="secondary" id="pick-bin-btn">Выбрать файл .bin</button>
+        <span class="file-name" id="bin-file-name">С сервера: firmware/esp.bin</span>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="chip-family">Семейство чипа</label>
+      <select id="chip-family" name="chip-family">
+        <option value="ESP8266">ESP8266</option>
+        <option value="ESP32">ESP32</option>
+      </select>
+    </div>
+
+    <div class="actions" id="flash-actions">
+      <button type="button" class="primary" id="flash-btn" disabled>Прошить</button>
+    </div>
+
+    <p class="hint">
+      Нужны <code>HTTPS</code> или <code>localhost</code>, Chrome/Edge на ПК.
+      Поддерживаются <code>ESP32</code> и <code>ESP8266</code>.
+    </p>
+    <p class="status" id="flash-status"></p>
+  </div>
+
+  <div id="flash-overlay" class="flash-overlay" hidden aria-hidden="true">
+    <div class="flash-dialog" id="flash-dialog" role="dialog" aria-modal="true" aria-labelledby="flash-dialog-title" data-state="confirm">
+      <header class="flash-dialog__head">
+        <h2 id="flash-dialog-title">Установка прошивки</h2>
+        <button type="button" class="flash-dialog__close" id="flash-dialog-close" aria-label="Закрыть">×</button>
+      </header>
+      <div class="flash-dialog__body" id="flash-dialog-body">
+        <p id="flash-dialog-text">
+          Стереть память перед установкой? Все данные на устройстве будут удалены.
+        </p>
+        <label class="flash-check" id="flash-erase-wrap">
+          <input type="checkbox" id="flash-erase-check" checked />
+          <span>Стереть flash перед записью</span>
+        </label>
+        <div id="flash-progress-block" hidden>
+          <div class="flash-ring-wrap">
+            <svg class="flash-ring" viewBox="0 0 120 120" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="flash-progress-bar">
+              <circle class="flash-ring__orbit" cx="60" cy="60" r="54" />
+              <circle class="flash-ring__track" cx="60" cy="60" r="52" />
+              <circle class="flash-ring__glow" id="flash-progress-glow" cx="60" cy="60" r="52" />
+              <circle class="flash-ring__fill" id="flash-progress-ring" cx="60" cy="60" r="52" />
+            </svg>
+            <div class="flash-ring__center">
+              <span class="flash-ring__pct" id="flash-progress-pct">0%</span>
+              <span class="flash-ring__stage" id="flash-progress-stage">Подготовка…</span>
+            </div>
+          </div>
+</div>
+      </div>
+      <footer class="flash-dialog__foot">
+        <button type="button" id="flash-dialog-back">Назад</button>
+        <button type="button" class="flash-btn--primary" id="flash-dialog-next">Далее</button>
+      </footer>
+    </div>
+  </div>
+
+  <script src="serial-cleanup.js"></script>
+  <script type="module" src="flash.js"></script>
+</body>
+</html>

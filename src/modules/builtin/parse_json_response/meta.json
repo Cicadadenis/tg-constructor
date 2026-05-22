@@ -1,0 +1,6 @@
+{
+  "id": "parse_json_response",
+  "name": "Разбор JSON-ответа от API",
+  "desc": "Парсинг JSON-строки из HTTP-ответа в объект",
+  "category": "📁 Файлы и JSON"
+}

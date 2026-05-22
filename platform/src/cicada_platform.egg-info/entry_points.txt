@@ -1,0 +1,2 @@
+[console_scripts]
+cicada-platform = cicada_platform.api.cli:main

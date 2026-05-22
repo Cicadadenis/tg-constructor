@@ -1,0 +1,16 @@
+﻿raw 'тЬи Studio ╨┤╨╗╤П Telegram-╨▒╨╛╤В╨╛╨▓'
+python : Traceback (most recent call last):
+C:\Users\denis\AppData\Local\Temp\ps-script-34b8c504-49e1-469d-86ca-3b37f3a81a5c.ps1:84 знак:1
++ python scripts/test_mojibake.py 2>&1 | Out-File -Encoding utf8 script ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Traceback (most recent call last)::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+full full err 'charmap' codec can't encode character '\u2728' in position 1: character maps to <undefined>
+  File "C:\Users\denis\Desktop\cicada-studio-main\scripts\test_mojibake.py", line 29, in <module>
+    print("runs", repr(fix_runs(s)))
+  File "C:\Users\denis\AppData\Local\Programs\Python\Python312\Lib\encodings\cp1251.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2728' in position 1: character maps to <undefined>
+runs 
