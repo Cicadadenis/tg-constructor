@@ -1,17 +1,31 @@
 import { buildExecutionGraph } from "../execution/buildExecutionGraph";
-import { resolveFSMTransitions } from "../execution/fsmTransitions";
-import { resolveCallbackRoutes } from "../execution/callbackRoutes";
+import { assertExecutionInvariants } from "../execution/assertExecutionInvariants";
+import { buildFSM } from "../execution/buildFSM";
+import { buildCallbackRoutes } from "../execution/buildCallbackRoutes";
+import type { ExecutionGraph } from "../execution/executionContract";
 
-export function executeGraph(graph: { nodes: any[]; edges: any[] }) {
-  const execution = buildExecutionGraph(graph.nodes, graph.edges);
+export interface GraphExecutionResult {
+  execution: ExecutionGraph;
+  fsm: ReturnType<typeof buildFSM>;
+  callbacks: ReturnType<typeof buildCallbackRoutes>;
+}
 
-  const fsm = resolveFSMTransitions(execution);
+export function executeGraph(graph: {
+  nodes: any[];
+  edges: any[];
+  version?: string;
+}): GraphExecutionResult {
+  const execution = buildExecutionGraph(
+    graph.nodes,
+    graph.edges,
+    graph.version ?? "1.0",
+  );
 
-  const callbacks = resolveCallbackRoutes(execution);
+  assertExecutionInvariants(execution);
 
   return {
     execution,
-    fsm,
-    callbacks,
+    fsm: buildFSM(execution),
+    callbacks: buildCallbackRoutes(execution),
   };
 }

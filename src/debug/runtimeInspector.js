@@ -1,5 +1,17 @@
 export function inspectRuntime(runtime) {
-  console.log("FSM", runtime.fsm);
+  const execution = runtime?.execution;
 
-  console.log("Callbacks", runtime.callbacks);
+  if (execution?.edges) {
+    console.table(
+      execution.edges.map((e) => ({
+        from: e.from,
+        to: e.to,
+        trigger: e.trigger,
+        condition: e.condition ?? "",
+      })),
+    );
+  }
+
+  console.log("FSM (derived)", runtime?.fsm);
+  console.log("Callbacks (derived)", runtime?.callbacks);
 }

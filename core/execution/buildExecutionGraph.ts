@@ -1,18 +1,64 @@
-export function buildExecutionGraph(nodes: any[], edges: any[]) {
-  const graph: Record<string, any> = {};
+import type {
+  ExecutionEdge,
+  ExecutionGraph,
+  ExecutionNode,
+  ExecutionTrigger,
+} from "./executionContract";
 
-  for (const node of nodes) {
-    graph[node.id] = {
-      ...node,
-      next: [],
-    };
-  }
+function inferTrigger(source: ExecutionNode): ExecutionTrigger {
+  if (source.type === "fsm") return "state";
+  if (source.type === "callback") return "callback";
+  return "next";
+}
+
+function toExecutionNode(node: any): ExecutionNode {
+  return {
+    id: node.id,
+    type: node.type,
+    data: (node.data && typeof node.data === "object" ? node.data : {}) as Record<
+      string,
+      unknown
+    >,
+  };
+}
+
+export function buildExecutionGraph(
+  nodes: any[],
+  edges: any[],
+  version = "1.0",
+): ExecutionGraph {
+  const executionNodes = nodes.map(toExecutionNode);
+  const nodeById = new Map(executionNodes.map((n) => [n.id, n]));
+
+  const executionEdges: ExecutionEdge[] = [];
 
   for (const edge of edges) {
-    if (graph[edge.source]) {
-      graph[edge.source].next.push(edge.target);
+    const source = nodeById.get(edge.source);
+    if (!source) continue;
+
+    const trigger = inferTrigger(source);
+    const executionEdge: ExecutionEdge = {
+      from: edge.source,
+      to: edge.target,
+      trigger,
+    };
+
+    if (trigger === "callback") {
+      const callback = String(source.data?.callback ?? source.data?.data ?? "");
+      if (callback) executionEdge.condition = callback;
     }
+
+    if (trigger === "state") {
+      const state = String(source.data?.state ?? "");
+      if (state) executionEdge.condition = state;
+    }
+
+    executionEdges.push(executionEdge);
   }
 
-  return graph;
+  return {
+    version,
+    nodes: executionNodes,
+    edges: executionEdges,
+  };
 }

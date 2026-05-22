@@ -6,7 +6,7 @@ export async function compilePreview(graph) {
   return {
     success: true,
     python: result.python,
+    execution: result.execution,
     runtime: result.runtime,
-    resolved: result.resolved,
   };
 }

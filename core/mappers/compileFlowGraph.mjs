@@ -15,7 +15,7 @@ export function compileFlowToPython(flow) {
     compileWarnings: [],
     transpileTrace: [],
     empty: !result.python,
-    resolved: result.resolved,
+    execution: result.execution,
     runtime: result.runtime,
     success: result.success,
   };
