@@ -2,7 +2,7 @@
  * Full graph check — structural audit, callbacks, compile dry-run (explicit «Проверить»).
  */
 
-import { compileGraphToPython, PYTHON_EXPORT_MODES } from '../../core/pythonAiogramCodegen.js';
+import { compileFlowToPython } from '../../core/mappers/compileFlowGraph.mjs';
 import { graphDocumentToProjectGraph } from '../constructor/graph_document/graph_project_bridge.js';
 import { projectGraphToFlow } from '../../core/graph/model.js';
 import { runGraphValidationPipeline, strictCompileValidation } from '../constructor/graph_document/graph_validation_pipeline.js';
@@ -51,14 +51,7 @@ export function runFullGraphValidation(document, options = {}) {
   });
 
   const flow = projectGraphToFlow(graphDocumentToProjectGraph(document));
-  const compileMeta = compileGraphToPython(flow, {
-    exportMode: PYTHON_EXPORT_MODES.FULL_MODULE,
-    strict,
-    validatePython: false,
-    graphDocument: document,
-    skipGraphGate: false,
-    validationStage: stage,
-  });
+  const compileMeta = compileFlowToPython(flow);
 
   const rawCompileErrors = compileMeta.compileErrors || [];
   const pipelineUser = formatDiagnosticsForUser(pipeline.diagnostics, { lang, graphDocument: document });

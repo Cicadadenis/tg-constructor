@@ -1,10 +1,16 @@
 import React from 'react';
 
-import { compileGraphToPython, PYTHON_EXPORT_MODES } from '../../core/pythonAiogramCodegen.js';
+import { PYTHON_EXPORT_MODES } from '../../core/pythonAiogramCodegen.js';
 
 import { graphDocumentToProjectGraph } from '../constructor/graph_document/graph_project_bridge.js';
 
 import { projectGraphToFlow } from '../../core/graph/model.js';
+
+import { compileFlowToPython } from '../../core/mappers/compileFlowGraph.mjs';
+
+import { inspectGraph } from '../debug/graphInspector.js';
+
+import { reactFlowToGraph } from '../../core/mappers/reactFlowToGraph.ts';
 
 import { groupGraphErrorsForDisplay } from './graph_error_messages.js';
 
@@ -123,21 +129,11 @@ export function useGraphPythonCompile(getGraphDocument, graphRevision, lang = 'r
 
     const flow = projectGraphToFlow(graphDocumentToProjectGraph(graphDocument));
 
-    return compileGraphToPython(flow, {
+    if (import.meta.env?.DEV) {
+      inspectGraph(reactFlowToGraph(flow.nodes, flow.edges));
+    }
 
-      exportMode,
-
-      strict: codegenStage === VALIDATION_STAGE.COMPILE,
-
-      validatePython: false,
-
-      graphDocument,
-
-      skipGraphGate,
-
-      validationStage: codegenStage,
-
-    });
+    return compileFlowToPython(flow);
 
   }, [graphDocument, exportMode, codegenStage, compileTick, skipGraphGate]);
 

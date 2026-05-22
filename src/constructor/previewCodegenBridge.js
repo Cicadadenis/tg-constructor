@@ -11,7 +11,7 @@ import { VALIDATION_STAGE } from './graph_document/validation_stages.js';
 import { validateCodegenContract } from './graph_document/contracts.js';
 import { migrateLegacyGraph } from './aiogram3Migration.js';
 import { projectGraphToFlow } from '../../core/graph/model.js';
-import { compileGraphToPython } from '../../core/pythonAiogramCodegen.js';
+import { compileFlowToPython } from '../../core/mappers/compileFlowGraph.mjs';
 
 assertUiImportAllowed('constructor/previewCodegenBridge');
 
@@ -64,14 +64,7 @@ export function buildPreviewCodegenSnapshot(getDocument, options = {}) {
     transpileTrace,
     compileErrors = [],
     empty = false,
-  } = compileGraphToPython(flow, {
-    validatePython: false,
-    graphDocument: document,
-    skipGraphGate: options.skipGraphGate,
-    strict: strictRun,
-    validationStage,
-    ...options,
-  });
+  } = compileFlowToPython(flow);
   const graph = graphDocumentToGraphIR(document, { skipValidation: true });
   const snapshot = {
     graph,

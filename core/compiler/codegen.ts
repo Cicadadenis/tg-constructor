@@ -5,7 +5,7 @@ import { resolveDependencies } from "./dependencyResolver";
 import { generateAiogramBot } from "../../generators/python_aiogram/generateBot";
 import { logStep } from "../debug/compilerLogger";
 
-export async function compileGraph(graph: any) {
+export function compileGraph(graph: any) {
   logStep("parse");
   const parsed = parseGraph(graph);
 

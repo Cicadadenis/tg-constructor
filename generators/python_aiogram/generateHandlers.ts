@@ -1,3 +1,7 @@
-export function generateHandlers(_graph: unknown): string {
-  return "# handlers stub\n";
+export function generateMessageHandler(node: any) {
+  return `
+await message.answer(
+  "${node.data.text || ""}"
+)
+`;
 }

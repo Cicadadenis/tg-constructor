@@ -5,8 +5,6 @@ const graph = JSON.parse(
   fs.readFileSync("./examples/simpleGraph.json", "utf-8"),
 );
 
-(async () => {
-  const result = await compileGraph(graph);
+const result = compileGraph(graph);
 
-  console.log(result.python);
-})();
+console.log(result.python);

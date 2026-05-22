@@ -1,26 +1,26 @@
 /**
- * Server bridge: Graph / stacks → aiogram 3 Python (единственный codegen target).
+ * Server bridge: Graph / stacks → aiogram 3 Python (graph compiler).
  */
 
 import { projectGraphToFlow } from '../core/graph/model.js';
-import { compileGraphToPython } from '../core/codegen/pipeline.js';
+import { compileFlowToPython } from '../core/mappers/compileFlowGraph.mjs';
 import { stacksToFlow } from '../core/codegen/stacksFlow.js';
 
 /**
  * @param {unknown[]} stacks
- * @param {object} [options]
+ * @param {object} [_options]
  */
-export function compilePythonFromStacks(stacks, options = {}) {
-  return compileGraphToPython(stacksToFlow(stacks), options);
+export function compilePythonFromStacks(stacks, _options = {}) {
+  return compileFlowToPython(stacksToFlow(stacks));
 }
 
 /**
  * @param {object} projectGraph
- * @param {object} [options]
+ * @param {object} [_options]
  */
-export function compilePythonFromProjectGraph(projectGraph, options = {}) {
+export function compilePythonFromProjectGraph(projectGraph, _options = {}) {
   const flow = projectGraphToFlow(projectGraph);
-  return compileGraphToPython(flow, options);
+  return compileFlowToPython(flow);
 }
 
 /**

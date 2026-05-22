@@ -1,3 +1,8 @@
-export function generateFSM(_graph: unknown): string {
-  return "# fsm stub\n";
+export function generateFSMNode(node: any) {
+  return `
+class ${node.id}States(
+  StatesGroup
+):
+    step = State()
+`;
 }
