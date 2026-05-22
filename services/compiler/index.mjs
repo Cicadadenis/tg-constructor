@@ -1,5 +1,5 @@
 import { compilePreview } from "./previewCompiler.mjs";
 
-export function buildBot(graph) {
-  return compilePreview(graph);
+export async function buildBot(graph) {
+  return await compilePreview(graph);
 }

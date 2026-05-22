@@ -1,9 +1,13 @@
-const routers = new Map<string, unknown>();
+const routers = new Map<string, Record<string, unknown>>();
 
-export function registerRouter(name: string, router: unknown) {
-  routers.set(name, router);
+export function registerRouter(name: string, config: Record<string, unknown> = {}) {
+  routers.set(name, config);
 }
 
 export function getRouter(name: string) {
   return routers.get(name);
+}
+
+export function getAllRouters() {
+  return [...routers.entries()];
 }

@@ -1,9 +1,13 @@
-const states = new Map<string, string>();
+const states = new Map<string, Record<string, unknown>>();
 
-export function registerState(name: string, group: string) {
-  states.set(name, group);
+export function registerState(id: string, config: Record<string, unknown>) {
+  states.set(id, config);
 }
 
-export function getState(name: string) {
-  return states.get(name);
+export function getState(id: string) {
+  return states.get(id);
+}
+
+export function getAllStates() {
+  return [...states.entries()];
 }

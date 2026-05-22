@@ -10,6 +10,8 @@ import { compileFlowToPython } from '../../core/mappers/compileFlowGraph.mjs';
 
 import { inspectGraph } from '../debug/graphInspector.js';
 
+import { inspectRuntime } from '../debug/runtimeInspector.js';
+
 import { reactFlowToGraph } from '../../core/mappers/reactFlowToGraph.ts';
 
 import { groupGraphErrorsForDisplay } from './graph_error_messages.js';
@@ -129,11 +131,14 @@ export function useGraphPythonCompile(getGraphDocument, graphRevision, lang = 'r
 
     const flow = projectGraphToFlow(graphDocumentToProjectGraph(graphDocument));
 
+    const meta = compileFlowToPython(flow);
+
     if (import.meta.env?.DEV) {
       inspectGraph(reactFlowToGraph(flow.nodes, flow.edges));
+      if (meta.runtime) inspectRuntime(meta.runtime);
     }
 
-    return compileFlowToPython(flow);
+    return meta;
 
   }, [graphDocument, exportMode, codegenStage, compileTick, skipGraphGate]);
 

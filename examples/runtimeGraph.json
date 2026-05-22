@@ -1,0 +1,26 @@
+{
+  "version": "1.0",
+  "nodes": [
+    {
+      "id": "start",
+      "type": "command",
+      "data": {
+        "command": "start"
+      }
+    },
+    {
+      "id": "welcome",
+      "type": "message",
+      "data": {
+        "text": "Добро пожаловать"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "start",
+      "target": "welcome"
+    }
+  ]
+}

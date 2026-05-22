@@ -92,6 +92,7 @@ import {
   buildIrSkeletonFallback,
 } from './core/ai/irSkeletonFactory.mjs';
 import { isPlaceholderBotToken } from './core/botTokenPlaceholders.mjs';
+import compileRouter from './server/routes/compile.mjs';
 
 const { Pool } = pg;
 
@@ -1616,6 +1617,10 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// ================= GRAPH COMPILER =================
+
+app.use('/api', compileRouter);
 
 // ================= AUTH =================
 
