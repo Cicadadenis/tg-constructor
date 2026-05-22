@@ -32,7 +32,7 @@ import PythonPane from './builder/PythonPane.jsx';
 import CanvasCompileErrors from './builder/CanvasCompileErrors.jsx';
 import CanvasSoftValidationHint from './builder/CanvasSoftValidationHint.jsx';
 import { extractIfConditionFromLine, isConditionLikeType, parseIfConditionFromDsl } from '../core/dslCondition.js';
-import { canRenderUi } from '../core/stacksToDsl.js';
+import { canRenderUi } from '../core/capabilityEngine.js';
 import { canAttach } from '../core/capabilityEngine.js';
 import { buildPreviewCodegenSnapshot } from './constructor/previewCodegenBridge.js';
 import { normalizeCallbackData } from '../core/codegen/callbackDataNormalize.js';

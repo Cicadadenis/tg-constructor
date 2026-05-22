@@ -17,6 +17,7 @@
     "core:guard": "node scripts/core-guard.mjs",
     "lint": "eslint src core/tests services scripts server.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
+    "test:compiler": "tsx tests/compiler/compiler.test.ts",
     "parser-core-blocks": "node scripts/core-blocks-check.mjs",
     "jammer:publish": "node scripts/publish-jammer-firmware.mjs",
     "flash:vendor": "mkdir -p public/flash/vendor && cp node_modules/esptool-js/bundle.js public/flash/vendor/esptool-js.bundle.js",
@@ -56,6 +57,7 @@
     "globals": "^17.6.0",
     "prettier": "^3.8.3",
     "tsup": "^8.5.1",
+    "tsx": "^4.22.3",
     "typescript": "^6.0.3",
     "vite": "^5.2.0",
     "vitest": "^4.1.7"

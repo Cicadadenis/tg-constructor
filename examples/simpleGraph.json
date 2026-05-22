@@ -1,0 +1,13 @@
+{
+  "version": "1.0",
+  "nodes": [
+    {
+      "id": "start_handler",
+      "type": "command",
+      "data": {
+        "command": "start"
+      }
+    }
+  ],
+  "edges": []
+}

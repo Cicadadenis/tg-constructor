@@ -1,5 +1,9 @@
-import type { GraphDocument } from "../ast/contracts";
+import type { BotGraph } from "../../schemas/graph/graph.schema";
 
-export function parseGraph(input: unknown): GraphDocument {
-  return input as GraphDocument;
+export function parseGraph(graph: BotGraph) {
+  return {
+    version: graph.version,
+    nodes: graph.nodes,
+    edges: graph.edges,
+  };
 }

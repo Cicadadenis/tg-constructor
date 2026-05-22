@@ -2,7 +2,7 @@
 /**
  * Palette smoke: each aiogram3 block type has a compiler and emits Python fragments.
  */
-import { compileNodeToPython, generatePythonFromStacks } from '../core/stacksToDsl.js';
+import { compileNodeToPython, generatePythonFromStacks } from '../core/codegen/index.js';
 import { validateAiogram3Graph } from '../core/rules/aiogram3RuleEngine.js';
 import { AIOGRAM3_PALETTE_BLOCK_TYPES } from '../core/aiogram3Runtime.js';
 import { BLOCK_TO_PYTHON_COMPILER } from '../core/codegen/index.js';

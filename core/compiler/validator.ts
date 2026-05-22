@@ -1,7 +1,13 @@
-import type { GraphDocument } from "../ast/contracts";
+export function validateGraph(ast: any) {
+  const ids = new Set();
 
-export function validateGraph(doc: GraphDocument): void {
-  if (!doc?.version) {
-    throw new Error("Graph document missing version");
+  for (const node of ast.nodes) {
+    if (ids.has(node.id)) {
+      throw new Error("Duplicate node id: " + node.id);
+    }
+
+    ids.add(node.id);
   }
+
+  return true;
 }
