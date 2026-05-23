@@ -10,6 +10,8 @@ Cicada Studio — веб-установщик (один файл, без зав�
 
   WEBINSTALL_PUBLIC_URL=http://домен:7700  — свой URL в консоли
   WEBINSTALL_SKIP_FIREWALL=1             — не трогать ufw
+  WEBINSTALL_NO_FREE_PORT=1              — не убивать процесс на 7700
+  WEBINSTALL_UFW_ENABLE=0                — не включать ufw автоматически
 
 Форма → webinstall/last-install.env → setup.sh --webinstall (логи по SSE).
 """
@@ -46,6 +48,8 @@ _jobs: dict[str, dict] = {}
 _jobs_lock = threading.Lock()
 _install_lock = threading.Lock()
 
+_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "0.0.0.0", "::", ""})
+
 
 def _configure_console() -> None:
     """Windows cp1251 consoles fail on emoji; prefer UTF-8 when supported."""
@@ -68,6 +72,13 @@ def detect_platform() -> str:
     except OSError:
         pass
     return "vps"
+
+
+PLATFORM_LABELS = {
+    "vps": "сервер Linux",
+    "termux": "Termux",
+    "wsl": "WSL",
+}
 
 
 def shell_quote(value: str) -> str:
@@ -101,9 +112,11 @@ def process_env_file(env_path: Path) -> dict[str, str]:
     """Загружает и обрабатывает .env файл, добавляя DOMAIN если есть API_HOST."""
     env_data = parse_env_file(env_path)
     
-    # Если DOMAIN не задан, но есть API_HOST, используем API_HOST как DOMAIN
+    # Если DOMAIN не задан, но есть API_HOST (не 0.0.0.0), используем как DOMAIN
     if not env_data.get("DOMAIN") and env_data.get("API_HOST"):
-        env_data["DOMAIN"] = env_data["API_HOST"]
+        api_host = env_data["API_HOST"].strip()
+        if api_host.lower() not in _LOOPBACK_HOSTS:
+            env_data["DOMAIN"] = api_host
     
     # Определяем режим на основе DOMAIN
     if env_data.get("DOMAIN") and env_data["DOMAIN"] != "localhost":
@@ -458,6 +471,49 @@ def env_to_form_preset(env_data: dict[str, str]) -> dict:
 INDEX_HTML = WEBINSTALL_DIR / "index.html"
 
 
+def port_is_open(host: str, port: int) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=1):
+            return True
+    except OSError:
+        return False
+
+
+def describe_port_owner(port: int) -> str | None:
+    for cmd in (
+        ["ss", "-tlnp", f"sport = :{port}"],
+        ["lsof", "-i", f":{port}"],
+    ):
+        if not shutil.which(cmd[0]):
+            continue
+        try:
+            out = subprocess.check_output(cmd, text=True, timeout=5, stderr=subprocess.DEVNULL)
+            for line in out.splitlines():
+                if f":{port}" in line:
+                    return line.strip()[:200]
+        except (subprocess.SubprocessError, OSError):
+            continue
+    return None
+
+
+def try_free_port(port: int) -> bool:
+    """Освободить порт (только root). WEBINSTALL_FREE_PORT=1 или по умолчанию на VPS."""
+    if os.environ.get("WEBINSTALL_NO_FREE_PORT"):
+        return False
+    if detect_platform() != "vps" or os.geteuid() != 0:
+        return False
+    if os.environ.get("WEBINSTALL_FREE_PORT", "1").strip().lower() in ("0", "false", "no"):
+        return False
+    fuser = shutil.which("fuser")
+    if not fuser:
+        return False
+    if not port_is_open("127.0.0.1", port):
+        return True
+    subprocess.run([fuser, "-k", f"{port}/tcp"], capture_output=True, timeout=10)
+    time.sleep(0.4)
+    return not port_is_open("127.0.0.1", port)
+
+
 def create_webinstall_server(host: str, start_port: int) -> tuple[ThreadingHTTPServer, int]:
     """Bind HTTP server; if start_port is busy, try the next ports (up to +20)."""
     last_err: OSError | None = None
@@ -496,9 +552,6 @@ def guess_public_ipv4() -> str | None:
     return None
 
 
-_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "0.0.0.0", "::", ""})
-
-
 def resolve_public_host() -> str | None:
     """Домен или IP для ссылки с ПК (не 0.0.0.0 из API_HOST)."""
     env_path = ROOT / ".env"
@@ -529,6 +582,9 @@ def public_api_base(port: int | None = None) -> str:
     p = PORT if port is None else port
     custom = os.environ.get("WEBINSTALL_PUBLIC_URL", "").strip().rstrip("/")
     if custom:
+        # Порт webinstall — только plain HTTP; https:// даёт TLS ClientHello и 400 в логах
+        if custom.lower().startswith("https://"):
+            custom = "http://" + custom[8:]
         return custom
 
     plat = detect_platform()
@@ -593,10 +649,21 @@ def ensure_firewall_port(port: int) -> str | None:
         st = _run_quiet([*prefix, "status"], timeout=10)
         combined = (st.stdout or "") + (st.stderr or "")
         _run_quiet([*prefix, "allow", rule], timeout=15)
-        if "inactive" not in combined.lower():
+        inactive = "inactive" in combined.lower()
+        if inactive and os.environ.get("WEBINSTALL_UFW_ENABLE", "1").strip().lower() not in (
+            "0",
+            "false",
+            "no",
+        ):
+            _run_quiet([*prefix, "--force", "enable"], timeout=20)
+            _run_quiet([*prefix, "reload"], timeout=15)
+            st2 = _run_quiet([*prefix, "status"], timeout=10)
+            if "inactive" not in ((st2.stdout or "") + (st2.stderr or "")).lower():
+                return f"файрвол: ufw включён, порт {port}/tcp открыт"
+        if not inactive:
             _run_quiet([*prefix, "reload"], timeout=15)
             return f"файрвол: порт {port}/tcp открыт (ufw)"
-        return f"ufw: правило {rule} добавлено (ufw выключен — включите: ufw enable)"
+        return f"ufw: правило {rule} добавлено (включите: ufw enable && ufw reload)"
     except (subprocess.SubprocessError, OSError, TimeoutError) as exc:
         return f"ufw: не удалось открыть порт {port} ({exc})"
 
@@ -621,7 +688,7 @@ def prepare_webinstall_network(port: int, page_url: str) -> None:
         print_vps_access_hints(port, page_url)
         host = resolve_public_host()
         if host:
-            print(f"  Откройте на ПК:  http://{host}:{port}/")
+            print(f"  Откройте на ПК:  http://{host}:{port}/  (не https)")
     elif plat in ("wsl", "termux") or sys.platform == "win32":
         print(f"  Локальный браузер:  {local_browser_url(port)}")
 
@@ -1177,11 +1244,203 @@ def load_html() -> bytes:
     return path.read_bytes()
 
 
+FILES_ROOT = ROOT.resolve()
+FILES_MAX_READ = 512 * 1024
+FILES_SKIP_NAMES = frozenset({".git", "node_modules", "__pycache__", ".venv-bot", ".venv-esphome"})
+FILES_BLOCK_NAMES = frozenset({".env", ".env.local", ".env.production"})
+
+
+def safe_files_path(rel: str) -> Path:
+    rel = (rel or "").strip().replace("\\", "/").lstrip("/")
+    parts = [p for p in rel.split("/") if p and p != "."]
+    if ".." in parts:
+        raise ValueError("недопустимый путь")
+    target = (FILES_ROOT / "/".join(parts)).resolve()
+    root = str(FILES_ROOT)
+    resolved = str(target)
+    if resolved != root and not resolved.startswith(root + os.sep):
+        raise ValueError("путь вне каталога приложения")
+    return target
+
+
+def list_files_dir(rel: str) -> dict:
+    target = safe_files_path(rel)
+    if not target.is_dir():
+        raise ValueError("не каталог")
+    parent = ""
+    if target != FILES_ROOT:
+        parent = str(target.parent.relative_to(FILES_ROOT)).replace("\\", "/")
+    entries: list[dict] = []
+    try:
+        children = sorted(target.iterdir(), key=lambda e: (not e.is_dir(), e.name.lower()))
+    except OSError as exc:
+        raise ValueError(str(exc)) from exc
+    for entry in children:
+        name = entry.name
+        if name in FILES_SKIP_NAMES:
+            continue
+        if name.startswith(".") and name not in (".gitkeep",):
+            continue
+        if name in FILES_BLOCK_NAMES or name.lower().endswith(".env"):
+            continue
+        try:
+            st = entry.stat()
+        except OSError:
+            continue
+        entries.append({
+            "name": name,
+            "dir": entry.is_dir(),
+            "size": st.st_size if entry.is_file() else 0,
+            "mtime": int(st.st_mtime),
+        })
+    rel_path = "" if target == FILES_ROOT else str(target.relative_to(FILES_ROOT)).replace("\\", "/")
+    return {
+        "path": rel_path,
+        "parent": parent,
+        "root": str(FILES_ROOT),
+        "entries": entries,
+    }
+
+
+def read_text_file(rel: str) -> dict:
+    target = safe_files_path(rel)
+    if not target.is_file():
+        raise ValueError("не файл")
+    size = target.stat().st_size
+    if size > FILES_MAX_READ:
+        raise ValueError(f"файл слишком большой (>{FILES_MAX_READ // 1024} КБ)")
+    raw = target.read_bytes()
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        raise ValueError("не текстовый файл (UTF-8)")
+    return {"path": rel, "size": size, "content": text}
+
+
+def setup_swap(size_gb: float, swap_path: str = "/swapfile") -> dict:
+    if sys.platform == "win32":
+        raise ValueError("swap доступен только на Linux")
+    try:
+        if os.geteuid() != 0:
+            raise ValueError("нужен root: sudo python3 webinstall.py")
+    except AttributeError:
+        raise ValueError("swap доступен только на Linux") from None
+
+    size_gb = max(0.5, min(64.0, float(size_gb)))
+    swap_path = (swap_path or "/swapfile").strip()
+    if not swap_path.startswith("/") or ".." in swap_path:
+        raise ValueError("некорректный путь swap")
+
+    try:
+        swaps = Path("/proc/swaps").read_text(encoding="utf-8", errors="ignore")
+        if swap_path in swaps:
+            return {"ok": True, "message": "swap уже подключён", "path": swap_path}
+    except OSError:
+        pass
+
+    size_arg = f"{int(size_gb)}G"
+    path_obj = Path(swap_path)
+    if path_obj.exists():
+        raise ValueError(f"файл уже существует: {swap_path}")
+
+    created = False
+    try:
+        subprocess.run(
+            ["fallocate", "-l", size_arg, swap_path],
+            check=True,
+            capture_output=True,
+            timeout=120,
+        )
+        created = True
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        subprocess.run(
+            ["dd", "if=/dev/zero", f"of={swap_path}", f"bs=1M", f"count={int(size_gb * 1024)}"],
+            check=True,
+            capture_output=True,
+            timeout=600,
+        )
+        created = True
+
+    os.chmod(swap_path, 0o600)
+    subprocess.run(["mkswap", swap_path], check=True, capture_output=True, timeout=60)
+    subprocess.run(["swapon", swap_path], check=True, capture_output=True, timeout=30)
+
+    fstab = Path("/etc/fstab")
+    line = f"{swap_path} none swap sw 0 0\n"
+    if fstab.is_file():
+        content = fstab.read_text(encoding="utf-8", errors="ignore")
+        if swap_path not in content:
+            with fstab.open("a", encoding="utf-8") as fh:
+                fh.write(line)
+    elif created:
+        pass
+
+    return {
+        "ok": True,
+        "path": swap_path,
+        "sizeGb": size_gb,
+        "message": f"swap {size_gb} ГБ создан и включён",
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "CicadaWebInstall/1.0"
 
+    def _looks_like_tls_client_hello(self, data: bytes) -> bool:
+        # TLS record: 0x16 0x03 0x0x (Handshake)
+        return len(data) >= 3 and data[0] == 0x16 and data[1] == 0x03
+
+    def _send_tls_on_http_hint(self) -> None:
+        host = resolve_public_host() or "127.0.0.1"
+        body = (
+            f"Webinstall на этом порту — только HTTP (без SSL).\r\n\r\n"
+            f"Откройте в браузере:\r\n  http://{host}:{PORT}/\r\n\r\n"
+            f"Не используйте https:// на порту {PORT}.\r\n"
+            f"Сайт с SSL: https://{host}/ (nginx, порт 443).\r\n"
+        ).encode("utf-8")
+        try:
+            self.send_response(400)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.wfile.write(body)
+        except OSError:
+            pass
+
+    def handle_one_request(self) -> None:
+        self.close_connection = True
+        self.raw_requestline = self.rfile.readline(65537)
+        if len(self.raw_requestline) > 65536:
+            self.requestline = ""
+            self.request_version = ""
+            self.command = ""
+            self.send_error(414)
+            return
+        if not self.raw_requestline:
+            return
+        if self._looks_like_tls_client_hello(self.raw_requestline):
+            self._send_tls_on_http_hint()
+            return
+        if not self.parse_request():
+            return
+        mname = "do_" + self.command
+        if not hasattr(self, mname):
+            self.send_error(501)
+            return
+        method = getattr(self, mname)
+        method()
+        self.wfile.flush()
+
     def log_message(self, fmt: str, *args) -> None:
-        sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
+        msg = (fmt % args) if args else fmt
+        if "Bad request version" in msg or "Bad HTTP" in msg:
+            sys.stderr.write(
+                "%s - HTTPS/TLS на HTTP-порт %s — откройте http:// (не https://)\n"
+                % (self.address_string(), PORT)
+            )
+            return
+        sys.stderr.write("%s - %s\n" % (self.address_string(), msg))
 
     def end_headers(self) -> None:
         # file:// → http://127.0.0.1 (открытие index.html с диска Windows)
@@ -1225,6 +1484,7 @@ class Handler(BaseHTTPRequestHandler):
             api_base = public_api_base(bound)
             payload: dict = {
                 "platform": plat,
+                "display_platform": PLATFORM_LABELS.get(plat, plat),
                 "termux": plat == "termux",
                 "root": os.geteuid() == 0 if hasattr(os, "geteuid") else False,
                 "port": bound,
@@ -1250,6 +1510,35 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/system/processes":
             try:
                 self._json(200, collect_system_processes())
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+            return
+
+        if path == "/api/files/list":
+            from urllib.parse import parse_qs
+
+            qs = parse_qs(urlparse(self.path).query)
+            rel = (qs.get("path") or [""])[0]
+            try:
+                self._json(200, list_files_dir(rel))
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+            return
+
+        if path == "/api/files/read":
+            from urllib.parse import parse_qs
+
+            qs = parse_qs(urlparse(self.path).query)
+            rel = (qs.get("path") or [""])[0]
+            if not rel:
+                self._json(400, {"error": "path обязателен"})
+                return
+            try:
+                self._json(200, read_text_file(rel))
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
             except Exception as exc:
                 self._json(500, {"error": str(exc)})
             return
@@ -1289,6 +1578,22 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
+
+        if path == "/api/system/swap":
+            try:
+                body = self._read_json()
+                size_gb = float(body.get("sizeGb") or body.get("size_gb") or 2)
+                swap_path = str(body.get("path") or "/swapfile")
+                self._json(200, setup_swap(size_gb, swap_path))
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
+            except subprocess.CalledProcessError as exc:
+                err = (exc.stderr or b"").decode("utf-8", errors="replace").strip()
+                self._json(500, {"error": err or str(exc)})
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+            return
+
         if path != "/api/install":
             self.send_error(404)
             return
@@ -1374,6 +1679,18 @@ def main() -> None:
 
     global PORT
     preferred = PORT
+    if port_is_open("127.0.0.1", preferred):
+        owner = describe_port_owner(preferred)
+        if owner:
+            print(f"  ▲ Порт {preferred} занят: {owner}")
+        if try_free_port(preferred):
+            print(f"  ✓ Порт {preferred} освобождён (старый webinstall остановлен)")
+        else:
+            print(
+                f"  ▲ Освободите порт:  fuser -k {preferred}/tcp"
+                f"  или  WEBINSTALL_PORT={preferred + 1} python3 webinstall.py"
+            )
+
     server, bound_port = create_webinstall_server(HOST, preferred)
     PORT = bound_port
 
@@ -1381,13 +1698,23 @@ def main() -> None:
     api_url = browser_url(bound_port)
     if bound_port != preferred:
         print(f"  ⚠ Порт {preferred} занят — используем {bound_port}")
+        host = resolve_public_host() or "домен"
+        print(f"  ▲ Открывайте именно:  http://{host}:{bound_port}/  (не :{preferred})")
     print(f"  Страница:  {page_label}")
     print(f"  API:       {api_url}")
     print(f"  Слушает:   {HOST}:{bound_port}")
+    if api_url.lower().startswith("http://"):
+        print(
+            f"  ⚠ Только HTTP — не https://…:{bound_port}/ "
+            "(иначе 400 Bad request version в логах)"
+        )
     print()
 
     prepare_webinstall_network(bound_port, page_label)
-    print("  Свой URL: WEBINSTALL_PUBLIC_URL=http://домен:7700 python3 webinstall.py")
+    host_hint = resolve_public_host() or "домен"
+    print(
+        f"  Свой URL: WEBINSTALL_PUBLIC_URL=http://{host_hint}:{bound_port} python3 webinstall.py"
+    )
     print()
 
     threading.Thread(

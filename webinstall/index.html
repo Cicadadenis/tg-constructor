@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CICADA — SYS.MONITOR</title>
+<title>CICADA — панель управления</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -477,6 +477,30 @@ select.inp option{background:#060b14;color:var(--text)}
 @media(max-width:900px){.col-extra{display:none}}
 @media(max-width:520px){.r2{grid-template-columns:1fr}.btn{clip-path:none}.btn.ok{clip-path:none}.panel-tag{font-size:.5rem;left:12px;padding:2px 10px}}
 @media(max-width:720px){.pods-row{flex-direction:column;align-items:center}.pod{max-width:320px}}
+
+/* SWAP setup */
+.swap-setup{margin-top:12px;padding:12px;border:1px solid rgba(255,190,0,.35);background:rgba(255,190,0,.06);text-align:left}
+.swap-setup p{font-size:.78rem;color:var(--yellow);margin-bottom:10px;line-height:1.45}
+.swap-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.swap-row .inp{max-width:88px;flex:0 0 auto}
+.swap-row .btn{width:auto;flex:1;min-width:140px;clip-path:none;padding:10px 14px;font-size:.58rem}
+
+/* File manager */
+.files-wrap{max-width:1320px;margin:0 auto;padding:32px 20px 56px}
+.files-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px}
+.files-path{flex:1;min-width:200px;font-family:'Share Tech Mono',monospace;font-size:.78rem;color:var(--cyan);padding:10px 12px;background:rgba(0,15,28,.9);border:1px solid rgba(0,229,255,.2)}
+.files-grid{display:grid;grid-template-columns:minmax(260px,1fr) minmax(320px,1.2fr);gap:16px}
+@media(max-width:900px){.files-grid{grid-template-columns:1fr}}
+.fm-list{max-height:min(58vh,520px);overflow:auto}
+.fm-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(0,229,255,.06);cursor:pointer;transition:background .15s}
+.fm-item:hover{background:rgba(0,229,255,.05)}
+.fm-item.active{background:rgba(0,229,255,.1)}
+.fm-icon{font-size:1rem;opacity:.85;flex-shrink:0}
+.fm-name{font-family:'Share Tech Mono',monospace;font-size:.8rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fm-meta{font-size:.68rem;color:var(--tdim);flex-shrink:0}
+.fm-viewer{min-height:280px;max-height:min(58vh,520px);overflow:auto;padding:12px}
+.fm-viewer pre{font-family:'Share Tech Mono',monospace;font-size:.75rem;line-height:1.5;color:var(--text);white-space:pre-wrap;word-break:break-word}
+.fm-empty{padding:24px;text-align:center;color:var(--tdim);font-size:.85rem}
 </style>
 </head>
 <body>
@@ -487,10 +511,11 @@ select.inp option{background:#060b14;color:var(--text)}
 <nav>
   <div class="brand">CICADA<span class="blink">_</span></div>
   <div class="nav-tabs">
-    <button class="tab active" onclick="switchTab('monitor',this)">SYS.MONITOR</button>
-    <button class="tab" onclick="switchTab('install',this)">WEB.INSTALL</button>
+    <button class="tab active" onclick="switchTab('monitor',this)">МОНИТОР</button>
+    <button class="tab" onclick="switchTab('install',this)">УСТАНОВКА</button>
+    <button class="tab" onclick="switchTab('files',this)">ФАЙЛЫ</button>
   </div>
-  <div class="nav-live">ONLINE</div>
+  <div class="nav-live">В СЕТИ</div>
 </nav>
 
 <!-- ═══════════════════ MONITOR PAGE ═══════════════════ -->
@@ -498,10 +523,10 @@ select.inp option{background:#060b14;color:var(--text)}
 <div class="sysmon-wrap">
 
   <header class="sysmon-hero fu">
-    <h1 class="sysmon-title np">CICADA_SYSMON</h1>
-    <p id="m-host" class="sysmon-host">ESTABLISHING UPLINK...</p>
+    <h1 class="sysmon-title np">МОНИТОР СИСТЕМЫ</h1>
+    <p id="m-host" class="sysmon-host">ПОДКЛЮЧЕНИЕ К СЕРВЕРУ...</p>
     <p id="m-meta" class="sysmon-host" style="margin-top:4px;font-size:.65rem">
-      <span id="m-time">--:--:--</span> · <span id="m-up">UP: --</span>
+      <span id="m-time">--:--:--</span> · <span id="m-up">Аптайм: --</span>
     </p>
   </header>
 
@@ -522,8 +547,8 @@ select.inp option{background:#060b14;color:var(--text)}
           </div>
         </div>
       </div>
-      <div class="pod-label">CPU COMPUTE</div>
-      <div class="pod-sub" id="cpu-model" title="">loading...</div>
+      <div class="pod-label">ПРОЦЕССОР</div>
+      <div class="pod-sub" id="cpu-model" title="">загрузка...</div>
       <div class="pod-cores" id="cores"></div>
     </article>
 
@@ -542,8 +567,8 @@ select.inp option{background:#060b14;color:var(--text)}
           </div>
         </div>
       </div>
-      <div class="pod-label">MEM ARRAY</div>
-      <div class="pod-sub" id="mem-total">loading...</div>
+      <div class="pod-label">ПАМЯТЬ</div>
+      <div class="pod-sub" id="mem-total">загрузка...</div>
       <div class="pod-stats" id="mem-rows"></div>
     </article>
 
@@ -562,8 +587,8 @@ select.inp option{background:#060b14;color:var(--text)}
           </div>
         </div>
       </div>
-      <div class="pod-label">SWAP SPACE</div>
-      <div class="pod-sub" id="swap-total">loading...</div>
+      <div class="pod-label">ПОДКАЧКА</div>
+      <div class="pod-sub" id="swap-total">загрузка...</div>
       <div class="pod-stats" id="swap-rows"></div>
     </article>
 
@@ -571,17 +596,17 @@ select.inp option{background:#060b14;color:var(--text)}
 
   <section class="proc-panel fu" style="animation-delay:.35s">
     <div class="proc-head">
-      <div class="ch"><span>ACTIVE SUBROUTINES</span><span id="proc-count" style="font-family:'Share Tech Mono',monospace;font-size:.7rem;color:var(--tdim);margin-left:8px">[-- PROC]</span></div>
-      <input class="inp proc-filter" id="proc-filter" placeholder="// FILTER" oninput="filterProcs()">
+      <div class="ch"><span>АКТИВНЫЕ ПРОЦЕССЫ</span><span id="proc-count" style="font-family:'Share Tech Mono',monospace;font-size:.7rem;color:var(--tdim);margin-left:8px">[-- шт.]</span></div>
+      <input class="inp proc-filter" id="proc-filter" placeholder="поиск..." oninput="filterProcs()">
     </div>
     <div style="overflow-x:auto">
       <table class="tbl">
         <thead><tr>
           <th onclick="sortProcs('pid')">PID <span id="s-pid"></span></th>
-          <th onclick="sortProcs('name')">IDENTIFIER <span id="s-name"></span></th>
-          <th onclick="sortProcs('user')">USER <span id="s-user"></span></th>
-          <th onclick="sortProcs('cpu')" class="col-extra" style="text-align:right">CPU% <span id="s-cpu">▼</span></th>
-          <th onclick="sortProcs('memMb')" class="col-extra" style="text-align:right">MEM <span id="s-memMb"></span></th>
+          <th onclick="sortProcs('name')">ПРОЦЕСС <span id="s-name"></span></th>
+          <th onclick="sortProcs('user')">ПОЛЬЗОВАТЕЛЬ <span id="s-user"></span></th>
+          <th onclick="sortProcs('cpu')" class="col-extra" style="text-align:right">ЦП % <span id="s-cpu">▼</span></th>
+          <th onclick="sortProcs('memMb')" class="col-extra" style="text-align:right">ПАМЯТЬ <span id="s-memMb"></span></th>
         </tr></thead>
         <tbody id="proc-body"></tbody>
       </table>
@@ -596,15 +621,15 @@ select.inp option{background:#060b14;color:var(--text)}
 <div class="install-wrap">
 
   <header class="install-hero fu">
-    <h1 class="sysmon-title np">CICADA_INSTALL</h1>
-    <p class="sysmon-host" id="install-host-line">WEB-INSTALLER // CICADA STUDIO</p>
+    <h1 class="sysmon-title np">УСТАНОВКА CICADA</h1>
+    <p class="sysmon-host" id="install-host-line">Веб-установщик Cicada Studio</p>
     <div id="plat-badge" class="plat-badge">ОПРЕДЕЛЕНИЕ...</div>
   </header>
 
   <div class="div" style="margin-bottom:22px"><div class="dd"></div></div>
 
   <section class="glass-panel fu">
-    <span class="panel-tag">WEBINSTALL.SERVER</span>
+    <span class="panel-tag">СЕРВЕР.УСТАНОВКИ</span>
     <div class="f" style="margin-bottom:0">
       <label class="lbl">URL сервера webinstall.py</label>
       <input class="inp" id="api-base" value="" placeholder="оставьте пустым = этот сервер" oninput="loadPlatform()">
@@ -831,9 +856,38 @@ select.inp option{background:#060b14;color:var(--text)}
     </div>
   </section>
 
-  <footer class="install-footer">// CICADA STUDIO // WEB INSTALLER //</footer>
+  <footer class="install-footer">// CICADA STUDIO // ВЕБ-УСТАНОВЩИК //</footer>
 </div>
 </div><!-- /install -->
+
+<!-- ═══════════════════ FILES PAGE ═══════════════════ -->
+<div id="page-files" class="page">
+<div class="files-wrap">
+  <header class="sysmon-hero fu">
+    <h1 class="sysmon-title np">ФАЙЛОВЫЙ МЕНЕДЖЕР</h1>
+    <p class="sysmon-host" id="fm-root-hint">Каталог приложения на сервере</p>
+  </header>
+
+  <section class="proc-panel fu">
+    <div class="files-toolbar">
+      <button type="button" class="btn sec" style="width:auto;clip-path:none;padding:10px 16px" onclick="filesGoUp()">↑ ВВЕРХ</button>
+      <button type="button" class="btn sec" style="width:auto;clip-path:none;padding:10px 16px" onclick="filesRefresh()">↻ ОБНОВИТЬ</button>
+      <div class="files-path" id="fm-path">/</div>
+    </div>
+    <div class="files-grid">
+      <div class="card" style="padding:0">
+        <div class="ch" style="padding:12px 14px 0;margin:0">СОДЕРЖИМОЕ</div>
+        <div class="fm-list" id="fm-list"><div class="fm-empty">Загрузка...</div></div>
+      </div>
+      <div class="card" style="padding:0">
+        <div class="ch" style="padding:12px 14px 0;margin:0">ПРОСМОТР</div>
+        <div class="fm-viewer" id="fm-viewer"><div class="fm-empty">Выберите файл</div></div>
+      </div>
+    </div>
+    <p class="hint" style="margin-top:12px">Доступ только к каталогу проекта. Скрыты <code>node_modules</code>, <code>.env</code> и служебные папки.</p>
+  </section>
+</div>
+</div><!-- /files -->
 
 </div><!-- /app -->
 
@@ -856,11 +910,14 @@ select.inp option{background:#060b14;color:var(--text)}
 })();
 
 // ════════════ TABS ════════════
+let serverIsRoot=false;
+
 function switchTab(id,btn){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById('page-'+id).classList.add('active');
+  if(id==='files') filesRefresh();
 }
 
 // ════════════ MONITOR ════════════
@@ -871,8 +928,12 @@ const API_MONITOR=window.location.origin;
 
 function formatUptime(s){
   const d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60),sec=Math.floor(s%60);
-  return `${d}D ${String(h).padStart(2,'0')}H ${String(m).padStart(2,'0')}M ${String(sec).padStart(2,'0')}S`;
+  if(d>0) return `${d} д ${h} ч ${m} мин`;
+  if(h>0) return `${h} ч ${m} мин ${sec} с`;
+  return `${m} мин ${sec} с`;
 }
+function formatGb(mb){return (mb/1024).toFixed(2)+' ГБ'}
+function formatGbTotal(mb){return (mb/1024).toFixed(1)+' ГБ всего'}
 const RING_LEN=339.292;
 function ringCls(p){return p>85?'crit':p>65?'warn':''}
 function setRing(el,pct,lowIsGood){
@@ -892,9 +953,9 @@ async function fetchMetrics(){
     const r=await fetch(API_MONITOR+'/api/system/metrics');
     if(!r.ok)return;
     const d=await r.json();
-    document.getElementById('m-host').textContent=`${d.hostname} // ${d.platform}`;
-    document.getElementById('m-time').textContent=new Date(d.timestamp).toLocaleTimeString();
-    document.getElementById('m-up').textContent='UP: '+formatUptime(d.uptime);
+    document.getElementById('m-host').textContent=`${d.hostname} · ${d.platform}`;
+    document.getElementById('m-time').textContent=new Date(d.timestamp).toLocaleTimeString('ru-RU');
+    document.getElementById('m-up').textContent='Аптайм: '+formatUptime(d.uptime);
     const cp=d.cpu.usagePercent;
     const cpuPctEl=document.getElementById('cpu-pct');
     cpuPctEl.textContent=cp.toFixed(1)+'%';
@@ -905,26 +966,35 @@ async function fetchMetrics(){
     setRing(document.getElementById('cpu-ring'),cp);
     const cores=document.getElementById('cores');
     cores.innerHTML=d.cpu.perCore.map(c=>
-      `<span>C${c.core}:<em>${Math.round(c.load)}%</em></span>`
+      `<span>Ядро ${c.core}:<em>${Math.round(c.load)}%</em></span>`
     ).join('');
     const mp=d.memory.usedPercent;
     document.getElementById('mem-pct').textContent=mp.toFixed(1)+'%';
-    document.getElementById('mem-total').textContent=(d.memory.totalMb/1024).toFixed(1)+' GB TOTAL';
+    document.getElementById('mem-total').textContent=formatGbTotal(d.memory.totalMb);
     setRing(document.getElementById('mem-ring'),mp);
     document.getElementById('mem-rows').innerHTML=
-      podStat('ALLOCATED',(d.memory.usedMb/1024).toFixed(2)+' GB')+
-      podStat('AVAILABLE',(d.memory.freeMb/1024).toFixed(2)+' GB')+
-      podStat('TOTAL',(d.memory.totalMb/1024).toFixed(2)+' GB');
+      podStat('ЗАНЯТО',formatGb(d.memory.usedMb))+
+      podStat('СВОБОДНО',formatGb(d.memory.freeMb))+
+      podStat('ВСЕГО',formatGb(d.memory.totalMb));
     const sp=d.swap.usedPercent;
-    document.getElementById('swap-pct').textContent=sp.toFixed(1)+'%';
-    document.getElementById('swap-total').textContent=(d.swap.totalMb/1024).toFixed(1)+' GB TOTAL';
+    document.getElementById('swap-pct').textContent=d.swap.totalMb===0?'—':sp.toFixed(1)+'%';
+    document.getElementById('swap-total').textContent=d.swap.totalMb===0?'не настроен':formatGbTotal(d.swap.totalMb);
     const swapRing=document.getElementById('swap-ring');
     setRing(swapRing,sp,true);
     let swapHtml=
-      podStat('ALLOCATED',(d.swap.usedMb/1024).toFixed(2)+' GB')+
-      podStat('AVAILABLE',(d.swap.freeMb/1024).toFixed(2)+' GB')+
-      podStat('TOTAL',(d.swap.totalMb/1024).toFixed(2)+' GB');
-    if(d.swap.totalMb===0) swapHtml+=`<div style="margin-top:10px;padding:8px 10px;background:rgba(255,190,0,.07);border:1px solid rgba(255,190,0,.2);font-size:.7rem;color:var(--yellow);text-align:center">// SWAP NOT CONFIGURED</div>`;
+      podStat('ЗАНЯТО',formatGb(d.swap.usedMb))+
+      podStat('СВОБОДНО',formatGb(d.swap.freeMb))+
+      podStat('ВСЕГО',formatGb(d.swap.totalMb));
+    if(d.swap.totalMb===0){
+      const rootHint=serverIsRoot?'':'<p style="font-size:.68rem;margin-top:6px">Запустите webinstall от root: <code>sudo python3 webinstall.py</code></p>';
+      swapHtml+=`<div class="swap-setup"><p>Подкачка не настроена. Можно создать файл на диске прямо отсюда.</p>
+        <div class="swap-row">
+          <label class="lbl" style="margin:0">Размер (ГБ)</label>
+          <input class="inp" id="swap-size" type="number" min="0.5" max="64" step="0.5" value="2">
+          <button type="button" class="btn ok" onclick="setupSwap()" ${serverIsRoot?'':'disabled'}>СОЗДАТЬ ПОДКАЧКУ</button>
+        </div>
+        <p id="swap-status" style="font-size:.7rem;margin-top:8px;color:var(--tdim)"></p>${rootHint}</div>`;
+    }
     document.getElementById('swap-rows').innerHTML=swapHtml;
   }catch(e){}
 }
@@ -935,7 +1005,7 @@ async function fetchProcs(){
     if(!r.ok)return;
     const d=await r.json();
     allProcs=d.processes||[];
-    document.getElementById('proc-count').textContent=`[${d.total} PROC]`;
+    document.getElementById('proc-count').textContent=`[${d.total} шт.]`;
     renderProcs();
   }catch(e){}
 }
@@ -965,13 +1035,99 @@ function renderProcs(){
       <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)" title="${p.command}">${p.name}</td>
       <td style="color:var(--tdim)">${p.user}</td>
       <td class="col-extra" style="text-align:right;color:${p.cpu>50?'var(--red)':p.cpu>20?'var(--yellow)':'var(--cyan)'}">${p.cpu.toFixed(1)}</td>
-      <td class="col-extra" style="text-align:right;color:var(--tdim)">${p.memMb.toFixed(0)}</td>
+      <td class="col-extra" style="text-align:right;color:var(--tdim)">${p.memMb.toFixed(0)} МБ</td>
     </tr>`).join('');
+}
+
+async function setupSwap(){
+  const size=parseFloat(document.getElementById('swap-size')?.value||'2');
+  if(!confirm(`Создать подкачку ${size} ГБ в файле /swapfile?`)) return;
+  const btn=event?.target;
+  const status=document.getElementById('swap-status');
+  if(btn){btn.disabled=true;btn.textContent='СОЗДАНИЕ...'}
+  if(status){status.textContent='Создаём файл подкачки, подождите...';status.style.color='var(--cyan)'}
+  try{
+    const r=await fetch(API_MONITOR+'/api/system/swap',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({sizeGb:size,path:'/swapfile'}),
+    });
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'ошибка');
+    if(status){status.textContent=d.message||'Подкачка создана';status.style.color='var(--green)'}
+    fetchMetrics();
+  }catch(e){
+    if(status){status.textContent='Ошибка: '+(e.message||e);status.style.color='var(--red)'}
+  }finally{
+    if(btn){btn.disabled=!serverIsRoot;btn.textContent='СОЗДАТЬ ПОДКАЧКУ'}
+  }
 }
 
 fetchMetrics(); fetchProcs();
 setInterval(fetchMetrics,3000);
 setInterval(fetchProcs,5000);
+
+// ════════════ FILES ════════════
+let fmPath='';
+let fmParent='';
+
+function formatSize(n){
+  if(n<1024) return n+' Б';
+  if(n<1024*1024) return (n/1024).toFixed(1)+' КБ';
+  return (n/1024/1024).toFixed(2)+' МБ';
+}
+
+async function filesRefresh(){
+  const list=document.getElementById('fm-list');
+  if(list) list.innerHTML='<div class="fm-empty">Загрузка...</div>';
+  try{
+    const q=fmPath?('?path='+encodeURIComponent(fmPath)):'';
+    const r=await fetch(API_MONITOR+'/api/files/list'+q);
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'ошибка');
+    fmPath=d.path||'';
+    fmParent=d.parent||'';
+    if(d.root) document.getElementById('fm-root-hint').textContent=d.root;
+    document.getElementById('fm-path').textContent='/'+fmPath;
+    if(!d.entries.length){
+      list.innerHTML='<div class="fm-empty">Пустая папка</div>';
+      return;
+    }
+    list.innerHTML=d.entries.map(e=>{
+      const p=fmPath?fmPath+'/'+e.name:e.name;
+      const esc=p.replace(/'/g,"\\'");
+      const click=e.dir?`filesEnter('${esc}')`:`filesRead('${esc}')`;
+      return `<div class="fm-item" onclick="${click}">
+        <span class="fm-icon">${e.dir?'📁':'📄'}</span>
+        <span class="fm-name" title="${p}">${e.name}</span>
+        <span class="fm-meta">${e.dir?'папка':formatSize(e.size)}</span>
+      </div>`;
+    }).join('');
+  }catch(e){
+    if(list) list.innerHTML=`<div class="fm-empty" style="color:var(--red)">${e.message||e}</div>`;
+  }
+}
+
+function filesEnter(rel){fmPath=rel;filesRefresh()}
+function filesGoUp(){fmPath=fmParent;filesRefresh()}
+
+async function filesRead(rel){
+  const viewer=document.getElementById('fm-viewer');
+  viewer.innerHTML='<div class="fm-empty">Чтение...</div>';
+  document.querySelectorAll('.fm-item').forEach(el=>el.classList.remove('active'));
+  try{
+    const r=await fetch(API_MONITOR+'/api/files/read?path='+encodeURIComponent(rel));
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'ошибка');
+    viewer.innerHTML=`<pre>${escapeHtml(d.content)}</pre>`;
+  }catch(e){
+    viewer.innerHTML=`<div class="fm-empty" style="color:var(--red)">${e.message||e}</div>`;
+  }
+}
+
+function escapeHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
 
 // ════════════ INSTALL ════════════
 function getBase(){
@@ -1015,9 +1171,12 @@ async function loadPlatform(){
     if(!r.ok) throw new Error();
     const d=await r.json();
     installPlatform=d.platform||'';
+    serverIsRoot=!!d.root;
     const apiIn=document.getElementById('api-base');
     if(apiIn && d.api_base && !apiIn.value.trim()) apiIn.value=d.api_base;
-    badge.textContent=(d.display_platform||d.platform||'unknown').toUpperCase();
+    if(d.app_dir) document.getElementById('fm-root-hint').textContent=d.app_dir;
+    badge.textContent=(d.display_platform||d.platform||'неизвестно').toUpperCase();
+    fetchMetrics();
     badge.classList.add('ok');
     if(d.termux||d.platform==='termux') applyTermuxInstallUi();
     else if(d.platform==='wsl'||d.platform==='vps') applyLocalInstallUi();
