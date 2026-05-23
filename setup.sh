@@ -256,6 +256,64 @@ install_phase() {
   echo -e "${GRAY}  └$(ui_repeat '─' $((UI_INNER + 4)))${NC}"
 }
 
+# Устаревший core/validator ломает npm run build (scripts/core-guard.mjs)
+prune_legacy_core_paths() {
+  local root="${APP_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+  if [ -d "${root}/core/validator" ]; then
+    info "Удаляем устаревший core/validator (требование core-guard)..."
+    rm -rf "${root}/core/validator"
+    ok "core/validator удалён"
+  fi
+}
+
+# Согласовать .env с режимом prod/local (OAuth, NODE_ENV, venv, listen)
+sync_runtime_env_file() {
+  local envf="${APP_DIR}/.env"
+  [ -f "$envf" ] || return 0
+
+  local app_url="$APP_URL_VAL"
+  local api_host="0.0.0.0"
+  local listen_host="0.0.0.0"
+  if [ "$PLATFORM" = "termux" ]; then
+    api_host="127.0.0.1"
+    listen_host="127.0.0.1"
+  fi
+
+  if [ "$MODE" = "prod" ] && [ -n "${DOMAIN:-}" ] && [ "$DOMAIN" != "localhost" ]; then
+    app_url="https://${DOMAIN}"
+  fi
+
+  local google_cb="${GOOGLE_CALLBACK_URL:-}"
+  if [ "$MODE" = "prod" ] && [ -n "$app_url" ]; then
+    google_cb="${app_url}/api/auth/google/callback"
+  fi
+
+  local bot_venv_line=""
+  if [ -d "${APP_DIR}/.venv-bot/bin" ]; then
+    bot_venv_line="$(cd "${APP_DIR}/.venv-bot" && pwd)"
+  elif [ -n "${BOT_PYTHON_VENV:-}" ]; then
+    bot_venv_line="${BOT_PYTHON_VENV}"
+  fi
+
+  _env_patch() {
+    local key=$1 val=$2
+    local tmp="${envf}.patch.$$"
+    grep -v "^${key}=" "$envf" >"$tmp" 2>/dev/null || cp "$envf" "$tmp"
+    echo "${key}=${val}" >>"$tmp"
+    mv -f "$tmp" "$envf"
+  }
+
+  _env_patch NODE_ENV "${NODE_ENV_VAL}"
+  _env_patch APP_ENV "${APP_ENV_VAL}"
+  _env_patch API_HOST "$api_host"
+  _env_patch API_LISTEN_HOST "$listen_host"
+  _env_patch APP_URL "$app_url"
+  [ -n "$google_cb" ] && _env_patch GOOGLE_CALLBACK_URL "$google_cb"
+  [ -n "$bot_venv_line" ] && _env_patch BOT_PYTHON_VENV "$bot_venv_line"
+  chmod 600 "$envf"
+  ok ".env синхронизирован (APP_URL, OAuth, NODE_ENV, API, venv)"
+}
+
 print_banner
 
 # CRLF (редактор Windows) ломает строки с кириллицей и heredoc — конвертируем в LF
@@ -490,6 +548,7 @@ apply_webinstall_preset() {
   fi
   if [ "$MODE" = "prod" ]; then
     PREVIEW_APP_URL="https://${DOMAIN}"
+    GOOGLE_CALLBACK_URL="${PREVIEW_APP_URL}/api/auth/google/callback"
   else
     DOMAIN="${DOMAIN:-localhost}"
     PREVIEW_APP_URL="${PREVIEW_APP_URL:-https://localhost}"
@@ -837,13 +896,16 @@ APP_DIR="${APP_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 BOT_VENV="${APP_DIR}/.venv-bot"
 
 install_bot_python_runtime() {
-  # Termux: venv может не создаться — не падаем, используем системный pip
-  if [ ! -d "$BOT_VENV" ]; then
+  # VPS/WSL: venv обязателен (preview worker, bot runner)
+  if [ ! -d "$BOT_VENV" ] || [ ! -x "${BOT_VENV}/bin/python3" ]; then
+    rm -rf "$BOT_VENV" 2>/dev/null || true
     if python3 -m venv "$BOT_VENV" 2>/dev/null; then
       info "venv создан: $BOT_VENV"
-    else
+    elif [ "$PLATFORM" = "termux" ]; then
       warn "venv не удалось создать — буду использовать глобальный pip"
       BOT_VENV=""
+    else
+      err "Не удалось создать ${BOT_VENV}. Установи: apt install python3-venv python3-pip"
     fi
   fi
 
@@ -875,15 +937,25 @@ install_bot_python_runtime() {
     warn "requirements-bot.txt не найден"
   fi
 
-  if [ -n "$BOT_VENV" ]; then
-    ok "aiogram: ${BOT_VENV}"
+  if [ -n "$BOT_VENV" ] && [ -d "$BOT_VENV" ]; then
+    if [ -x "${BOT_VENV}/bin/python3" ]; then
+      "${BOT_VENV}/bin/python3" -c "import aiogram" 2>/dev/null \
+        && ok "aiogram: ${BOT_VENV}" \
+        || warn "aiogram не импортируется в ${BOT_VENV} — проверь pip install"
+    else
+      warn "Нет ${BOT_VENV}/bin/python3"
+    fi
   fi
 }
 
 install_bot_python_runtime
 
 PYTHON=$(command -v python3 || echo /usr/bin/python3)
-BOT_PYTHON_VENV="$BOT_VENV"
+if [ -n "$BOT_VENV" ] && [ -d "$BOT_VENV" ]; then
+  BOT_PYTHON_VENV="$(cd "$BOT_VENV" && pwd)"
+else
+  BOT_PYTHON_VENV="${APP_DIR}/.venv-bot"
+fi
 
 install_phase "Node.js, PM2, PostgreSQL, Nginx"
 if ! command -v node &>/dev/null; then
@@ -1156,6 +1228,7 @@ if [ "$MODE" = "prod" ]; then
   VITE_API_TARGET="https://${DOMAIN}"
   APP_URL_VAL="https://${DOMAIN}"
   APP_ENV_VAL="production"
+  GOOGLE_CALLBACK_URL="${APP_URL_VAL}/api/auth/google/callback"
 elif [ "$PLATFORM" = "termux" ]; then
   VITE_API_URL="http://127.0.0.1:${API_PORT}/api"
   VITE_API_TARGET="http://127.0.0.1:${API_PORT}"
@@ -1182,6 +1255,14 @@ if [ "$PLATFORM" = "termux" ]; then
   AUTH_BYPASS_VAL="1"
 elif [ "$MODE" = "local" ]; then
   AUTH_BYPASS_VAL="1"
+fi
+
+if [ "$PLATFORM" = "termux" ]; then
+  API_HOST_VAL="127.0.0.1"
+  API_LISTEN_HOST_VAL="127.0.0.1"
+else
+  API_HOST_VAL="0.0.0.0"
+  API_LISTEN_HOST_VAL="0.0.0.0"
 fi
 
 ESPHOME_BIN_VAL=""
@@ -1267,8 +1348,10 @@ cat > "$APP_DIR/.env" << ENV
 NODE_ENV=${NODE_ENV_VAL}
 APP_ENV=${APP_ENV_VAL}
 AUTH_BYPASS=${AUTH_BYPASS_VAL}
-API_HOST=${DOMAIN}
+API_HOST=${API_HOST_VAL}
+API_LISTEN_HOST=${API_LISTEN_HOST_VAL}
 API_PORT=${API_PORT}
+DOMAIN=${DOMAIN}
 PYTHON_BIN=${PYTHON}
 BOT_PYTHON_VENV=${BOT_PYTHON_VENV}
 ${PYTHON_LINE}
@@ -1355,11 +1438,14 @@ if [ "$PLATFORM" = "termux" ] && [ -f "$APP_DIR/.env" ]; then
   ok "Termux: .env очищен (AUTH_BYPASS, DISABLE_FIRMWARE_RUNTIME)"
 fi
 
+sync_runtime_env_file
+
 # ═══════════════════════════════════════════════════════════════
 # 8. СБОРКА ФРОНТЕНДА
 # ═══════════════════════════════════════════════════════════════
 if [ -f "$APP_DIR/package.json" ]; then
   install_phase "Сборка фронтенда (Vite)"
+  prune_legacy_core_paths
   info "npm run build..."
   cd "$APP_DIR"
   if ! npm run build 2>${CICADA_ERR_DIR}/cicada_build_err; then
@@ -1586,9 +1672,36 @@ install_phase "Запуск сервера (PM2)"
 info "Стартуем Node.js..."
 cd "$APP_DIR"
 
+pm2 delete cicada-server 2>/dev/null || true
 pm2 delete server 2>/dev/null || true
-pm2 start server.mjs --name server --node-args="--import tsx"
+
+PM2_NODE_ENV="${NODE_ENV_VAL:-production}"
+if [ -f "$APP_DIR/.env" ]; then
+  _pm2_ne=$(grep -E '^NODE_ENV=' "$APP_DIR/.env" 2>/dev/null | tail -1 | cut -d= -f2- || true)
+  [ -n "$_pm2_ne" ] && PM2_NODE_ENV="$_pm2_ne"
+fi
+PM2_APP_ENV="${APP_ENV_VAL:-$PM2_NODE_ENV}"
+
+info "PM2: NODE_ENV=${PM2_NODE_ENV}, tsx, cwd=${APP_DIR}"
+NODE_ENV="$PM2_NODE_ENV" APP_ENV="$PM2_APP_ENV" pm2 start server.mjs \
+  --name cicada-server \
+  --node-args="--import tsx" \
+  --cwd "$APP_DIR"
 pm2 save
+
+sleep 2
+if command -v ss &>/dev/null && ss -tln 2>/dev/null | grep -q ":${API_PORT} "; then
+  ok "API слушает порт ${API_PORT}"
+elif command -v lsof &>/dev/null && lsof -i ":${API_PORT}" &>/dev/null; then
+  ok "API слушает порт ${API_PORT}"
+else
+  warn "Порт ${API_PORT} пока не слушается — проверь: pm2 logs cicada-server"
+fi
+if [ "$PM2_NODE_ENV" = "development" ]; then
+  hint "AI Debug IDE: http://127.0.0.1:${API_PORT}/debug.html (только development)"
+elif [ "$MODE" = "prod" ]; then
+  dim "AI Debug IDE отключена в production (нужен NODE_ENV=development)"
+fi
 
 if $HAS_SYSTEMCTL && [ "$PLATFORM" = "vps" ]; then
   pm2 startup systemd -u root --hp /root &>/dev/null || true
@@ -1683,7 +1796,7 @@ SEED
   then
     ok "Вход готов: $ADMIN_EMAIL (email подтверждён, роль admin, план pro)"
   else
-    warn "Не удалось создать учётку — проверь pm2 logs server и подключение к БД"
+    warn "Не удалось создать учётку — проверь pm2 logs cicada-server и подключение к БД"
   fi
 }
 
@@ -1742,11 +1855,11 @@ fi
 if command -v timeout &>/dev/null; then
   timeout 45 pm2 list 2>/dev/null | grep -q "online" \
     && ok "PM2: сервер online" \
-    || warn "PM2: сервер может не запуститься сразу — проверь: pm2 logs server"
+    || warn "PM2: сервер может не запуститься сразу — проверь: pm2 logs cicada-server"
 else
   pm2 list 2>/dev/null | grep -q "online" \
     && ok "PM2: сервер online" \
-    || warn "PM2: сервер может не запуститься сразу — проверь: pm2 logs server"
+    || warn "PM2: сервер может не запуститься сразу — проверь: pm2 logs cicada-server"
 fi
 
 if [ "$PLATFORM" != "termux" ]; then
@@ -1846,8 +1959,8 @@ summary_panel_end "$MAGENTA"
 echo ""
 echo -e "  ${BOLD}${WHITE}Команды${NC}"
 if [ "$UI_NARROW" = "1" ]; then
-  echo -e "  ${TEAL}pm2 logs server${NC} ${GRAY}— логи${NC}"
-  echo -e "  ${TEAL}pm2 restart server${NC} ${GRAY}— рестарт${NC}"
+  echo -e "  ${TEAL}pm2 logs cicada-server${NC} ${GRAY}— логи${NC}"
+  echo -e "  ${TEAL}pm2 restart cicada-server${NC} ${GRAY}— рестарт${NC}"
   if [ "$PLATFORM" != "termux" ]; then
     echo -e "  ${TEAL}sudo systemctl reload nginx${NC}"
   else
@@ -1855,8 +1968,8 @@ if [ "$UI_NARROW" = "1" ]; then
   fi
 else
   echo -e "  ${GRAY}┌$(ui_repeat '─' $((UI_INNER + 4)))┐${NC}"
-  echo -e "  ${GRAY}│${NC}  ${TEAL}pm2 logs server${NC}        ${GRAY}— просмотр логов${NC}"
-  echo -e "  ${GRAY}│${NC}  ${TEAL}pm2 restart server${NC}     ${GRAY}— перезапуск сервера${NC}"
+  echo -e "  ${GRAY}│${NC}  ${TEAL}pm2 logs cicada-server${NC}        ${GRAY}— просмотр логов${NC}"
+  echo -e "  ${GRAY}│${NC}  ${TEAL}pm2 restart cicada-server${NC}     ${GRAY}— перезапуск сервера${NC}"
   if [ "$PLATFORM" != "termux" ]; then
     echo -e "  ${GRAY}│${NC}  ${TEAL}nginx -t && sudo systemctl reload nginx${NC}  ${GRAY}— nginx${NC}"
   fi

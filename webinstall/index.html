@@ -1015,6 +1015,8 @@ async function loadPlatform(){
     if(!r.ok) throw new Error();
     const d=await r.json();
     installPlatform=d.platform||'';
+    const apiIn=document.getElementById('api-base');
+    if(apiIn && d.api_base && !apiIn.value.trim()) apiIn.value=d.api_base;
     badge.textContent=(d.display_platform||d.platform||'unknown').toUpperCase();
     badge.classList.add('ok');
     if(d.termux||d.platform==='termux') applyTermuxInstallUi();

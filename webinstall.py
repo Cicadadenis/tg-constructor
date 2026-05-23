@@ -3,10 +3,13 @@
 Cicada Studio — веб-установщик (один файл, без зависимостей).
 
   python3 webinstall.py
-  → http://127.0.0.1:7700  (форма в браузере, .env предзаполняет поля)
+  → HTTP на 0.0.0.0:7700, ufw (VPS), открытие браузера где возможно
 
   python3 webinstall.py --direct
   → установка из .env в терминале (без веб-UI)
+
+  WEBINSTALL_PUBLIC_URL=http://домен:7700  — свой URL в консоли
+  WEBINSTALL_SKIP_FIREWALL=1             — не трогать ufw
 
 Форма → webinstall/last-install.env → setup.sh --webinstall (логи по SSE).
 """
@@ -493,37 +496,163 @@ def guess_public_ipv4() -> str | None:
     return None
 
 
-def public_api_base() -> str:
+_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "0.0.0.0", "::", ""})
+
+
+def resolve_public_host() -> str | None:
+    """Домен или IP для ссылки с ПК (не 0.0.0.0 из API_HOST)."""
+    env_path = ROOT / ".env"
+    if env_path.is_file():
+        env_data = parse_env_file(env_path)
+        domain = (env_data.get("DOMAIN") or "").strip()
+        if domain.lower() not in _LOOPBACK_HOSTS:
+            return domain
+        app_url = (env_data.get("APP_URL") or "").strip()
+        if app_url:
+            try:
+                host = urlparse(app_url).hostname
+                if host and host.lower() not in _LOOPBACK_HOSTS:
+                    return host
+            except ValueError:
+                pass
+        api_host = (env_data.get("API_HOST") or "").strip()
+        if api_host.lower() not in _LOOPBACK_HOSTS:
+            return api_host
+    return guess_public_ipv4()
+
+
+def public_api_base(port: int | None = None) -> str:
     """
     Базовый URL API webinstall (без завершающего /).
-    WSL/Termux → 127.0.0.1; VPS → домен/IP сервера.
+    WSL/Termux → 127.0.0.1; VPS → домен/IP из .env или сети.
     """
+    p = PORT if port is None else port
     custom = os.environ.get("WEBINSTALL_PUBLIC_URL", "").strip().rstrip("/")
     if custom:
         return custom
 
     plat = detect_platform()
     if plat in ("wsl", "termux"):
-        return f"http://127.0.0.1:{PORT}"
+        return f"http://127.0.0.1:{p}"
 
-    env_path = ROOT / ".env"
-    if env_path.is_file():
-        env_data = parse_env_file(env_path)
-        host = (env_data.get("API_HOST") or env_data.get("DOMAIN") or "").strip()
-        if host and host not in ("localhost", "127.0.0.1"):
-            return f"http://{host}:{PORT}"
-
-    ip = guess_public_ipv4()
-    if ip:
-        return f"http://{ip}:{PORT}"
+    host = resolve_public_host()
+    if host:
+        return f"http://{host}:{p}"
 
     if HOST not in ("0.0.0.0", "::", ""):
-        return f"http://{HOST}:{PORT}"
-    return f"http://127.0.0.1:{PORT}"
+        return f"http://{HOST}:{p}"
+    return f"http://127.0.0.1:{p}"
 
 
-def browser_url() -> str:
-    return f"{public_api_base()}/"
+def local_browser_url(port: int | None = None) -> str:
+    """URL для браузера на той же машине (WSL → Windows localhost)."""
+    p = PORT if port is None else port
+    return f"http://127.0.0.1:{p}/"
+
+
+def browser_url(port: int | None = None) -> str:
+    return f"{public_api_base(port)}/"
+
+
+def _run_quiet(cmd: list[str], timeout: float = 20) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        errors="replace",
+    )
+
+
+def _ufw_prefix() -> list[str] | None:
+    ufw = shutil.which("ufw")
+    if not ufw:
+        return None
+    try:
+        if os.geteuid() == 0:
+            return [ufw]
+        sudo = shutil.which("sudo")
+        if sudo:
+            return [sudo, "-n", ufw]
+    except AttributeError:
+        pass
+    return None
+
+
+def ensure_firewall_port(port: int) -> str | None:
+    """VPS/WSL: ufw allow PORT/tcp (если доступен ufw и root/sudo -n)."""
+    if os.environ.get("WEBINSTALL_SKIP_FIREWALL"):
+        return None
+    if detect_platform() not in ("vps", "wsl"):
+        return None
+    prefix = _ufw_prefix()
+    if not prefix:
+        return None
+    rule = f"{port}/tcp"
+    try:
+        st = _run_quiet([*prefix, "status"], timeout=10)
+        combined = (st.stdout or "") + (st.stderr or "")
+        _run_quiet([*prefix, "allow", rule], timeout=15)
+        if "inactive" not in combined.lower():
+            _run_quiet([*prefix, "reload"], timeout=15)
+            return f"файрвол: порт {port}/tcp открыт (ufw)"
+        return f"ufw: правило {rule} добавлено (ufw выключен — включите: ufw enable)"
+    except (subprocess.SubprocessError, OSError, TimeoutError) as exc:
+        return f"ufw: не удалось открыть порт {port} ({exc})"
+
+
+def prepare_webinstall_network(port: int, page_url: str) -> None:
+    """Автонастройка доступа: firewall, подсказки, проверка локального HTTP."""
+    plat = detect_platform()
+    fw = ensure_firewall_port(port)
+    if fw:
+        if fw.startswith("файрвол"):
+            print(f"  ✓ {fw}")
+        else:
+            print(f"  ▲ {fw}")
+
+    if verify_local_server(port):
+        print(f"  ✓ HTTP OK на 127.0.0.1:{port}")
+    else:
+        print(f"  ⚠ Нет ответа на 127.0.0.1:{port} — подождите секунду или проверьте логи")
+
+    if plat == "vps" and is_vps_headless():
+        print()
+        print_vps_access_hints(port, page_url)
+        host = resolve_public_host()
+        if host:
+            print(f"  Откройте на ПК:  http://{host}:{port}/")
+    elif plat in ("wsl", "termux") or sys.platform == "win32":
+        print(f"  Локальный браузер:  {local_browser_url(port)}")
+
+
+def is_vps_headless() -> bool:
+    """VPS по SSH без графического окружения — webbrowser.open бесполезен."""
+    if detect_platform() != "vps":
+        return False
+    if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
+        return False
+    return True
+
+
+def verify_local_server(port: int) -> bool:
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=3):
+            return True
+    except OSError:
+        return False
+
+
+def print_vps_access_hints(port: int, page_url: str) -> None:
+    print("  VPS (SSH): откройте ссылку на своём ПК (Chrome/Edge).")
+    print(f"  Страница:  {page_url}")
+    host = resolve_public_host() or "IP_СЕРВЕРА"
+    print("  Если с ПК не открывается:")
+    print(f"    · SSH-туннель на компьютере:  ssh -L {port}:127.0.0.1:{port} root@{host}")
+    print(f"      затем в браузере:  http://127.0.0.1:{port}/")
+    print("    · Панель хостинга: разрешите входящий TCP на этот порт")
+    print(f"    · На VPS:  curl -sI http://127.0.0.1:{port}/ | head -1")
+    print("  Без UI:  python3 webinstall.py --direct")
 
 
 def index_html_windows_path() -> str | None:
@@ -550,44 +679,50 @@ def windows_path_to_file_uri(win_path: str) -> str:
     raise ValueError(f"не Windows-путь: {win_path!r}")
 
 
-def install_page_target() -> tuple[str, str]:
+def install_page_target(port: int | None = None) -> tuple[str, str]:
     """
-    (url для браузера, подпись для консоли).
-    WSL/Termux/Windows: HTTP на 127.0.0.1 (форма и API на одном origin).
-    VPS: http://домен-или-ip:PORT/
+    (url для консоли, подпись).
+    VPS → публичный URL; WSL/Termux/Windows → 127.0.0.1 (прокси WSL).
     """
-    api = public_api_base()
+    p = PORT if port is None else port
     plat = detect_platform()
 
     if plat == "vps":
-        page = f"{api}/"
+        page = browser_url(p)
         return page, page
 
-    # Надёжнее file:// — fetch /api/info с того же origin (WSL → Chrome в Windows)
-    page = f"http://127.0.0.1:{PORT}/"
-    return page, page
+    local = local_browser_url(p)
+    return local, local
 
 
-def open_install_page() -> None:
+def open_install_page(port: int | None = None) -> None:
     if os.environ.get("WEBINSTALL_NO_BROWSER"):
         return
-    page_url, page_label = install_page_target()
+    p = PORT if port is None else port
     plat = detect_platform()
+    if is_vps_headless():
+        return
+
+    # Всегда localhost для WSL/Windows/десктоп — WSL пробрасывает порт в Windows
+    open_url = local_browser_url(p)
+    if plat == "vps":
+        open_url = browser_url(p)
+
     try:
         if plat == "wsl" or sys.platform == "win32":
-            # Windows надёжнее открывает путь C:\... чем file:// из WSL
-            target = page_label if "\\" in page_label or ":" in page_label[:3] else page_url
             subprocess.Popen(
-                ["cmd.exe", "/c", "start", "", target],
+                ["cmd.exe", "/c", "start", "", open_url],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
+            print(f"  ✓ Браузер: {open_url}")
             return
         import webbrowser
 
-        webbrowser.open(page_url)
+        if webbrowser.open(open_url):
+            print(f"  ✓ Браузер: {open_url}")
     except OSError:
-        pass
+        print(f"  ▲ Откройте вручную: {open_url}")
 
 
 def run_install_job(job_id: str, env_path: Path) -> None:
@@ -1086,15 +1221,17 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/info":
             plat = detect_platform()
-            api_base = public_api_base()
+            bound = PORT
+            api_base = public_api_base(bound)
             payload: dict = {
                 "platform": plat,
                 "termux": plat == "termux",
                 "root": os.geteuid() == 0 if hasattr(os, "geteuid") else False,
-                "port": PORT,
+                "port": bound,
                 "app_dir": str(ROOT),
-                "url": browser_url(),
+                "url": browser_url(bound),
                 "api_base": api_base,
+                "local_url": local_browser_url(bound).rstrip("/"),
             }
             env_path = ROOT / ".env"
             if env_path.is_file():
@@ -1226,40 +1363,35 @@ def main() -> None:
         sys.exit(run_install_direct(ENV_FILE))
 
     plat = detect_platform()
-    page_url, page_label = install_page_target()
-    api_url = browser_url()
     print()
     print("  🦟  Cicada Studio — Web Install")
     print(f"  Платформа: {plat}")
     if env_file.is_file():
         print("  Найден .env — форма будет предзаполнена (установка только по кнопке в UI)")
         print("  Установка в терминале без UI:  python3 webinstall.py --direct")
-    print(f"  Страница:  {page_label}")
-    print(f"  API:       {api_url}")
-    if not os.environ.get("WEBINSTALL_NO_BROWSER"):
-        print("  Если браузер не открылся — вставьте URL выше в Chrome/Edge")
-    if plat == "termux":
-        print(f"  Termux: Chrome → {api_url}")
-    elif plat == "vps":
-        print(f"  VPS: форма и установка → {api_url}")
-        print("  Свой URL API: WEBINSTALL_PUBLIC_URL=http://IP:7700 python3 webinstall.py")
     print("  Прямая установка из .env без UI:  python3 webinstall.py --direct")
     print()
 
     global PORT
     preferred = PORT
     server, bound_port = create_webinstall_server(HOST, preferred)
+    PORT = bound_port
+
+    page_url, page_label = install_page_target(bound_port)
+    api_url = browser_url(bound_port)
     if bound_port != preferred:
-        PORT = bound_port
-        page_url, page_label = install_page_target()
-        api_url = browser_url()
-        print(f"  ⚠ Порт {preferred} уже занят — сервер запущен на порту {bound_port}")
-        print(f"  Страница:  {page_label}")
-        print(f"  API:       {api_url}")
-        print()
+        print(f"  ⚠ Порт {preferred} занят — используем {bound_port}")
+    print(f"  Страница:  {page_label}")
+    print(f"  API:       {api_url}")
+    print(f"  Слушает:   {HOST}:{bound_port}")
+    print()
+
+    prepare_webinstall_network(bound_port, page_label)
+    print("  Свой URL: WEBINSTALL_PUBLIC_URL=http://домен:7700 python3 webinstall.py")
+    print()
 
     threading.Thread(
-        target=lambda: (time.sleep(0.8), open_install_page()),
+        target=lambda p=bound_port: (time.sleep(0.8), open_install_page(p)),
         daemon=True,
     ).start()
     try:
