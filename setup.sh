@@ -1336,8 +1336,10 @@ if [ -f "package.json" ]; then
   info "Cleanup: node_modules, package-lock.json, dist"
   rm -rf node_modules package-lock.json dist
   ok "Cleaned node_modules, package-lock.json, dist"
-  info "npm install --legacy-peer-deps"
-  if ! npm install --legacy-peer-deps 2>${CICADA_ERR_DIR}/cicada_npm_err; then
+  info "npm install --legacy-peer-deps (включая tsx для PM2)"
+  # NODE_ENV=production в окружении иначе npm не ставит devDependencies — tsx нужен в runtime
+  if ! env NPM_CONFIG_PRODUCTION=false NODE_ENV=development npm install --legacy-peer-deps \
+    2>${CICADA_ERR_DIR}/cicada_npm_err; then
     _npm_err=$(tail -8 ${CICADA_ERR_DIR}/cicada_npm_err 2>/dev/null || echo "no log")
     err "npm install failed. Check package.json and registry. Log: ${_npm_err}"
   fi
@@ -1347,6 +1349,12 @@ if [ -f "package.json" ]; then
     err "npm install (passport) failed. Log: ${_npm_err}"
   fi
   ok "npm install OK"
+  if [ ! -d "$APP_DIR/node_modules/tsx" ]; then
+    info "Доустанавливаем tsx (runtime для server.mjs)..."
+    npm install tsx@^4.22.3 --legacy-peer-deps --no-save 2>/dev/null \
+      || npm install tsx --legacy-peer-deps 2>/dev/null \
+      || err "Не найден пакет tsx — PM2 не сможет запустить server.mjs"
+  fi
   chmod -R 755 "$APP_DIR" 2>/dev/null || true
 else
   warn "package.json not found in $APP_DIR"
@@ -1923,6 +1931,9 @@ if [ -f "$APP_DIR/.env" ]; then
 fi
 PM2_APP_ENV="${APP_ENV_VAL:-$PM2_NODE_ENV}"
 
+if [ ! -d "$APP_DIR/node_modules/tsx" ]; then
+  err "Нет node_modules/tsx. Выполни: cd ${APP_DIR} && npm install --legacy-peer-deps"
+fi
 info "PM2: NODE_ENV=${PM2_NODE_ENV}, tsx, cwd=${APP_DIR}"
 NODE_ENV="$PM2_NODE_ENV" APP_ENV="$PM2_APP_ENV" pm2 start server.mjs \
   --name cicada-server \
