@@ -54,6 +54,10 @@ import {
   updateUser,
   uploadAvatar,
   isMobileBuilderViewport,
+  normalizeSessionUser,
+  getDevBypassUser,
+  isAuthBypassEnabled,
+  resolveInitialSessionUser,
 } from './apiClient.js';
 import { BlockInfoContext, AddBlockContext, BuilderUiContext } from './builderContext.js';
 import { useGraphEditor } from './constructor/graph_document/useGraphEditor.js';
@@ -910,8 +914,8 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(() => {
     if (typeof window === 'undefined') return null;
     const params = new URLSearchParams(window.location.search);
-    if (params.get('login') === '1') return null;
-    return getSession();
+    if (params.get('login') === '1' && !isAuthBypassEnabled()) return null;
+    return resolveInitialSessionUser(getSession);
   });
   const uiLang = (currentUser?.uiLanguage || 'ru').toLowerCase();
   const builderBlockTypes = React.useMemo(() => buildLocalizedBlockCatalog(uiLang), [uiLang]);
@@ -1203,7 +1207,7 @@ export default function App() {
     });
   }, [showFilesMenu]);
 
-  const onboardingKey = currentUser
+  const onboardingKey = currentUser?.id
     ? `cicada_onboarding_v2_${currentUser.id}_${isMobileView ? 'mobile' : 'desktop'}`
     : null;
 
@@ -3037,6 +3041,20 @@ export default function App() {
       window.history.replaceState({}, '', nextQuery ? `/?${nextQuery}` : '/');
     }
 
+    if (isAuthBypassEnabled()) {
+      const bypassUser = getDevBypassUser();
+      if (bypassUser) {
+        saveSession(bypassUser);
+        setCurrentUser(bypassUser);
+        setShowAuthModal(false);
+        loadUserProjects(bypassUser.id);
+        checkBotStatus(bypassUser.id);
+      }
+      const handleExpiredBypass = () => {};
+      window.addEventListener('cicada:session-expired', handleExpiredBypass);
+      return () => window.removeEventListener('cicada:session-expired', handleExpiredBypass);
+    }
+
     let cancelled = false;
 
     (async () => {
@@ -3056,18 +3074,23 @@ export default function App() {
 
       if (cancelled) return;
 
-      if (serverUser) {
-        saveSession(serverUser);
+      const bootUser = normalizeSessionUser(serverUser);
+      if (bootUser) {
+        saveSession(bootUser);
         if (returnIntent && peekReturnTo()) {
           redirectIfReturnTo();
           return;
         }
         if (!returnIntent) clearRememberedReturnTo();
-        setCurrentUser(serverUser);
+        setCurrentUser(bootUser);
         setShowAuthModal(false);
-        await loadUserProjects(serverUser.id);
+        await loadUserProjects(bootUser.id);
         checkBotStatus();
         return;
+      }
+
+      if (serverUser) {
+        clearSession();
       }
 
       if (getSession()) {
@@ -3086,6 +3109,7 @@ export default function App() {
     })();
 
     const handleExpired = () => {
+      if (isAuthBypassEnabled()) return;
       setCurrentUser(null);
       setUserProjects([]);
       setShowProfileModal(false);
@@ -3743,15 +3767,16 @@ export default function App() {
         if (result.needVerify) {
           return result; // AuthModal переключится на экран "проверьте почту"
         }
-        if (result.user) {
-          saveSession(result.user);
+        const registeredUser = normalizeSessionUser(result.user);
+        if (registeredUser) {
+          saveSession(registeredUser);
           if (peekReturnTo()) {
             redirectIfReturnTo();
             return;
           }
-          setCurrentUser(result.user);
+          setCurrentUser(registeredUser);
           setShowAuthModal(false);
-          await loadUserProjects(result.user.id);
+          await loadUserProjects(registeredUser.id);
           fireRegistrationConfetti();
           showToast('Регистрация успешна! 3 дня PRO уже на аккаунте.', 'success');
         }
@@ -4343,6 +4368,9 @@ export default function App() {
       .editor-main-grid {
         border-top: 1px solid rgba(255,255,255,.025);
         background: radial-gradient(circle at 48% 20%, rgba(116,61,255,.34), transparent 35%);
+      }
+      .editor-main-grid > * {
+        min-height: 0;
       }
       .editor-sidebar-shell,
       .editor-right-panel {
@@ -5839,7 +5867,7 @@ export default function App() {
           className="canvas-bg"
           style={{
             position:'relative', overflow:'hidden',
-            width: '100%', height: '100%',
+            width: '100%', height: '100%', minHeight: 0,
             background: 'linear-gradient(160deg, #06030f 0%, #0a0518 50%, #080615 100%)',
             ...(isMobileView ? { gridColumn: '1', display: (mobileTab === 'canvas' || mobileTab === 'dsl') ? 'block' : 'none' } : {}),
           }}

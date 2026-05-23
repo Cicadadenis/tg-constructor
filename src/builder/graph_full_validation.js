@@ -51,7 +51,10 @@ export function runFullGraphValidation(document, options = {}) {
   });
 
   const flow = projectGraphToFlow(graphDocumentToProjectGraph(document));
-  const compileMeta = compileFlowToPython(flow);
+  const compileMeta = compileFlowToPython(flow, {
+    graphDocument: document,
+    strict,
+  });
 
   const rawCompileErrors = compileMeta.compileErrors || [];
   const pipelineUser = formatDiagnosticsForUser(pipeline.diagnostics, { lang, graphDocument: document });

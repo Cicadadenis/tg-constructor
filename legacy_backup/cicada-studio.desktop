@@ -2,8 +2,8 @@
 Version=1.0
 Type=Application
 Name=Cicada Studio
-Comment=Open Cicada Studio fullscreen
-Exec=/var/www/cicada-studio/scripts/launch-desktop.sh
+Comment=Open Cicada Studio in the default web browser
+Exec=xdg-open http://127.0.0.1:5173
 Path=/var/www/cicada-studio
 Terminal=false
 Categories=Development;

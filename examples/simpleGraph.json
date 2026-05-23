@@ -7,7 +7,20 @@
       "data": {
         "command": "start"
       }
+    },
+    {
+      "id": "welcome",
+      "type": "message",
+      "data": {
+        "text": "Hello"
+      }
     }
   ],
-  "edges": []
+  "edges": [
+    {
+      "id": "e1",
+      "source": "start_handler",
+      "target": "welcome"
+    }
+  ]
 }

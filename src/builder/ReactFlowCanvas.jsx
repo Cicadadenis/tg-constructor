@@ -142,8 +142,43 @@ function GraphFlowInner({
   const lastViewportRef = useRef(null);
   const lastNodeCountRef = useRef(0);
   const draggingRef = useRef(false);
+  const flowHostRef = useRef(null);
 
   const { fitView } = useReactFlow();
+
+  // Re-measure when parent flex/grid layout settles (e.g. after auth/API bootstrap).
+  useEffect(() => {
+    const host = flowHostRef.current;
+    if (!host || typeof ResizeObserver !== 'function') return undefined;
+
+    let lastW = 0;
+    let lastH = 0;
+    let raf = 0;
+    const reflow = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const { width, height } = host.getBoundingClientRect();
+        const wasZero = lastW < 2 || lastH < 2;
+        lastW = width;
+        lastH = height;
+        if (width < 2 || height < 2) return;
+        if (!wasZero) return;
+        try {
+          fitView({ padding: 0.2, duration: 200, maxZoom: 1.2 });
+        } catch {
+          /* flow not ready */
+        }
+      });
+    };
+
+    reflow();
+    const ro = new ResizeObserver(reflow);
+    ro.observe(host);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
+  }, [fitView]);
 
   // Sync projection → ReactFlow state when revision, node count, or preview content changes.
   useEffect(() => {
@@ -420,7 +455,8 @@ function GraphFlowInner({
   const isEmpty = (projection?.nodes?.length ?? 0) === 0;
 
   return (
-    <ReactFlow
+    <div ref={flowHostRef} className="graph-flow-host">
+      <ReactFlow
       nodes={nodes}
       edges={edges}
       onNodesChange={onNodesChange}
@@ -490,6 +526,7 @@ function GraphFlowInner({
         </div>
       )}
     </ReactFlow>
+    </div>
   );
 }
 

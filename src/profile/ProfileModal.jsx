@@ -387,6 +387,8 @@ export default function ProfileModal({
   onStopBot,
   onOpenPremium,
 }) {
+  if (!user?.id) return null;
+
   const builderUiContext = React.useContext(BuilderUiContext);
   const builderUi = builderUiContext?.t;
   const builderUiForToast = builderUi;
@@ -621,7 +623,7 @@ export default function ProfileModal({
       .then((data) => { if (!cancelled) setPasskeyCount(Array.isArray(data.passkeys) ? data.passkeys.length : 0); })
       .catch(() => { if (!cancelled) setPasskeyCount(null); });
     return () => { cancelled = true; };
-  }, [user.id]);
+  }, [user?.id]);
 
   const loadPurchases = React.useCallback(async () => {
     setPurchasesLoading(true);

@@ -1,3 +1,4 @@
+import { CURRENT_VERSION } from "./version";
 import type {
   ExecutionEdge,
   ExecutionGraph,
@@ -25,7 +26,7 @@ function toExecutionNode(node: any): ExecutionNode {
 export function buildExecutionGraph(
   nodes: any[],
   edges: any[],
-  version = "1.0",
+  version = CURRENT_VERSION,
 ): ExecutionGraph {
   const executionNodes = nodes.map(toExecutionNode);
   const nodeById = new Map(executionNodes.map((n) => [n.id, n]));

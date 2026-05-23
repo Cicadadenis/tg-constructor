@@ -37,8 +37,8 @@ const graph = JSON.parse(
   const callbacksProjected = projectCallbackRoutesFromExecution(execution);
   assert.deepEqual(callbacks, callbacksProjected);
 
-  assert.ok(result.python.includes("# EDGE start -> welcome [next]"));
-  assert.ok(result.python.includes("command: start"));
+  assert.ok(result.python.includes("# EDGE: start -> welcome [next]"));
+  assert.ok(result.python.includes("# EXECUTION GRAPH VERSION: 1.0"));
 
   console.log("runtime invariants OK");
   console.log(result.runtime);

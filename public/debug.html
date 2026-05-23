@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cicada AI Debug IDE</title>
+  <style>
+    :root {
+      --bg: #1e1e1e;
+      --bg2: #252526;
+      --bg3: #2d2d30;
+      --border: #3e3e42;
+      --text: #cccccc;
+      --muted: #858585;
+      --accent: #007acc;
+      --accent2: #3794ff;
+      --green: #4ec9b0;
+      --orange: #ce9178;
+      --red: #f48771;
+      --yellow: #dcdcaa;
+      --mono: 'Cascadia Code', 'Consolas', 'JetBrains Mono', ui-monospace, monospace;
+      --ui: 'Segoe UI', system-ui, sans-serif;
+      --explorer-w: 260px;
+      --chat-w: 340px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: var(--ui);
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+    }
+    .topbar {
+      height: 36px;
+      background: var(--bg3);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+    .topbar h1 { font-size: 13px; font-weight: 600; }
+    .badge {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--green);
+      border: 1px solid rgba(78, 201, 176, 0.35);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .topbar a { color: var(--accent2); font-size: 12px; text-decoration: none; }
+    .topbar a:hover { text-decoration: underline; }
+    .workspace {
+      flex: 1;
+      display: grid;
+      grid-template-columns: var(--explorer-w) 1fr var(--chat-w);
+      min-height: 0;
+    }
+    .panel {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      border-right: 1px solid var(--border);
+    }
+    .panel:last-child { border-right: none; border-left: 1px solid var(--border); }
+    .panel-head {
+      height: 32px;
+      padding: 0 10px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .explorer {
+      overflow: auto;
+      padding: 6px 0;
+      font-size: 13px;
+      flex: 1;
+    }
+    .tree-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px 3px calc(8px + var(--indent, 0px));
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+    .tree-item:hover { background: rgba(255,255,255,0.06); }
+    .tree-item.active { background: rgba(0, 122, 204, 0.35); }
+    .tree-item .icon { width: 16px; text-align: center; font-size: 11px; color: var(--muted); flex-shrink: 0; }
+    .tree-item.file .icon { color: var(--orange); }
+    .editor-wrap {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      background: var(--bg);
+    }
+    .editor-toolbar {
+      height: 36px;
+      padding: 0 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .editor-toolbar .path {
+      flex: 1;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .status { font-size: 11px; color: var(--muted); min-width: 80px; text-align: right; }
+    .status.ok { color: var(--green); }
+    .status.err { color: var(--red); }
+    button {
+      font: inherit;
+      font-size: 12px;
+      padding: 5px 10px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: var(--bg3);
+      color: var(--text);
+      cursor: pointer;
+    }
+    button:hover { background: #3a3a3d; }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    button.primary:hover { background: #1a8ad4; }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    #editor {
+      flex: 1;
+      width: 100%;
+      resize: none;
+      border: none;
+      outline: none;
+      padding: 12px 14px;
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.5;
+      background: var(--bg);
+      color: var(--text);
+      tab-size: 2;
+    }
+    .chat-messages {
+      flex: 1;
+      overflow: auto;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .msg {
+      font-size: 13px;
+      line-height: 1.45;
+      padding: 8px 10px;
+      border-radius: 6px;
+      max-width: 100%;
+      word-break: break-word;
+    }
+    .msg.user { background: rgba(0, 122, 204, 0.2); align-self: flex-end; }
+    .msg.assistant { background: var(--bg3); border: 1px solid var(--border); }
+    .msg.system { background: transparent; color: var(--muted); font-size: 12px; font-style: italic; }
+    .msg pre {
+      margin-top: 8px;
+      padding: 8px;
+      background: #0d0d0d;
+      border-radius: 4px;
+      overflow: auto;
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+    .patch-bar {
+      margin-top: 8px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .chat-input-wrap {
+      border-top: 1px solid var(--border);
+      padding: 10px;
+      background: var(--bg2);
+      flex-shrink: 0;
+    }
+    .chat-options {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    #chatInput {
+      width: 100%;
+      min-height: 72px;
+      max-height: 160px;
+      resize: vertical;
+      font-family: var(--ui);
+      font-size: 13px;
+      padding: 8px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+    .chat-actions { display: flex; gap: 8px; justify-content: flex-end; }
+    .offline-banner {
+      display: none;
+      padding: 8px 12px;
+      background: #5a1e1e;
+      color: #ffb4b4;
+      font-size: 12px;
+      text-align: center;
+    }
+    .offline-banner.show { display: block; }
+    @media (max-width: 1000px) {
+      .workspace { grid-template-columns: 200px 1fr; }
+      .panel.chat-panel { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="offline" class="offline-banner"></div>
+  <header class="topbar">
+    <h1>Cicada AI Debug IDE</h1>
+    <span class="badge">dev only</span>
+    <a href="/">← Studio</a>
+    <a href="/dev/errors">Errors</a>
+  </header>
+  <div class="workspace">
+    <aside class="panel">
+      <div class="panel-head">
+        <span>Explorer</span>
+        <button type="button" id="refreshTree" title="Refresh">↻</button>
+      </div>
+      <div id="explorer" class="explorer"></div>
+    </aside>
+    <section class="panel editor-wrap">
+      <div class="panel-head"><span>Editor</span></div>
+      <div class="editor-toolbar">
+        <span class="path" id="currentPath">No file open</span>
+        <span class="status" id="saveStatus"></span>
+        <button type="button" id="saveBtn" class="primary" disabled>Save</button>
+      </div>
+      <textarea id="editor" spellcheck="false" placeholder="Open a file from the explorer…" disabled></textarea>
+    </section>
+    <aside class="panel chat-panel">
+      <div class="panel-head"><span>AI Assistant</span></div>
+      <div id="chatMessages" class="chat-messages"></div>
+      <div class="chat-input-wrap">
+        <label class="chat-options">
+          <input type="checkbox" id="includeFile" checked />
+          Include open file in context
+        </label>
+        <textarea id="chatInput" placeholder="Ask about the code, bugs, or request a patch…"></textarea>
+        <div class="chat-actions">
+          <button type="button" id="clearChat">Clear</button>
+          <button type="button" id="sendChat" class="primary">Send</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+  <script>
+    const API_FILES = '/api/files';
+    const API_CHAT = '/api/ai/chat';
+
+    const $ = (id) => document.getElementById(id);
+    let openPath = null;
+    let dirty = false;
+    let chatHistory = [];
+    let sending = false;
+
+    function setOffline(msg) {
+      const el = $('offline');
+      if (msg) {
+        el.textContent = msg;
+        el.classList.add('show');
+      } else {
+        el.classList.remove('show');
+      }
+    }
+
+    async function api(path, opts = {}) {
+      const res = await fetch(path, {
+        credentials: 'include',
+        ...opts,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(opts.headers || {}),
+        },
+      });
+      if (res.status === 404) {
+        setOffline('AI Debug IDE is disabled. Run backend with NODE_ENV=development (npm run server:dev).');
+        throw new Error('not available');
+      }
+      setOffline('');
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return null;
+      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      return data;
+    }
+
+    function setSaveStatus(text, kind = '') {
+      const el = $('saveStatus');
+      el.textContent = text;
+      el.className = 'status' + (kind ? ` ${kind}` : '');
+    }
+
+    function renderTreeNode(node, depth = 0) {
+      const indent = depth * 12;
+      if (node.type === 'dir') {
+        const children = (node.children || []).map((c) => renderTreeNode(c, depth + 1)).join('');
+        return `
+          <div class="tree-item dir" style="--indent:${indent}px" data-path="${esc(node.path)}" data-type="dir">
+            <span class="icon">▾</span><span>${esc(node.name)}</span>
+          </div>
+          ${children}
+        `;
+      }
+      return `
+        <div class="tree-item file${openPath === node.path ? ' active' : ''}" style="--indent:${indent}px" data-path="${esc(node.path)}" data-type="file">
+          <span class="icon">📄</span><span>${esc(node.name)}</span>
+        </div>
+      `;
+    }
+
+    function esc(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function bindExplorer() {
+      $('explorer').querySelectorAll('.tree-item.file').forEach((el) => {
+        el.addEventListener('click', () => openFile(el.dataset.path));
+      });
+    }
+
+    async function loadTree() {
+      try {
+        const data = await api(`${API_FILES}/tree`);
+        const html = (data.roots || []).map((r) => renderTreeNode(r, 0)).join('');
+        $('explorer').innerHTML = html || '<p style="padding:12px;color:#858585">Empty tree</p>';
+        bindExplorer();
+        if (data.truncated) {
+          setOffline('File tree truncated (too many entries).');
+        }
+      } catch (err) {
+        $('explorer').innerHTML = `<p style="padding:12px;color:#f48771">${esc(err.message)}</p>`;
+      }
+    }
+
+    async function openFile(path) {
+      if (dirty && !confirm('Discard unsaved changes?')) return;
+      try {
+        const data = await api(`${API_FILES}/read?path=${encodeURIComponent(path)}`);
+        openPath = data.path;
+        dirty = false;
+        $('editor').value = data.content;
+        $('editor').disabled = false;
+        $('saveBtn').disabled = false;
+        $('currentPath').textContent = openPath;
+        setSaveStatus('');
+        document.querySelectorAll('.tree-item.file').forEach((el) => {
+          el.classList.toggle('active', el.dataset.path === openPath);
+        });
+      } catch (err) {
+        setSaveStatus(err.message, 'err');
+      }
+    }
+
+    async function saveFile() {
+      if (!openPath) return;
+      $('saveBtn').disabled = true;
+      setSaveStatus('Saving…');
+      try {
+        await api(`${API_FILES}/write`, {
+          method: 'POST',
+          body: JSON.stringify({ path: openPath, content: $('editor').value }),
+        });
+        dirty = false;
+        setSaveStatus('Saved', 'ok');
+      } catch (err) {
+        setSaveStatus(err.message, 'err');
+      } finally {
+        $('saveBtn').disabled = false;
+      }
+    }
+
+    function parseMarkdownLite(text) {
+      let html = esc(text);
+      html = html.replace(/```(\w+)?(?::([^\n]+))?\n([\s\S]*?)```/g, (_m, _lang, file, code) => {
+        const label = file ? esc(file.trim()) : 'code';
+        return `<pre data-patch-path="${file ? esc(file.trim()) : ''}"><strong>${label}</strong>\n${esc(code.trim())}</pre>`;
+      });
+      html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+      html = html.replace(/\n/g, '<br>');
+      return html;
+    }
+
+    function extractPatchesFromReply(reply) {
+      const patches = [];
+      const re = /```(?:patch|diff)?(?::([^\n]+))?\n([\s\S]*?)```/gi;
+      let m;
+      while ((m = re.exec(reply))) {
+        const p = (m[1] || '').trim();
+        if (!p) continue;
+        patches.push({ path: p, content: m[2].trim() });
+      }
+      return patches;
+    }
+
+    function applyPatch(patch) {
+      const applyToEditor = () => {
+        $('editor').value = patch.content;
+        dirty = true;
+        $('editor').disabled = false;
+        $('saveBtn').disabled = false;
+        setSaveStatus('Patch in editor — click Save to persist', 'ok');
+      };
+      if (openPath === patch.path) {
+        applyToEditor();
+        return;
+      }
+      if (!confirm(`Apply patch to ${patch.path}?`)) return;
+      openFile(patch.path).then(applyToEditor).catch(() => {
+        openPath = patch.path;
+        $('currentPath').textContent = patch.path;
+        applyToEditor();
+      });
+    }
+
+    function renderChat() {
+      const root = $('chatMessages');
+      root.innerHTML = chatHistory.map((m, msgIdx) => {
+        if (m.role === 'system') {
+          return `<div class="msg system">${esc(m.content)}</div>`;
+        }
+        const body = m.role === 'assistant' ? parseMarkdownLite(m.content) : esc(m.content);
+        let patchHtml = '';
+        if (m.role === 'assistant' && m.patches?.length) {
+          patchHtml = '<div class="patch-bar">' + m.patches.map((p, i) =>
+            `<button type="button" data-msg-idx="${msgIdx}" data-patch-idx="${i}">Apply: ${esc(p.path)}</button>`
+          ).join('') + '</div>';
+        }
+        return `<div class="msg ${m.role}">${body}${patchHtml}</div>`;
+      }).join('');
+      root.scrollTop = root.scrollHeight;
+
+      root.querySelectorAll('[data-patch-idx]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const msg = chatHistory[Number(btn.dataset.msgIdx)];
+          const patch = msg?.patches?.[Number(btn.dataset.patchIdx)];
+          if (patch) applyPatch(patch);
+        });
+      });
+    }
+
+    async function sendChat() {
+      const text = $('chatInput').value.trim();
+      if (!text || sending) return;
+      $('chatInput').value = '';
+      chatHistory.push({ role: 'user', content: text });
+      renderChat();
+
+      const body = {
+        messages: chatHistory.filter((m) => m.role === 'user' || m.role === 'assistant'),
+      };
+      if ($('includeFile').checked && openPath) {
+        body.filePath = openPath;
+        body.fileContent = $('editor').value;
+      }
+
+      sending = true;
+      $('sendChat').disabled = true;
+      chatHistory.push({ role: 'assistant', content: '…' });
+      renderChat();
+
+      try {
+        const data = await api(API_CHAT, { method: 'POST', body: JSON.stringify(body) });
+        chatHistory.pop();
+        const reply = data.reply || '';
+        const patches = extractPatchesFromReply(reply);
+        chatHistory.push({ role: 'assistant', content: reply, patches });
+      } catch (err) {
+        chatHistory.pop();
+        chatHistory.push({ role: 'assistant', content: `Error: ${err.message}` });
+      } finally {
+        sending = false;
+        $('sendChat').disabled = false;
+        renderChat();
+      }
+    }
+
+    $('editor').addEventListener('input', () => {
+      dirty = true;
+      setSaveStatus('Modified');
+    });
+    $('saveBtn').addEventListener('click', saveFile);
+    $('refreshTree').addEventListener('click', loadTree);
+    $('sendChat').addEventListener('click', sendChat);
+    $('clearChat').addEventListener('click', () => {
+      chatHistory = [{ role: 'system', content: 'Chat cleared. Ask about your open file or project code.' }];
+      renderChat();
+    });
+    $('chatInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        sendChat();
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        saveFile();
+      }
+    });
+
+    chatHistory = [{
+      role: 'system',
+      content: 'Anthropic assistant ready. Open a file, ask questions, or request a patch (Ctrl+Enter to send).',
+    }];
+    renderChat();
+    loadTree();
+  </script>
+</body>
+</html>

@@ -128,19 +128,81 @@ export function useGraphPythonCompile(getGraphDocument, graphRevision, lang = 'r
   const skipGraphGate = validationMode !== VALIDATION_MODE.STRICT;
 
   const pythonMeta = React.useMemo(() => {
+    try {
+      if (!graphDocument || isGraphEffectivelyEmpty(graphDocument)) {
+        return {
+          code: '',
+          python: '',
+          compileErrors: [],
+          compileWarnings: [],
+          transpileTrace: [],
+          empty: true,
+          success: false,
+        };
+      }
 
-    const flow = projectGraphToFlow(graphDocumentToProjectGraph(graphDocument));
+      const flow = projectGraphToFlow(graphDocumentToProjectGraph(graphDocument));
 
-    const meta = compileFlowToPython(flow);
+      const hasFlowEdges = (flow?.edges || []).length > 0;
+      if (!hasFlowEdges && validationMode !== VALIDATION_MODE.STRICT) {
+        return {
+          code: '',
+          python: '',
+          compileErrors: [],
+          compileWarnings: [],
+          transpileTrace: [],
+          empty: true,
+          success: false,
+        };
+      }
 
-    if (import.meta.env?.DEV) {
-      inspectGraph(reactFlowToGraph(flow.nodes, flow.edges));
-      if (meta.runtime) inspectRuntime(meta.runtime);
+      if (isFlowEmptyForCodegen(flow)) {
+        return {
+          code: '',
+          python: '',
+          compileErrors: [],
+          compileWarnings: [],
+          transpileTrace: [],
+          empty: true,
+          success: false,
+        };
+      }
+
+      const meta = compileFlowToPython(flow, {
+        graphDocument,
+        strict: validationMode === VALIDATION_MODE.STRICT,
+      });
+
+      if (import.meta.env?.DEV && meta.success && meta.python) {
+        try {
+          inspectGraph(reactFlowToGraph(flow.nodes, flow.edges));
+          if (meta.runtime) inspectRuntime(meta.runtime);
+        } catch (inspectErr) {
+          console.warn('[compile preview inspect]', inspectErr);
+        }
+      }
+
+      return meta;
+    } catch (err) {
+      if (import.meta.env?.DEV) {
+        console.warn('[compile preview]', err);
+      }
+      return {
+        code: '',
+        python: '',
+        compileErrors: [{
+          code: 'COMPILE_PREVIEW',
+          message: err instanceof Error ? err.message : String(err),
+          severity: 'error',
+        }],
+        compileWarnings: [],
+        transpileTrace: [],
+        empty: true,
+        success: false,
+      };
     }
 
-    return meta;
-
-  }, [graphDocument, exportMode, codegenStage, compileTick, skipGraphGate]);
+  }, [graphDocument, exportMode, codegenStage, compileTick, skipGraphGate, validationMode]);
 
   const flowEmpty = isFlowEmptyForCodegen(
 

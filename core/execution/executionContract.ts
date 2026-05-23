@@ -1,14 +1,16 @@
+export type NodeId = string;
+
 export type ExecutionTrigger = "next" | "callback" | "state";
 
 export interface ExecutionEdge {
-  from: string;
-  to: string;
+  from: NodeId;
+  to: NodeId;
   trigger: ExecutionTrigger;
   condition?: string;
 }
 
 export interface ExecutionNode {
-  id: string;
+  id: NodeId;
   type: string;
   data: Record<string, unknown>;
 }

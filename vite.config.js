@@ -6,6 +6,10 @@ import react from '@vitejs/plugin-react'
 const rootDir = path.dirname(fileURLToPath(import.meta.url))
 const validatePythonStub = path.resolve(rootDir, 'core/codegen/validatePython.stub.js')
 
+function parseTruthyFlag(value) {
+  return ['1', 'true', 'yes', 'on'].includes(String(value ?? '').trim().toLowerCase())
+}
+
 function devServerBanner() {
   return {
     name: 'cicada-dev-banner',
@@ -13,7 +17,7 @@ function devServerBanner() {
       server.httpServer?.once('listening', () => {
         const addr = server.httpServer?.address()
         const port = typeof addr === 'object' && addr?.port ? addr.port : '?'
-        console.log(`\n  Cicada UI → http://localhost:${port}/\n`)
+        console.log(`\n  Cicada UI (development) → http://localhost:${port}/\n`)
       })
     },
   }
@@ -21,12 +25,18 @@ function devServerBanner() {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  const isDevMode = mode !== 'production'
   const apiTarget = env.VITE_API_TARGET || 'http://127.0.0.1:3001'
   const devPort = Number(env.VITE_DEV_PORT) || 5173
+  const authBypassDev = isDevMode && parseTruthyFlag(env.AUTH_BYPASS || env.VITE_AUTH_BYPASS)
 
   return {
     base: './',
     plugins: [react(), devServerBanner()],
+    define: {
+      'import.meta.env.VITE_AUTH_BYPASS': JSON.stringify(authBypassDev ? '1' : '0'),
+      'import.meta.env.VITE_APP_MODE': JSON.stringify(isDevMode ? 'development' : 'production'),
+    },
     resolve: {
       alias: {
         // Prevent Node py_compile from entering the client bundle if imported transitively.
@@ -59,6 +69,16 @@ export default defineConfig(({ mode }) => {
           secure: true,
         },
         '/esphome': {
+          target: apiTarget,
+          changeOrigin: true,
+          secure: true,
+        },
+        '/dev': {
+          target: apiTarget,
+          changeOrigin: true,
+          secure: true,
+        },
+        '/debug.html': {
           target: apiTarget,
           changeOrigin: true,
           secure: true,

@@ -1,19 +1,16 @@
 import fs from 'fs';
 import path from 'path';
+import { isProduction } from '../core/env.mjs';
 import { resolveCicadaCoreRoot } from './cicadaRuntimeEnv.mjs';
 
 const SAFE_EXECUTABLE = /^(?:[a-zA-Z0-9_./:-]+)$/;
 const DSL_MEDIA_DIR = path.resolve(process.env.DSL_MEDIA_DIR || '/var/www/cicada-studio/uploads/media');
 const DSL_SANDBOX_MODE = String(
-  process.env.DSL_SANDBOX_MODE || (process.env.APP_ENV === 'production' || process.env.NODE_ENV === 'production' ? 'enforced' : 'auto'),
+  process.env.DSL_SANDBOX_MODE || (isProduction() ? 'enforced' : 'auto'),
 ).trim().toLowerCase();
 const DSL_CPU_SECONDS = Math.max(1, Number(process.env.DSL_CPU_SECONDS || 60));
 const DSL_MEMORY_BYTES = Math.max(64 * 1024 * 1024, Number(process.env.DSL_MEMORY_BYTES || 512 * 1024 * 1024));
 const DSL_MAX_PROCESSES = Math.max(8, Number(process.env.DSL_MAX_PROCESSES || 64));
-
-function isProductionEnv() {
-  return process.env.APP_ENV === 'production' || process.env.NODE_ENV === 'production';
-}
 
 /** @returns {'none' | 'isolated' | 'host'} */
 export function resolveSandboxNetwork(override) {
@@ -21,7 +18,7 @@ export function resolveSandboxNetwork(override) {
   if (raw != null && String(raw).trim() !== '') {
     return String(raw).trim().toLowerCase();
   }
-  return isProductionEnv() ? 'none' : 'host';
+  return isProduction() ? 'none' : 'host';
 }
 
 export function sandboxNetworkDisabled(network = resolveSandboxNetwork()) {

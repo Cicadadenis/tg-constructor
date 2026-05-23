@@ -1,5 +1,26 @@
 import dotenv from 'dotenv';
-dotenv.config();
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __serverDir = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(__serverDir, '.env') });
+dotenv.config({ path: path.join(__serverDir, '.env.local'), override: true });
+import {
+  applyDevAuthBypassToRequest,
+  getDevBypassUser,
+  isAuthBypassEnabled,
+  logAuthBypassStartupWarning,
+} from './server/authBypass.mjs';
+import {
+  attachAuthenticatedUser,
+  DEV_BYPASS_API_DEFAULTS,
+  isDatabaseUnavailableError,
+  normalizeAuthUserId,
+  requireRequestAuthContext,
+  respondAuthProtectedRead,
+  respondDatastoreRoute,
+  sendAuthVerificationFailed,
+} from './server/requestAuth.mjs';
 import express from 'express';
 import {
   API_PORT,
@@ -17,7 +38,6 @@ import cors from 'cors';
 import { spawnSync } from 'child_process';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import helmet from 'helmet';
-import path from 'path';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
 import cookieParser from 'cookie-parser';
@@ -93,12 +113,37 @@ import {
 } from './core/ai/irSkeletonFactory.mjs';
 import { isPlaceholderBotToken } from './core/botTokenPlaceholders.mjs';
 import compileRouter from './server/routes/compile.mjs';
+import { isProduction } from './core/env.mjs';
+import {
+  devApiRequestLogger,
+  devErrorHandler,
+  isDevLogApiPath,
+  isDevLoggingEnabled,
+  logBackend,
+  logDevLoggingStartupBanner,
+  registerDevLogRoutes,
+  wrapAsyncRoute,
+} from './server/devLog.mjs';
+import {
+  registerDevErrorsRoutes,
+  registerDevErrorsPage,
+} from './server/devErrors.mjs';
+import {
+  isDevIdeApiPath,
+  registerDevIdeRoutes,
+  registerDevIdePage,
+  logDevIdeStartupBanner,
+} from './server/devIde.mjs';
 
 const { Pool } = pg;
 
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', process.env.TRUST_PROXY === 'false' ? false : true);
+
+registerDevLogRoutes(app);
+registerDevErrorsRoutes(app);
+registerDevIdeRoutes(app);
 
 function normalizeClientIp(raw) {
   if (raw == null) return null;
@@ -145,10 +190,6 @@ function pickBestStoredIp(...ips) {
   const list = ips.map(normalizeClientIp).filter(Boolean);
   const pub = list.find((ip) => !isLoopbackIp(ip));
   return pub || list[list.length - 1] || null;
-}
-
-function isProductionEnv() {
-  return (process.env.APP_ENV || process.env.NODE_ENV || '').trim() === 'production';
 }
 
 function cspNonce(req, res) {
@@ -200,7 +241,7 @@ app.use(
         frameSrc: ["'self'", 'https://oauth.telegram.org', 'https://telegram.org'],
         frameAncestors: ["'self'"],
         formAction: ["'self'"],
-        upgradeInsecureRequests: isProductionEnv() ? [] : null,
+        upgradeInsecureRequests: isProduction() ? [] : null,
       },
     },
     crossOriginEmbedderPolicy: false,
@@ -229,8 +270,8 @@ function isDevLocalBrowserOrigin(origin) {
 
 function corsAllowedOrigins() {
   if (CORS_ORIGINS.length > 0) return CORS_ORIGINS;
-  const isProduction = isProductionEnv();
-  if (!isProduction) {
+  const productionMode = isProduction();
+  if (!productionMode) {
     return [
       'http://localhost:5173',
       'http://127.0.0.1:5173',
@@ -252,7 +293,7 @@ app.use(
       if (CORS_ORIGINS.length > 0) {
         return callback(null, CORS_ORIGINS.includes(origin));
       }
-      if (!isProductionEnv() && isDevLocalBrowserOrigin(origin)) {
+      if (!isProduction() && isDevLocalBrowserOrigin(origin)) {
         return callback(null, true);
       }
       const allowed = corsAllowedOrigins();
@@ -289,6 +330,7 @@ const pool = new Pool({
 });
 
 app.use((req, res, next) => {
+  if (req.path === '/api/dev/log') return next();
   if (req.path === '/api/subscription/webhook') return next();
   if (
     req.method === 'POST' &&
@@ -299,7 +341,12 @@ app.use((req, res, next) => {
 });
 const subscriptionWebhookParser = express.raw({ type: 'application/json', limit: '64kb' });
 app.use(cookieParser());
+app.use(devApiRequestLogger);
 app.use((err, req, res, next) => {
+  if (isDevLogApiPath(req.path)) {
+    if (!res.headersSent) return res.status(204).end();
+    return undefined;
+  }
   if (err?.type === 'entity.too.large') {
     recordSecurityEvent('json_body_rejected', req, { reason: 'too_large', limit: LARGE_JSON_ROUTE_PATHS.has(req.path) ? 'upload' : '1mb' });
     return res.status(413).json({ error: 'Слишком большой запрос' });
@@ -313,14 +360,14 @@ app.use((err, req, res, next) => {
 app.use((req, res, next) => {
   const origJson = res.json.bind(res);
   res.json = (payload) => {
-    if (payload?.error) {
+    if (payload?.error && !isDevLogApiPath(req.path)) {
       const statusCode = res.statusCode && res.statusCode >= 100 ? res.statusCode : 200;
       recordApiError(req, statusCode, payload.error);
     }
     return origJson(payload);
   };
   res.on('finish', () => {
-    if (res.statusCode >= 400) {
+    if (res.statusCode >= 400 && !isDevLogApiPath(req.path)) {
       recordApiError(req, res.statusCode, res.statusMessage || 'HTTP error');
     }
   });
@@ -338,6 +385,8 @@ app.use('/esphome', express.static(path.resolve('public/esphome'), {
   },
 }));
 registerCleanUrlRouting(app);
+registerDevErrorsPage(app);
+registerDevIdePage(app);
 
 app.all(/^\/(?:satana|debug)(?:\/|\.|$)/, authAdminPage, (req, res) => {
   res.redirect(302, '/admin');
@@ -394,7 +443,11 @@ function pushSystemError(source, err) {
 /** Log full error server-side; never send err.message/stack in API JSON (SQL, internals). */
 function sendInternalApiError(res, source, err, publicMessage = 'Произошла ошибка. Попробуйте позже.', status = 500) {
   const safeMsg = err instanceof Error ? redactSecrets(err.message) : redactSecrets(String(err));
-  console.error(source, safeMsg);
+  if (isDevLoggingEnabled()) {
+    logBackend(err instanceof Error ? err : new Error(safeMsg));
+  } else {
+    console.error(source, safeMsg);
+  }
   pushSystemError(source, new Error(safeMsg));
   return res.status(status).json({ error: publicMessage });
 }
@@ -544,12 +597,20 @@ function recordUserLogin(userId, ipOrReq, method) {
 
 process.on('uncaughtException', (err) => {
   pushSystemError('uncaughtException', err);
-  console.error('[uncaughtException]', err);
+  if (isDevLoggingEnabled()) {
+    logBackend(err);
+  } else {
+    console.error('[uncaughtException]', err);
+  }
 });
 
 process.on('unhandledRejection', (reason) => {
   pushSystemError('unhandledRejection', reason);
-  console.error('[unhandledRejection]', reason);
+  if (isDevLoggingEnabled()) {
+    logBackend(reason instanceof Error ? reason : new Error(String(reason)));
+  } else {
+    console.error('[unhandledRejection]', reason);
+  }
 });
 
 function rl429(req, res) {
@@ -769,7 +830,7 @@ const sessionSyncRateLimit = rateLimit({
 
 const MIN_JWT_SECRET_LEN = 32;
 const _rawJwtSecret = (process.env.JWT_SECRET || '').trim();
-const _isProd = isProductionEnv();
+const _isProd = isProduction();
 
 if (_isProd && !_rawJwtSecret) {
   console.error('FATAL: задайте JWT_SECRET в .env (не менее 32 символов) перед запуском в production.');
@@ -923,12 +984,42 @@ function getJwtUserId(req) {
   }
 }
 
-function requireUserAuth(req, res, next) {
-  const jwtUserId = getJwtUserId(req);
-  if (!jwtUserId) return res.status(401).json({ error: 'Необходима авторизация' });
-  req.authUserId = jwtUserId;
-  void touchUserSeenIp(jwtUserId, req);
-  return next();
+async function requireUserAuth(req, res, next) {
+  try {
+    if (isAuthBypassEnabled()) {
+      if (!applyDevAuthBypassToRequest(req)) {
+        return res.status(503).json({ error: 'AUTH_BYPASS включён, но mock user не настроен' });
+      }
+      attachAuthenticatedUser(req);
+      return next();
+    }
+
+    const jwtUserId = getJwtUserId(req);
+    if (!jwtUserId) return res.status(401).json({ error: 'Необходима авторизация' });
+    req.authUserId = jwtUserId;
+    try {
+      const user = await findById(jwtUserId);
+      if (!user?.id) {
+        clearUserSessionCookies(req, res);
+        return res.status(401).json({ error: 'Сессия недействительна. Войдите снова.' });
+      }
+      if (user.banned) {
+        return res.status(403).json({ error: 'Аккаунт заблокирован администратором' });
+      }
+      req.authUser = user;
+      attachAuthenticatedUser(req);
+    } catch (err) {
+      if (isAuthBypassEnabled() && applyDevAuthBypassToRequest(req)) {
+        attachAuthenticatedUser(req);
+        return next();
+      }
+      return sendAuthVerificationFailed(res, err);
+    }
+    void touchUserSeenIp(jwtUserId, req).catch(() => {});
+    return next();
+  } catch (err) {
+    return next(err);
+  }
 }
 
 function safeReturnToPath(value) {
@@ -948,6 +1039,14 @@ function studioLoginRedirectUrl(req) {
 
 /** HTML pages: redirect to Cicada Studio login instead of JSON 401. */
 function requireUserAuthPage(req, res, next) {
+  if (isAuthBypassEnabled()) {
+    if (!applyDevAuthBypassToRequest(req)) {
+      return res.status(503).send('AUTH_BYPASS misconfigured');
+    }
+    attachAuthenticatedUser(req);
+    return next();
+  }
+
   const jwtUserId = getJwtUserId(req);
   if (!jwtUserId) {
     return res.redirect(302, studioLoginRedirectUrl(req));
@@ -1444,6 +1543,7 @@ function rowToUser(row) {
 }
 
 function safeUser(user) {
+  if (!user || user.id == null || String(user.id).trim() === '') return null;
   const {
     password,
     verifyToken,
@@ -1561,6 +1661,8 @@ const CSRF_PATH_EXEMPT = new Set(['/api/subscription/webhook']);
 
 function isCsrfExemptApiPath(path) {
   if (CSRF_PATH_EXEMPT.has(path)) return true;
+  if (path === '/api/dev/log' && isDevLoggingEnabled()) return true;
+  if (isDevIdeApiPath(path)) return true;
   return path.startsWith('/api/firmware/');
 }
 
@@ -1568,6 +1670,8 @@ function isCsrfExemptApiPath(path) {
 function shouldSkipGlobalRateLimit(req) {
   const p = req.path;
   if (p === '/api/health' || p === '/api/csrf-token') return true;
+  if (p === '/api/dev/log' && isDevLoggingEnabled()) return true;
+  if (isDevIdeApiPath(p)) return true;
   if (p.startsWith('/api/auth/')) return true;
   if (p === '/api/bots' || p === '/api/bot/logs' || p === '/api/me') return true;
   return false;
@@ -1792,13 +1896,23 @@ app.post('/api/login', loginRateLimit, async (req, res) => {
 
 /** Свежие данные пользователя из БД (план, подписка после выдачи в админке и т.д.) — клиент синхронизирует cicada_session. */
 app.get('/api/me', requireUserAuth, sessionSyncRateLimit, async (req, res) => {
+  const auth = requireRequestAuthContext(req, res);
+  if (!auth) return;
   try {
-    const user = await findById(req.authUserId);
-    if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+    if (auth.bypass && req.authUser) {
+      return res.json({ user: safeUser(req.authUser) });
+    }
+    const user = await findById(auth.userId);
+    if (!user?.id) return res.status(401).json({ error: 'Сессия недействительна. Войдите снова.' });
     if (user.banned) return res.status(403).json({ error: 'Аккаунт заблокирован администратором' });
+    req.authUser = user;
+    attachAuthenticatedUser(req);
     return res.json({ user: safeUser(user) });
   } catch (err) {
-    return sendInternalApiError(res, 'GET /api/me', err, 'Не удалось загрузить профиль.', 500);
+    if (auth.bypass && req.authUser) {
+      return res.json({ user: safeUser(req.authUser) });
+    }
+    return sendAuthVerificationFailed(res, err);
   }
 });
 
@@ -3054,8 +3168,37 @@ app.post('/api/stop', requireUserAuth, (req, res) => {
   res.json({ status: 'stopped', mode: mode || 'all' });
 });
 
-app.get('/api/bots', requireUserAuth, botPollRateLimit, (req, res) => {
-  res.json(listRunners().filter((bot) => bot.userId === req.authUserId));
+app.get('/api/bots', requireUserAuth, botPollRateLimit, async (req, res) => {
+  try {
+    const auth = requireRequestAuthContext(req, res);
+    if (!auth) return;
+    if (auth.bypass) {
+      return res.json(DEV_BYPASS_API_DEFAULTS.bots);
+    }
+
+    let runners = [];
+    try {
+      const listed = listRunners();
+      runners = Array.isArray(listed) ? listed : [];
+    } catch (runnerErr) {
+      return respondAuthProtectedRead(res, 'GET /api/bots', runnerErr, {
+        bypass: auth.bypass,
+        bypassPayload: DEV_BYPASS_API_DEFAULTS.bots,
+        devFallback: DEV_BYPASS_API_DEFAULTS.bots,
+      });
+    }
+
+    return res.json(
+      runners.filter((bot) => normalizeAuthUserId(bot?.userId) === auth.userId),
+    );
+  } catch (e) {
+    if (res.headersSent) return;
+    return respondAuthProtectedRead(res, 'GET /api/bots', e, {
+      bypass: Boolean(req.authBypass),
+      bypassPayload: DEV_BYPASS_API_DEFAULTS.bots,
+      devFallback: DEV_BYPASS_API_DEFAULTS.bots,
+    });
+  }
 });
 
 /** Логи процесса cicada для песочницы «Запуск» (тот же userId, что в POST /api/run). */
@@ -3552,12 +3695,13 @@ app.get('/api/subscription/status', requireUserAuth, async (req, res) => {
 });
 
 // Публичный эндпоинт — цены для фронтенда
-app.get('/api/plans', async (req, res) => {
+app.get('/api/plans', async (_req, res) => {
+  res.set('Cache-Control', 'no-store');
   try {
-    res.set('Cache-Control', 'no-store');
-    res.json({ plans: await loadPlansFromDb() });
+    return res.json({ plans: await loadPlansFromDb() });
   } catch (e) {
-    return sendInternalApiError(res, 'GET /api/plans', e, 'Не удалось загрузить тарифы', 500);
+    console.error('GET /api/plans', e instanceof Error ? e.message : e);
+    return res.json({ plans: PLANS, degraded: true });
   }
 });
 
@@ -3571,6 +3715,12 @@ app.get('/api/health', (_req, res) => {
 
 // OAuth/bootstrap now returns the user; JWT remains in HttpOnly SameSite cookie.
 app.get('/api/auth/oauth-bootstrap', async (req, res) => {
+  if (isAuthBypassEnabled()) {
+    const user = getDevBypassUser();
+    return res.json({ ok: true, user: safeUser(user) });
+  }
+
+  try {
   const handoffOpts = strictCookieOptions(req, { httpOnly: true });
   const pendingOpts = strictCookieOptions(req, { httpOnly: true, maxAge: 10 * 60 * 1000 });
   const pendingRaw = req.cookies?.[OAUTH_2FA_PENDING_COOKIE];
@@ -3621,6 +3771,10 @@ app.get('/api/auth/oauth-bootstrap', async (req, res) => {
     }
   }
   return res.json({ ok: false });
+  } catch (err) {
+    console.error('GET /api/auth/oauth-bootstrap', err instanceof Error ? err.message : err);
+    return res.json({ ok: false });
+  }
 });
 
 app.post('/api/auth/oauth-2fa/complete', async (req, res) => {
@@ -3653,23 +3807,33 @@ app.post('/api/auth/oauth-2fa/complete', async (req, res) => {
 
 // Список проектов пользователя
 app.get('/api/projects', requireUserAuth, async (req, res) => {
-  const userId = req.authUserId;
+  const auth = requireRequestAuthContext(req, res);
+  if (!auth) return;
+  if (auth.bypass) return res.json(DEV_BYPASS_API_DEFAULTS.projects);
   try {
     const { rows } = await pool.query(
       `SELECT id, name, created_at AS "createdAt", updated_at AS "updatedAt"
        FROM projects WHERE user_id=$1 ORDER BY updated_at DESC`,
-      [userId]
+      [auth.userId],
     );
-    res.json({ projects: rows });
+    return res.json({ projects: rows });
   } catch (e) {
-    console.error('GET /api/projects error:', e);
-    res.status(500).json({ error: 'Ошибка базы данных' });
+    return respondAuthProtectedRead(res, 'GET /api/projects', e, {
+      bypass: auth.bypass,
+      bypassPayload: DEV_BYPASS_API_DEFAULTS.projects,
+      devFallback: DEV_BYPASS_API_DEFAULTS.projects,
+    });
   }
 });
 
 // Создать или обновить проект (upsert по id или по user_id + name)
 app.post('/api/projects', requireUserAuth, async (req, res) => {
-  const userId = req.authUserId;
+  const auth = requireRequestAuthContext(req, res);
+  if (!auth) return;
+  if (auth.bypass) {
+    return res.status(503).json({ error: 'Сохранение проектов недоступно в AUTH_BYPASS без БД' });
+  }
+  const userId = auth.userId;
   const { name, graph_document: graphDocument, id: requestedId } = req.body || {};
   if (!name || graphDocument == null) return res.status(400).json({ error: 'name и graph_document обязательны' });
   if (!graphDocument || typeof graphDocument !== 'object' || Array.isArray(graphDocument)) {
@@ -3713,7 +3877,10 @@ app.post('/api/projects', requireUserAuth, async (req, res) => {
 
 // Загрузить проект с данными
 app.get('/api/projects/:id', requireUserAuth, async (req, res) => {
-  const userId = req.authUserId;
+  const auth = requireRequestAuthContext(req, res);
+  if (!auth) return;
+  if (auth.bypass) return res.status(404).json({ error: 'Проект не найден' });
+  const userId = auth.userId;
   const { id } = req.params;
   try {
     const { rows } = await pool.query(
@@ -3732,7 +3899,10 @@ app.get('/api/projects/:id', requireUserAuth, async (req, res) => {
 
 // Удалить проект
 app.delete('/api/projects/:id', requireUserAuth, async (req, res) => {
-  const userId = req.authUserId;
+  const auth = requireRequestAuthContext(req, res);
+  if (!auth) return;
+  if (auth.bypass) return res.status(404).json({ error: 'Проект не найден' });
+  const userId = auth.userId;
   const { id } = req.params;
   try {
     const { rowCount } = await pool.query(
@@ -3757,17 +3927,23 @@ function isProUser(user) {
 }
 
 app.get('/api/libraries', requireUserAuth, async (req, res) => {
+  const auth = requireRequestAuthContext(req, res);
+  if (!auth) return;
+  if (auth.bypass) return res.json(DEV_BYPASS_API_DEFAULTS.libraries);
   try {
     const { rows } = await pool.query(
       `SELECT id, name, description, items,
               created_at AS "createdAt", updated_at AS "updatedAt"
        FROM user_libraries WHERE user_id=$1 ORDER BY created_at DESC`,
-      [req.authUserId]
+      [auth.userId],
     );
-    res.json({ libraries: rows });
+    return res.json({ libraries: rows });
   } catch (e) {
-    console.error('GET /api/libraries error:', e);
-    res.status(500).json({ error: 'Ошибка загрузки библиотек' });
+    return respondDatastoreRoute(res, 'GET /api/libraries', e, {
+      bypass: auth.bypass,
+      bypassPayload: DEV_BYPASS_API_DEFAULTS.libraries,
+      devFallback: DEV_BYPASS_API_DEFAULTS.libraries,
+    });
   }
 });
 
@@ -4763,15 +4939,26 @@ app.post('/api/support/requests/seen', requireUserAuth, async (req, res) => {
 });
 
 app.get('/api/support/unread-count', requireUserAuth, async (req, res) => {
-  const { rows } = await pool.query(
-    `SELECT COUNT(*)::int AS unread_count
-     FROM support_requests
-     WHERE user_id=$1
-       AND replied_at IS NOT NULL
-       AND (user_seen_at IS NULL OR replied_at > user_seen_at)`,
-    [req.authUserId],
-  );
-  res.json({ unread: Number(rows[0]?.unread_count || 0) });
+  const auth = requireRequestAuthContext(req, res);
+  if (!auth) return;
+  if (auth.bypass) return res.json(DEV_BYPASS_API_DEFAULTS.unread);
+  try {
+    const { rows } = await pool.query(
+      `SELECT COUNT(*)::int AS unread_count
+       FROM support_requests
+       WHERE user_id=$1
+         AND replied_at IS NOT NULL
+         AND (user_seen_at IS NULL OR replied_at > user_seen_at)`,
+      [auth.userId],
+    );
+    return res.json({ unread: Number(rows[0]?.unread_count || 0) });
+  } catch (e) {
+    return respondAuthProtectedRead(res, 'GET /api/support/unread-count', e, {
+      bypass: auth.bypass,
+      bypassPayload: DEV_BYPASS_API_DEFAULTS.unread,
+      devFallback: DEV_BYPASS_API_DEFAULTS.unread,
+    });
+  }
 });
 
 app.post('/api/support/requests/:id/messages', supportJsonParser, requireUserAuth, async (req, res) => {
@@ -5254,6 +5441,11 @@ async function upsertUserFromTelegramPayload(body, req) {
       [newId, name, premiumExp, tgId, username ?? null, photo_url ?? null],
     );
     user = await findByTgId(tgId);
+    if (!user) {
+      const err = new Error('Не удалось создать пользователя Telegram');
+      err.publicMessage = err.message;
+      throw err;
+    }
   } else {
     if (user.banned) return { banned: true };
     const name = [first_name, last_name].filter(Boolean).join(' ') || username || user.name;
@@ -5266,6 +5458,17 @@ async function upsertUserFromTelegramPayload(body, req) {
       user.id,
     ]);
     user = await findByTgId(tgId);
+    if (!user) {
+      const err = new Error('Не удалось обновить пользователя Telegram');
+      err.publicMessage = err.message;
+      throw err;
+    }
+  }
+
+  if (!user?.id) {
+    const err = new Error('Пользователь Telegram без id');
+    err.publicMessage = err.message;
+    throw err;
   }
 
   recordUserLogin(user.id, req, 'telegram');
@@ -5306,6 +5509,9 @@ app.get('/api/auth/telegram/callback', async (req, res) => {
       recordAuthError('telegram', req, String(req.query?.id || ''), 'banned_user');
       return redirectAppAuthError(res, 'Аккаунт заблокирован администратором', req);
     }
+    if (!result?.user?.id) {
+      return redirectAppAuthError(res, 'Не удалось завершить вход через Telegram', req);
+    }
     const handoffCode = issueOauthJwtHandoffCookie(res, result.user.id);
     return res.redirect(buildOauthRedirectUrl(handoffCode, null, req));
   } catch (e) {
@@ -5333,6 +5539,9 @@ app.post('/api/auth/telegram', async (req, res) => {
     if (result.banned) {
       recordAuthError('telegram', req, String(req.body?.id || ''), 'banned_user');
       return res.status(403).json({ error: 'Аккаунт заблокирован администратором' });
+    }
+    if (!result?.user?.id) {
+      return res.status(500).json({ error: 'Не удалось завершить вход через Telegram' });
     }
 
     issueUserSessionCookie(req, res, result.user.id);
@@ -8607,6 +8816,8 @@ registerEspFirmwareApiRoutes(app, {
   findById,
 });
 
+app.use(devErrorHandler);
+
 // ================= START =================
 
 console.log('PORT =', API_PORT);
@@ -8622,6 +8833,9 @@ initDBWithRetry()
     const displayHost =
       listenHost === '0.0.0.0' || listenHost === '::' ? (API_HOST || 'localhost') : listenHost;
     app.listen(API_PORT, listenHost, () => {
+      logAuthBypassStartupWarning();
+      logDevLoggingStartupBanner();
+      logDevIdeStartupBanner();
       console.log(`🚀 Server running on http://${displayHost}:${API_PORT}`);
     });
   })

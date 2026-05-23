@@ -12,6 +12,7 @@ import {
   withAutoDependencies,
 } from './modules/library/module_insertion_pipeline.js';
 import { ModuleLibraryInsertPanel } from './builder/ModuleLibraryInsertPanel.jsx';
+import { ModuleCompositionPanel } from './builder/ModuleCompositionPanel.jsx';
 import { appAlert, appConfirm } from './dialog/appDialog.js';
 
 function normalizeUiLang(lang) {

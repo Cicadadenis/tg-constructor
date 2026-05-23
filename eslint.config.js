@@ -8,7 +8,6 @@ export default [
       'coverage/**',
       'platform/**',
       'public/**',
-      'electron/**',
     ],
   },
   {

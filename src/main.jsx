@@ -4,8 +4,10 @@ import App from './App';
 import { AppDialogProvider } from './dialog/AppDialogProvider.jsx';
 import { API_URL } from './apiClient.js';
 import { prefetchCsrfToken } from './csrf.js';
+import { initDevErrorLogging } from './debug/devLog.js';
 import './index.css';
 
+initDevErrorLogging();
 prefetchCsrfToken(API_URL).catch(() => {});
 
 ReactDOM.createRoot(document.getElementById('root')).render(

@@ -1,6 +1,7 @@
 import React from 'react';
 import confetti from 'canvas-confetti';
 import { postJsonWithCsrf } from './apiClient.js';
+import { requireSessionUser } from './auth/sessionUser.js';
 
 export function fireRegistrationConfetti() {
   const opts = { origin: { y: 0.72 }, zIndex: 10050 };
@@ -212,9 +213,9 @@ export function translateServerError(msg) {
 
 export async function telegramAuth(tgData) {
   const res = await postJsonWithCsrf('/api/auth/telegram', tgData);
-  const data = await res.json();
+  const data = await res.json().catch(() => ({}));
   if (data.error) throw new Error(data.error);
-  return data.user;
+  return requireSessionUser(data.user, 'Telegram-вход не вернул профиль пользователя');
 }
 
 function webauthnB64urlToBuffer(value) {
@@ -238,7 +239,9 @@ function prepareWebauthnOptions(options) {
   if (publicKey.challenge) publicKey.challenge = webauthnB64urlToBuffer(publicKey.challenge);
   ['allowCredentials', 'excludeCredentials'].forEach((key) => {
     if (Array.isArray(publicKey[key])) {
-      publicKey[key] = publicKey[key].map((c) => ({ ...c, id: webauthnB64urlToBuffer(c.id) }));
+      publicKey[key] = publicKey[key]
+        .filter((c) => c && c.id != null && String(c.id).length > 0)
+        .map((c) => ({ ...c, id: webauthnB64urlToBuffer(c.id) }));
     }
   });
   if (publicKey.user?.id) publicKey.user = { ...publicKey.user, id: webauthnB64urlToBuffer(publicKey.user.id) };
@@ -263,7 +266,7 @@ export async function loginWithPasskey(email = '') {
   const verifyRes = await postJsonWithCsrf('/api/passkey/login', serializeWebauthnCredential(credential, options.challenge));
   const data = await verifyRes.json().catch(() => ({}));
   if (!verifyRes.ok || data.error) throw new Error(data.error || 'Не удалось войти по passkey');
-  return data.user;
+  return requireSessionUser(data.user, 'Passkey-вход не вернул профиль пользователя');
 }
 
 export async function registerProfilePasskey() {

@@ -1,8 +1,9 @@
 export function inspectGraph(graph) {
-  console.table(
-    graph.nodes.map((n) => ({
+  const rows = (graph?.nodes || [])
+    .filter((n) => n?.id)
+    .map((n) => ({
       id: n.id,
       type: n.type,
-    })),
-  );
+    }));
+  if (rows.length) console.table(rows);
 }

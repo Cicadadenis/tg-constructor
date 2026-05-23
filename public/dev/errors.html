@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dev Errors — Cicada</title>
+  <style>
+    :root {
+      --bg: #0c0d10;
+      --panel: #14161c;
+      --border: #2a2f3a;
+      --text: #e8eaf0;
+      --muted: #8b90a0;
+      --accent: #f59e0b;
+      --frontend: #60a5fa;
+      --api: #a78bfa;
+      --backend: #f87171;
+      --mono: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      background: var(--panel);
+    }
+    header h1 { font-size: 18px; font-weight: 700; }
+    header .badge {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--accent);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      padding: 3px 8px;
+      border-radius: 6px;
+    }
+    .toolbar {
+      margin-left: auto;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    button, select {
+      font: inherit;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #1a1d24;
+      color: var(--text);
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+    button:hover { border-color: #444b5c; }
+    button.primary { background: #2a2410; border-color: #6b5200; color: #fcd34d; }
+    button.danger { background: #2a1414; border-color: #6b2020; color: #fca5a5; }
+    .layout {
+      flex: 1;
+      display: grid;
+      grid-template-columns: minmax(280px, 360px) 1fr;
+      min-height: 0;
+    }
+    @media (max-width: 860px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+    .list-panel {
+      border-right: 1px solid var(--border);
+      overflow: auto;
+      min-height: 0;
+    }
+    .stats {
+      padding: 12px 16px;
+      font-size: 12px;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .stats span strong { color: var(--text); }
+    .error-item {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .error-item:hover { background: rgba(255,255,255,0.03); }
+    .error-item.active { background: rgba(245, 158, 11, 0.08); border-left: 3px solid var(--accent); }
+    .error-item .top {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .pill {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .pill.frontend { background: rgba(96,165,250,0.15); color: var(--frontend); }
+    .pill.api { background: rgba(167,139,250,0.15); color: var(--api); }
+    .pill.backend { background: rgba(248,113,113,0.15); color: var(--backend); }
+    .error-item .msg {
+      font-size: 13px;
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .error-item time { font-size: 11px; color: var(--muted); }
+    .detail-panel {
+      overflow: auto;
+      padding: 20px;
+      min-height: 0;
+    }
+    .empty {
+      color: var(--muted);
+      font-size: 14px;
+      padding: 40px 20px;
+      text-align: center;
+    }
+    .detail h2 {
+      font-size: 15px;
+      margin-bottom: 8px;
+      word-break: break-word;
+    }
+    .meta {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    pre.stack {
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.5;
+      background: #0a0b0e;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .offline {
+      padding: 10px 16px;
+      background: #2a1414;
+      color: #fca5a5;
+      font-size: 13px;
+      display: none;
+    }
+    .offline.show { display: block; }
+  </style>
+</head>
+<body>
+  <div id="offline" class="offline">Dashboard unavailable — start the server with NODE_ENV=development (npm run server:dev).</div>
+  <header>
+    <h1>Dev Errors</h1>
+    <span class="badge">development only</span>
+    <div class="toolbar">
+      <label>
+        <span style="font-size:12px;color:var(--muted);margin-right:6px">Filter</span>
+        <select id="filter">
+          <option value="">All sources</option>
+          <option value="frontend">Frontend</option>
+          <option value="api">API</option>
+          <option value="backend">Backend</option>
+        </select>
+      </label>
+      <button type="button" id="pause">Pause</button>
+      <button type="button" class="primary" id="refresh">Refresh</button>
+      <button type="button" class="danger" id="clear">Clear all</button>
+    </div>
+  </header>
+  <div class="layout">
+    <aside class="list-panel">
+      <div class="stats" id="stats">Loading…</div>
+      <div id="list"></div>
+    </aside>
+    <main class="detail-panel" id="detail">
+      <p class="empty">Select an error from the list</p>
+    </main>
+  </div>
+  <script>
+    const API = '/api/dev/errors';
+    let errors = [];
+    let selectedId = null;
+    let paused = false;
+    let pollTimer = null;
+
+    const $ = (id) => document.getElementById(id);
+
+    function fmtTime(ms) {
+      try {
+        return new Date(ms).toLocaleString();
+      } catch {
+        return String(ms);
+      }
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function filtered() {
+      const f = $('filter').value;
+      if (!f) return errors;
+      return errors.filter((e) => e.source === f);
+    }
+
+    function renderStats(list) {
+      const counts = { frontend: 0, api: 0, backend: 0 };
+      for (const e of errors) counts[e.source] = (counts[e.source] || 0) + 1;
+      $('stats').innerHTML = [
+        `<span>Total: <strong>${errors.length}</strong></span>`,
+        `<span>Frontend: <strong>${counts.frontend}</strong></span>`,
+        `<span>API: <strong>${counts.api}</strong></span>`,
+        `<span>Backend: <strong>${counts.backend}</strong></span>`,
+        `<span>Showing: <strong>${list.length}</strong></span>`,
+      ].join('');
+    }
+
+    function renderList(list) {
+      const root = $('list');
+      if (!list.length) {
+        root.innerHTML = '<p class="empty">No errors captured yet</p>';
+        return;
+      }
+      root.innerHTML = list.map((e) => `
+        <article class="error-item${e.id === selectedId ? ' active' : ''}" data-id="${escapeHtml(e.id)}">
+          <div class="top">
+            <span class="pill ${escapeHtml(e.source)}">${escapeHtml(e.source)}</span>
+            ${e.status != null ? `<span style="font-size:11px;color:var(--muted)">${e.status}</span>` : ''}
+            <time>${escapeHtml(fmtTime(e.at))}</time>
+          </div>
+          <div class="msg">${escapeHtml(e.message)}</div>
+        </article>
+      `).join('');
+      root.querySelectorAll('.error-item').forEach((el) => {
+        el.addEventListener('click', () => {
+          selectedId = el.dataset.id;
+          render();
+        });
+      });
+    }
+
+    function renderDetail(item) {
+      const panel = $('detail');
+      if (!item) {
+        panel.innerHTML = '<p class="empty">Select an error from the list</p>';
+        return;
+      }
+      const loc = item.url || item.path || '';
+      const stack = item.stack || item.message;
+      panel.innerHTML = `
+        <div class="detail">
+          <h2>${escapeHtml(item.message)}</h2>
+          <div class="meta">
+            <span><strong>ID</strong> ${escapeHtml(item.id)} · <strong>Source</strong> ${escapeHtml(item.source)}</span>
+            <span><strong>Time</strong> ${escapeHtml(fmtTime(item.at))}</span>
+            ${item.method ? `<span><strong>Method</strong> ${escapeHtml(item.method)}</span>` : ''}
+            ${loc ? `<span><strong>URL</strong> ${escapeHtml(loc)}</span>` : ''}
+            ${item.status != null ? `<span><strong>Status</strong> ${escapeHtml(item.status)}</span>` : ''}
+          </div>
+          <pre class="stack">${escapeHtml(stack)}</pre>
+        </div>
+      `;
+    }
+
+    function render() {
+      const list = filtered();
+      renderStats(list);
+      renderList(list);
+      const item = errors.find((e) => e.id === selectedId) || list[0];
+      if (item && !selectedId) selectedId = item.id;
+      renderDetail(errors.find((e) => e.id === selectedId));
+      document.querySelectorAll('.error-item').forEach((el) => {
+        el.classList.toggle('active', el.dataset.id === selectedId);
+      });
+    }
+
+    async function load() {
+      try {
+        const res = await fetch(API, { credentials: 'include' });
+        if (res.status === 404) {
+          $('offline').classList.add('show');
+          return;
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        $('offline').classList.remove('show');
+        const data = await res.json();
+        errors = Array.isArray(data.errors) ? data.errors : [];
+        render();
+      } catch (err) {
+        $('offline').classList.add('show');
+        $('offline').textContent = `Dashboard unavailable — ${err.message}`;
+      }
+    }
+
+    async function clearAll() {
+      if (!confirm('Clear all captured dev errors?')) return;
+      await fetch(API, { method: 'DELETE', credentials: 'include' });
+      errors = [];
+      selectedId = null;
+      render();
+    }
+
+    function schedulePoll() {
+      clearInterval(pollTimer);
+      if (paused) return;
+      pollTimer = setInterval(load, 2000);
+    }
+
+    $('filter').addEventListener('change', render);
+    $('refresh').addEventListener('click', load);
+    $('clear').addEventListener('click', clearAll);
+    $('pause').addEventListener('click', () => {
+      paused = !paused;
+      $('pause').textContent = paused ? 'Resume' : 'Pause';
+      schedulePoll();
+      if (!paused) load();
+    });
+
+    load();
+    schedulePoll();
+  </script>
+</body>
+</html>

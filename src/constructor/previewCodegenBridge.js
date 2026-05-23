@@ -64,7 +64,10 @@ export function buildPreviewCodegenSnapshot(getDocument, options = {}) {
     transpileTrace,
     compileErrors = [],
     empty = false,
-  } = compileFlowToPython(flow);
+  } = compileFlowToPython(flow, {
+    graphDocument: document,
+    strict: strictRun,
+  });
   const graph = graphDocumentToGraphIR(document, { skipValidation: true });
   const snapshot = {
     graph,

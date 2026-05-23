@@ -74,6 +74,7 @@ export async function getCsrfTokenForRequest(apiBaseOrRequestUrl = import.meta.e
         return cached;
       })
       .catch((err) => {
+        inflight = null;
         if (err instanceof TypeError) {
           throw new Error(
             'CSRF: API-сервер недоступен. Запустите npm run server  (или npm run dev:full)',

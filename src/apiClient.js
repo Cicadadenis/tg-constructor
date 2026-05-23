@@ -1,6 +1,25 @@
 import { getCsrfTokenForRequest, resetCsrfPrefetch } from './csrf.js';
+import { normalizeSessionUser, requireSessionUser } from './auth/sessionUser.js';
+import { getDevBypassUser, isAuthBypassEnabled, resolveInitialSessionUser } from './auth/authBypass.js';
+import { isDevLoggingEnabled } from './config/env.js';
+import { reportApiFailure } from './debug/devLog.js';
+
+export { normalizeSessionUser, requireSessionUser, isAuthenticatedUser } from './auth/sessionUser.js';
+export { getDevBypassUser, isAuthBypassEnabled, resolveInitialSessionUser } from './auth/authBypass.js';
 
 export const API_URL = import.meta.env.VITE_API_URL ?? '/api';
+
+const DEV_MONITOR_SUFFIXES = ['/api/dev/log', '/api/dev/errors'];
+
+function isDevMonitorRequestUrl(url) {
+  const text = String(url ?? '');
+  return DEV_MONITOR_SUFFIXES.some((suffix) => text.includes(suffix));
+}
+
+function reportApiFetchFailure(method, url, status, message) {
+  if (!isDevLoggingEnabled()) return;
+  reportApiFailure(method, url, status, message);
+}
 
 /** Resolve /api/... paths against VITE_API_URL (absolute or same-origin). */
 export function resolveApiUrl(path) {
@@ -78,6 +97,9 @@ function adminV2Headers(url) {
 
 export async function apiFetch(url, options = {}, retryCsrf = true) {
   const resolvedUrl = resolveApiUrl(url);
+  if (isDevMonitorRequestUrl(resolvedUrl)) {
+    throw new Error('apiFetch: dev monitor endpoints must not use apiFetch');
+  }
   const method = (options.method || 'GET').toUpperCase();
   const csrfHeaders = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)
     ? { 'x-csrf-token': await getCsrfTokenForRequest(API_URL) }
@@ -86,40 +108,74 @@ export async function apiFetch(url, options = {}, retryCsrf = true) {
   let res;
   try {
     res = await fetch(resolvedUrl, { credentials: 'include', ...options, headers: mergedHeaders });
-  } catch {
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    reportApiFetchFailure(method, resolvedUrl, 0, msg);
     throw new Error('⚠️ Сервер не запущен или недоступен');
   }
 
   if (res.status === 401) {
     clearJwt();
     localStorage.removeItem('cicada_session');
-    window.dispatchEvent(new CustomEvent('cicada:session-expired'));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('cicada:session-expired'));
+    }
     throw new Error('⚠️ Сессия истекла — войдите заново');
   }
 
   const contentType = res.headers.get('content-type') || '';
   if (!contentType.includes('application/json')) {
+    if (res.status === 204) return null;
     if (res.status === 502 || res.status === 503) {
-      throw new Error(`⚠️ Сервер временно недоступен (${res.status}). Запустите backend: npm run server`);
+      const errMsg = `⚠️ Сервер временно недоступен (${res.status}). Запустите backend: npm run server`;
+      reportApiFetchFailure(method, resolvedUrl, res.status, errMsg);
+      throw new Error(errMsg);
     }
-    if (res.status === 500) throw new Error('⚠️ Внутренняя ошибка сервера (500)');
-    if (res.status === 404) throw new Error('⚠️ Эндпоинт не найден (404)');
-    throw new Error('⚠️ Сервер не запущен или вернул неверный ответ');
+    if (res.status === 500) {
+      const errMsg = '⚠️ Внутренняя ошибка сервера (500)';
+      reportApiFetchFailure(method, resolvedUrl, res.status, errMsg);
+      throw new Error(errMsg);
+    }
+    if (res.status === 404) {
+      const errMsg = '⚠️ Эндпоинт не найден (404)';
+      reportApiFetchFailure(method, resolvedUrl, res.status, errMsg);
+      throw new Error(errMsg);
+    }
+    const errMsg = '⚠️ Сервер не запущен или вернул неверный ответ';
+    reportApiFetchFailure(method, resolvedUrl, res.status, errMsg);
+    throw new Error(errMsg);
   }
 
   const data = await res.json();
 
-  if (retryCsrf && res.status === 403 && typeof data?.error === 'string' && data.error.includes('CSRF')) {
+  if (
+    retryCsrf === true
+    && res.status === 403
+    && typeof data?.error === 'string'
+    && data.error.includes('CSRF')
+  ) {
     resetCsrfPrefetch();
     return apiFetch(url, options, false);
   }
 
-  if (data.error) throw new Error(data.error);
+  if (res.status >= 500) {
+    const errMsg = data?.error || `⚠️ Внутренняя ошибка сервера (${res.status})`;
+    reportApiFetchFailure(method, resolvedUrl, res.status, errMsg);
+    throw new Error(errMsg);
+  }
+
+  if (data?.error) {
+    reportApiFetchFailure(method, resolvedUrl, res.status, data.error);
+    throw new Error(data.error);
+  }
   return data;
 }
 
 export async function postJsonWithCsrf(url, body, retryCsrf = true) {
   const resolvedUrl = resolveApiUrl(url);
+  if (isDevMonitorRequestUrl(resolvedUrl)) {
+    throw new Error('postJsonWithCsrf: dev monitor endpoints must not use postJsonWithCsrf');
+  }
   const token = await getCsrfTokenForRequest(API_URL);
   const res = await fetch(resolvedUrl, {
     method: 'POST',
@@ -130,7 +186,10 @@ export async function postJsonWithCsrf(url, body, retryCsrf = true) {
     },
     body: JSON.stringify(body ?? {}),
   });
-  if (retryCsrf && res.status === 403) {
+  if (
+    retryCsrf === true
+    && res.status === 403
+  ) {
     const data = await res.clone().json().catch(() => ({}));
     if (typeof data?.error === 'string' && data.error.includes('CSRF')) {
       resetCsrfPrefetch();
@@ -141,6 +200,9 @@ export async function postJsonWithCsrf(url, body, retryCsrf = true) {
 }
 
 export async function fetchOauthBootstrapUser() {
+  const bypassUser = getDevBypassUser();
+  if (bypassUser) return bypassUser;
+
   const params = new URLSearchParams();
   if (typeof window !== 'undefined') {
     const code = new URLSearchParams(window.location.search).get('oauth_login');
@@ -152,10 +214,12 @@ export async function fetchOauthBootstrapUser() {
   if (data?.twofaRequired && data?.user) {
     const e = new Error('Требуется код 2FA');
     e.twofaRequired = true;
-    e.user = data.user;
+    e.user = normalizeSessionUser(data.user);
     throw e;
   }
   if (data?.ok && data.user) {
+    const user = normalizeSessionUser(data.user);
+    if (!user) return null;
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
       if (url.searchParams.has('oauth_login')) {
@@ -163,7 +227,7 @@ export async function fetchOauthBootstrapUser() {
         window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
       }
     }
-    return data.user;
+    return user;
   }
   return null;
 }
@@ -177,7 +241,7 @@ export async function completeOauth2FA(totp = '') {
     throw e;
   }
   if (data?.error) throw new Error(data.error);
-  return data.user;
+  return requireSessionUser(data.user, 'Вход выполнен, но сервер не вернул профиль. Попробуйте снова.');
 }
 
 export async function registerUser(name, email, password) {
@@ -197,7 +261,7 @@ export async function loginUser(email, password, totp = '') {
     throw e;
   }
   if (data?.error) throw new Error(data.error);
-  return data.user;
+  return requireSessionUser(data.user, 'Вход выполнен, но сервер не вернул профиль. Попробуйте снова.');
 }
 
 export async function forgotPassword(email) {
@@ -245,10 +309,14 @@ export async function updateUser(userId, updates, currentUser = null) {
   });
 
   const rawUser = data?.user || {};
-  const normalized = {
+  const normalized = normalizeSessionUser({
     ...(currentUser || {}),
     ...rawUser,
-  };
+    id: rawUser.id ?? currentUser?.id ?? userId,
+  });
+  if (!normalized) {
+    throw new Error('Сервер не вернул профиль пользователя');
+  }
 
   if (Object.prototype.hasOwnProperty.call(updates || {}, 'photo_url')) {
     normalized.photo_url = Object.prototype.hasOwnProperty.call(rawUser, 'photo_url')
@@ -272,10 +340,14 @@ export async function uploadAvatar(userId, dataUrl, currentUser = null) {
     body: JSON.stringify({ userId, dataUrl }),
   });
   const rawUser = data?.user || {};
-  const normalized = {
+  const normalized = normalizeSessionUser({
     ...(currentUser || {}),
     ...rawUser,
-  };
+    id: rawUser.id ?? currentUser?.id ?? userId,
+  });
+  if (!normalized) {
+    throw new Error('Сервер не вернул профиль пользователя');
+  }
   if (Object.prototype.hasOwnProperty.call(rawUser, 'photo_url')) {
     normalized.photo_url = rawUser.photo_url ?? null;
   }
@@ -283,8 +355,9 @@ export async function uploadAvatar(userId, dataUrl, currentUser = null) {
 }
 
 export function saveSession(user) {
-  if (user) {
-    localStorage.setItem('cicada_session', JSON.stringify(user));
+  const normalized = normalizeSessionUser(user);
+  if (normalized) {
+    localStorage.setItem('cicada_session', JSON.stringify(normalized));
   } else {
     localStorage.removeItem('cicada_session');
   }
@@ -293,8 +366,15 @@ export function saveSession(user) {
 export function getSession() {
   try {
     const data = localStorage.getItem('cicada_session');
-    return data ? JSON.parse(data) : null;
+    if (!data) return null;
+    const parsed = JSON.parse(data);
+    const user = normalizeSessionUser(parsed);
+    if (!user && parsed) {
+      localStorage.removeItem('cicada_session');
+    }
+    return user;
   } catch {
+    localStorage.removeItem('cicada_session');
     return null;
   }
 }
@@ -306,9 +386,12 @@ export function clearSession() {
 }
 
 export async function fetchSessionUserFromServer() {
+  const bypassUser = getDevBypassUser();
+  if (bypassUser) return bypassUser;
+
   try {
     const data = await apiFetch('/api/me');
-    return data?.user ?? null;
+    return normalizeSessionUser(data?.user);
   } catch {
     return null;
   }

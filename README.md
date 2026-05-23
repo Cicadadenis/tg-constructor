@@ -251,9 +251,9 @@ Cicada DSL — декларативный язык с русскоязычным
 - Для AI-генерации: **Ollama** локально или **GROQ** ([console.groq.com](https://console.groq.com)); см. `env.example`
 - Для сборки прошивок из Studio: **ESPHome** (опционально; `bootstrap.sh` ставит в `.venv-esphome`, см. ниже)
 
-### Автоустановка: `bootstrap.sh`
+### Автоустановка: `bootstrap.sh` / `setup.sh`
 
-На **Ubuntu/Debian (VPS)**, в **WSL** или в **Termux** можно поднять стек одним скриптом из корня проекта:
+На **Ubuntu/Debian (VPS)** и в **WSL** — из корня проекта:
 
 ```bash
 chmod +x bootstrap.sh
@@ -262,6 +262,18 @@ sudo bash bootstrap.sh           # VPS: от root
 # При необходимости зафиксировать версию рантайма DSL:
 sudo CICADA_TG_PIN=0.0.1 bash bootstrap.sh
 ```
+
+**Termux (Android):** используйте `setup.sh` (тот же сценарий, что в рабочем `setup.sh` для Termux). `bootstrap.sh` на Termux автоматически перенаправляет в `setup.sh`.
+
+```bash
+# Скопируйте проект в ~/ (не в /root), обычная сессия Termux (без su):
+cd ~/tg-constructor-main
+bash setup.sh
+# или:
+bash scripts/termux-setup.sh
+```
+
+На Termux скрипт выбирает режим **LOCAL**, в `.env` пишет **`AUTH_BYPASS=1`** и **`NODE_ENV=development`** — вход в Studio **без пароля** (mock-пользователь `dev-bypass-user`). API: `http://127.0.0.1:3001` (не `https://localhost`). Nginx и ESPHome на устройстве не ставятся.
 
 Скрипт:
 

@@ -330,6 +330,10 @@ case "$PLATFORM" in
     ;;
 esac
 
+# Termux: логи установки в $HOME (общий /tmp часто недоступен для записи)
+CICADA_ERR_DIR="${TMPDIR:-/tmp}"
+[ "$PLATFORM" = "termux" ] && CICADA_ERR_DIR="$HOME"
+
 # ─── Вспомогательные функции под платформу ─────────────────────
 
 svc_enable() {
@@ -399,7 +403,7 @@ termux_pkg() {
   pkg "$@"
 }
 
-# Фиксированный /tmp/cicada_pkg_err ломается в Termux (root создал файл — app user не пишет).
+# Фиксированный ${CICADA_ERR_DIR}/cicada_pkg_err ломается в Termux (root создал файл — app user не пишет).
 cicada_errlog_file() {
   local base d f
   for base in "${TMPDIR:-}" "${PREFIX:-}/tmp" "${HOME:-}" "$(pwd)"; do
@@ -491,6 +495,13 @@ apply_webinstall_preset() {
     PREVIEW_APP_URL="${PREVIEW_APP_URL:-https://localhost}"
   fi
   INSTALL_ESPHOME="${INSTALL_ESPHOME:-0}"
+  if [ "$PLATFORM" = "termux" ]; then
+    MODE="local"
+    DOMAIN="${DOMAIN:-localhost}"
+    ADMIN_EMAIL="${ADMIN_EMAIL:-admin@local}"
+    ADMIN_PASSWORD=""
+    ADMIN_NAME="${ADMIN_NAME:-Admin}"
+  fi
   return 0
 }
 
@@ -504,6 +515,9 @@ if apply_webinstall_preset; then
   summary_row "Папка" "$APP_DIR" "$WHITE"
   summary_row "Порт" "$API_PORT" "$CYAN"
   summary_row "ADMIN_EMAIL" "${ADMIN_EMAIL:-—}" "$ORANGE"
+  if [ "$PLATFORM" = "termux" ]; then
+    summary_row "Вход" "не требуется (AUTH_BYPASS)" "$GREEN"
+  fi
   summary_box_end
   ok "Запуск установки (без интерактивного опроса)"
 else
@@ -614,6 +628,11 @@ ADMIN_PASSWORD=""
 ADMIN_NAME="Admin"
 section "Учётная запись (вход в Studio)"
 if [ "$MODE" = "local" ]; then
+  if [ "$PLATFORM" = "termux" ]; then
+    hint "AUTH_BYPASS=1: вход без пароля (mock-пользователь dev-bypass-user)"
+    prompt_def ADMIN_EMAIL "admin@local" "Email для UI (VITE_ADMIN_EMAIL)"
+    ADMIN_PASSWORD=""
+  else
   while true; do
     prompt ADMIN_EMAIL "Email администратора"
     [ -n "$ADMIN_EMAIL" ] && break
@@ -627,6 +646,7 @@ if [ "$MODE" = "local" ]; then
     [ "$ADMIN_PASSWORD" = "$ADMIN_PASSWORD2" ] && break
     warn "Пароли не совпадают"
   done
+  fi
 else
   prompt ADMIN_EMAIL "Email администратора"
 fi
@@ -718,7 +738,9 @@ summary_row "Порт" "$API_PORT" "$CYAN"
 summary_row "БД" "${DB_NAME} @ localhost" "$WHITE"
 summary_row "DB_USER" "$DB_USER" "$WHITE"
 summary_row "ADMIN_EMAIL" "$ADMIN_EMAIL" "$ORANGE"
-if [ "$MODE" = "local" ] && [ -n "$ADMIN_PASSWORD" ]; then
+if [ "$PLATFORM" = "termux" ]; then
+  summary_row "Вход" "не требуется (AUTH_BYPASS)" "$GREEN"
+elif [ "$MODE" = "local" ] && [ -n "$ADMIN_PASSWORD" ]; then
   summary_row "Пароль входа" "задан (${#ADMIN_PASSWORD} симв.)" "$GREEN"
 fi
 if [ "$INSTALL_ESPHOME" = "1" ]; then
@@ -934,13 +956,17 @@ info "Создаём БД и пользователя..."
 
 pgsql_super() {
   if [ "$PLATFORM" = "termux" ]; then
-    psql -U "$(whoami)" "$@"
+    psql -U "$(whoami)" -d "$(whoami)" "$@"
   else
     sudo -u postgres psql "$@"
   fi
 }
 
-if ! pgsql_super << SQL 2>/tmp/cicada_pg_err
+if [ "$PLATFORM" = "termux" ]; then
+  createdb "$(whoami)" 2>/dev/null || true
+fi
+
+if ! pgsql_super << SQL 2>"${CICADA_ERR_DIR}/cicada_pg_err"
 DO \$\$
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${DB_USER}') THEN
@@ -957,14 +983,14 @@ SELECT 'CREATE DATABASE ${DB_NAME} OWNER ${DB_USER}'
 GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};
 SQL
 then
-  _pg_err=$(cat /tmp/cicada_pg_err 2>/dev/null || echo "нет деталей")
+  _pg_err=$(cat ${CICADA_ERR_DIR}/cicada_pg_err 2>/dev/null || echo "нет деталей")
   err "Ошибка настройки PostgreSQL:
     ${_pg_err}
   Убедись что PostgreSQL запущен и пользователь postgres существует."
 fi
 
-pgsql_super -d "$DB_NAME" -c "GRANT ALL ON SCHEMA public TO ${DB_USER};" 2>/tmp/cicada_pg_err \
-  || warn "GRANT на schema public не удался: $(cat /tmp/cicada_pg_err 2>/dev/null)"
+pgsql_super -d "$DB_NAME" -c "GRANT ALL ON SCHEMA public TO ${DB_USER};" 2>${CICADA_ERR_DIR}/cicada_pg_err \
+  || warn "GRANT на schema public не удался: $(cat ${CICADA_ERR_DIR}/cicada_pg_err 2>/dev/null)"
 ok "БД '${DB_NAME}' и пользователь '${DB_USER}' готовы"
 
 # ═══════════════════════════════════════════════════════════════
@@ -981,13 +1007,13 @@ if [ -f "package.json" ]; then
   rm -rf node_modules package-lock.json dist
   ok "Cleaned node_modules, package-lock.json, dist"
   info "npm install --legacy-peer-deps"
-  if ! npm install --legacy-peer-deps 2>/tmp/cicada_npm_err; then
-    _npm_err=$(tail -8 /tmp/cicada_npm_err 2>/dev/null || echo "no log")
+  if ! npm install --legacy-peer-deps 2>${CICADA_ERR_DIR}/cicada_npm_err; then
+    _npm_err=$(tail -8 ${CICADA_ERR_DIR}/cicada_npm_err 2>/dev/null || echo "no log")
     err "npm install failed. Check package.json and registry. Log: ${_npm_err}"
   fi
   info "npm install passport (OAuth)"
-  if ! npm install passport passport-google-oauth20 express-session 2>/tmp/cicada_npm_err; then
-    _npm_err=$(tail -8 /tmp/cicada_npm_err 2>/dev/null || echo "no log")
+  if ! npm install passport passport-google-oauth20 express-session 2>${CICADA_ERR_DIR}/cicada_npm_err; then
+    _npm_err=$(tail -8 ${CICADA_ERR_DIR}/cicada_npm_err 2>/dev/null || echo "no log")
     err "npm install (passport) failed. Log: ${_npm_err}"
   fi
   ok "npm install OK"
@@ -998,7 +1024,12 @@ fi
 
 mkdir -p "$APP_DIR/uploads/media" "$APP_DIR/bots" "$APP_DIR/data/firmware-cache" \
   "$APP_DIR/public/firmware" "$APP_DIR/public/flash/jammer" "$APP_DIR/.cache/platformio" \
-  /tmp/esphome-jobs 2>/dev/null || true
+  2>/dev/null || true
+if [ "$PLATFORM" = "termux" ]; then
+  mkdir -p "$HOME/esphome-jobs" 2>/dev/null || true
+else
+  mkdir -p /tmp/esphome-jobs 2>/dev/null || true
+fi
 ok "Рабочие каталоги (bots/, uploads/, firmware/) созданы"
 
 # Канонический путь к .bin (пишется в .env; publish читает отсюда)
@@ -1075,6 +1106,16 @@ fi
 DSL_SANDBOX_MODE_VAL="auto"
 DSL_SANDBOX_NETWORK_VAL="host"
 [ "$APP_ENV_VAL" = "production" ] && DSL_SANDBOX_MODE_VAL="enforced"
+[ "$PLATFORM" = "termux" ] && DSL_SANDBOX_MODE_VAL="disabled"
+
+NODE_ENV_VAL="production"
+AUTH_BYPASS_VAL="0"
+if [ "$APP_ENV_VAL" = "development" ]; then
+  NODE_ENV_VAL="development"
+fi
+if [ "$PLATFORM" = "termux" ]; then
+  AUTH_BYPASS_VAL="1"
+fi
 
 ESPHOME_BIN_VAL="${ESPHOME_BIN:-}"
 if [ -z "$ESPHOME_BIN_VAL" ] && [ -n "${ESPHOME_BIN_PATH:-}" ] && [ -f "$ESPHOME_BIN_PATH" ]; then
@@ -1111,6 +1152,7 @@ ESPHOME_CLEANUP_INTERVAL_MS="${ESPHOME_CLEANUP_INTERVAL_MS:-300000}"
 FIRMWARE_BUILD_TIMEOUT_MS="${FIRMWARE_BUILD_TIMEOUT_MS:-1800000}"
 ESPHOME_PLATFORMIO_HOME="${ESPHOME_PLATFORMIO_HOME:-${APP_DIR}/.cache/platformio}"
 ESPHOME_JOBS_ROOT="${ESPHOME_JOBS_ROOT:-/tmp/esphome-jobs}"
+[ "$PLATFORM" = "termux" ] && ESPHOME_JOBS_ROOT="$HOME/esphome-jobs"
 ESPHOME_MAX_CONCURRENT_BUILDS="${ESPHOME_MAX_CONCURRENT_BUILDS:-2}"
 ESPHOME_PUBLIC_BUILD="${ESPHOME_PUBLIC_BUILD:-0}"
 JAMMER_FIRMWARE_BIN="${JAMMER_FIRMWARE_BIN:-${APP_DIR}/public/firmware/esp8266_deauther.bin}"
@@ -1132,7 +1174,9 @@ CORS_LINE="# CORS_ORIGINS=${APP_URL_VAL}"
 
 cat > "$APP_DIR/.env" << ENV
 # ─── Server ──────────────────────────────────────────────────
+NODE_ENV=${NODE_ENV_VAL}
 APP_ENV=${APP_ENV_VAL}
+AUTH_BYPASS=${AUTH_BYPASS_VAL}
 API_HOST=${DOMAIN}
 API_PORT=${API_PORT}
 PYTHON_BIN=${PYTHON}
@@ -1220,9 +1264,9 @@ if [ -f "$APP_DIR/package.json" ]; then
   install_phase "Сборка фронтенда (Vite)"
   info "npm run build..."
   cd "$APP_DIR"
-  if ! npm run build 2>/tmp/cicada_build_err; then
+  if ! npm run build 2>${CICADA_ERR_DIR}/cicada_build_err; then
     warn "Сборка фронтенда не удалась. Причина:"
-    tail -20 /tmp/cicada_build_err >&2 || true
+    tail -20 ${CICADA_ERR_DIR}/cicada_build_err >&2 || true
     warn "Для ручного запуска: cd ${APP_DIR} && npm run build"
   else
     ok "Фронтенд собран (dist/)"
@@ -1393,9 +1437,9 @@ NGINX
 
   $SUDO ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/cicada
   $SUDO rm -f /etc/nginx/sites-enabled/default
-  if ! $SUDO nginx -t 2>/tmp/cicada_nginx_err; then
+  if ! $SUDO nginx -t 2>${CICADA_ERR_DIR}/cicada_nginx_err; then
     warn "Nginx: ошибка в конфигурации:"
-    cat /tmp/cicada_nginx_err >&2 || true
+    cat ${CICADA_ERR_DIR}/cicada_nginx_err >&2 || true
     warn "Исправь конфиг вручную: ${NGINX_CONF}"
   else
     svc_reload nginx
@@ -1445,7 +1489,7 @@ info "Стартуем Node.js..."
 cd "$APP_DIR"
 
 pm2 delete server 2>/dev/null || true
-pm2 start server.mjs --name server
+pm2 start server.mjs --name server --node-args="--import tsx"
 pm2 save
 
 if $HAS_SYSTEMCTL && [ "$PLATFORM" = "vps" ]; then
@@ -1484,6 +1528,7 @@ wait_for_users_table() {
 }
 
 seed_local_admin_account() {
+  [ "$PLATFORM" = "termux" ] && return 0
   [ "$MODE" != "local" ] && return 0
   [ -z "$ADMIN_EMAIL" ] || [ -z "$ADMIN_PASSWORD" ] && return 0
 
@@ -1650,10 +1695,12 @@ elif [ "$PLATFORM" = "termux" ]; then
   summary_row "Сайт" "http://127.0.0.1:${API_PORT}" "$GREEN"
   summary_row "Админка" "/satana" "$ORANGE"
   summary_row "ESPHome" "/esphome/" "$CYAN"
-  if [ "$MODE" = "local" ] && [ -n "$ADMIN_EMAIL" ]; then
+  if [ "${AUTH_BYPASS_VAL:-0}" = "1" ]; then
+    summary_row "Вход" "не требуется (AUTH_BYPASS)" "$GREEN"
+  elif [ "$MODE" = "local" ] && [ -n "$ADMIN_EMAIL" ]; then
     summary_row "Вход" "${ADMIN_EMAIL}" "$WHITE"
   fi
-  dim "В Termux: http://127.0.0.1:${API_PORT} (не https://localhost)"
+  dim "Termux: http://127.0.0.1:${API_PORT} — mock-пользователь без логина"
 else
   summary_row "Сайт" "https://localhost" "$GREEN"
   summary_row "Админка" "https://localhost/satana" "$ORANGE"

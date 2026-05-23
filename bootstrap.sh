@@ -1,6 +1,23 @@
 #!/bin/bash
 set -euo pipefail
 
+_cicada_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# --webinstall и Termux: только setup.sh (bootstrap интерактивный и без --webinstall)
+for _arg in "$@"; do
+  if [ "$_arg" = "--webinstall" ] && [ -f "${_cicada_root}/setup.sh" ]; then
+    exec bash "${_cicada_root}/setup.sh" "$@"
+  fi
+done
+
+# Termux: канонический установщик — setup.sh (pkg от app-user, AUTH_BYPASS, http://127.0.0.1)
+# Чтобы принудительно остаться в bootstrap.sh: CICADA_USE_BOOTSTRAP=1 bash bootstrap.sh
+if [ -z "${CICADA_USE_BOOTSTRAP:-}" ]; then
+  if { [ -n "${TERMUX_VERSION:-}" ] || [ -d "/data/data/com.termux" ]; } && [ -f "${_cicada_root}/setup.sh" ]; then
+    exec bash "${_cicada_root}/setup.sh" "$@"
+  fi
+fi
+
 # ═══════════════════════════════════════════════════════════════
 #   CICADA STUDIO — ULTRA PROD BOOTSTRAP
 #   Автоустановка всего необходимого с нуля
