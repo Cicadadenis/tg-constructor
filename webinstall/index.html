@@ -3,37 +3,44 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CICADA STUDIO</title>
+<title>CICADA — SYS.MONITOR</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#02040c;--bg2:#061018;--panel:rgba(4,14,28,.72);
-  --pb:rgba(0,229,255,.22);--pbh:rgba(0,229,255,.55);
-  --cyan:#00e5ff;--cdim:rgba(0,229,255,.12);
-  --green:#00ff41;--gdim:rgba(0,255,65,.1);
+  --bg:#00050a;--bg2:#020a14;--panel:rgba(2,12,24,.78);
+  --pb:rgba(0,242,255,.28);--pbh:rgba(0,242,255,.62);
+  --cyan:#00f2ff;--cdim:rgba(0,242,255,.14);
+  --green:#00ff41;--gdim:rgba(0,255,65,.12);
   --magenta:#ff006e;--yellow:#ffbe00;--ydim:rgba(255,190,0,.1);
-  --text:#c8e8f8;--tdim:#4a7088;--red:#ff2257;--rdim:rgba(255,34,87,.12);
+  --text:#d4f4ff;--tdim:#5a8aa8;--red:#ff2257;--rdim:rgba(255,34,87,.12);
   --ring-r:54;--ring-c:339.292;
+  --glow:0 0 24px rgba(0,242,255,.55),0 0 60px rgba(0,242,255,.25);
+  --title-glow:0 0 20px rgba(0,242,255,.9),0 0 50px rgba(0,242,255,.45),0 0 100px rgba(0,120,200,.2);
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
 body{
   min-height:100vh;font-family:'Rajdhani',sans-serif;
-  background:radial-gradient(ellipse 120% 80% at 50% -20%,rgba(0,80,120,.35),transparent 55%),
-             radial-gradient(ellipse 80% 50% at 50% 100%,rgba(0,40,80,.25),transparent 50%),
-             linear-gradient(180deg,#02040c 0%,#030810 40%,#02060e 100%);
+  background:
+    radial-gradient(ellipse 90% 45% at 50% 0%,rgba(0,100,160,.22),transparent 50%),
+    radial-gradient(ellipse 120% 40% at 50% 72%,rgba(0,242,255,.08),transparent 55%),
+    linear-gradient(180deg,#000308 0%,#00050a 35%,#020812 100%);
   color:var(--text);overflow-x:hidden;font-size:15px;
 }
 body::before{
   content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
-  background-image:linear-gradient(rgba(0,229,255,.04) 1px,transparent 1px),
-                   linear-gradient(90deg,rgba(0,229,255,.04) 1px,transparent 1px);
-  background-size:48px 48px;
+  background-image:
+    linear-gradient(rgba(0,242,255,.07) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,242,255,.07) 1px,transparent 1px);
+  background-size:52px 52px;
+  mask-image:radial-gradient(ellipse 85% 70% at 50% 40%,#000 20%,transparent 75%);
 }
 body::after{
   content:'';position:fixed;inset:0;z-index:1;pointer-events:none;
-  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.06) 3px,rgba(0,0,0,.06) 4px);
+  background:
+    linear-gradient(180deg,transparent 0%,transparent 58%,rgba(0,242,255,.04) 62%,rgba(0,242,255,.12) 63%,transparent 64%),
+    repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.05) 3px,rgba(0,0,0,.05) 4px);
 }
 #app{position:relative;z-index:2}
 
@@ -45,34 +52,38 @@ body::after{
 
 /* NAV */
 nav{
-  display:flex;align-items:center;border-bottom:1px solid rgba(0,229,255,.12);
-  background:rgba(3,3,8,.97);backdrop-filter:blur(10px);
-  position:sticky;top:0;z-index:40;padding:0 24px;
+  display:grid;grid-template-columns:minmax(120px,1fr) auto minmax(120px,1fr);
+  align-items:center;border-bottom:1px solid rgba(0,242,255,.15);
+  background:rgba(0,5,12,.92);backdrop-filter:blur(14px);
+  position:sticky;top:0;z-index:40;padding:0 clamp(12px,3vw,28px);
+  box-shadow:0 4px 32px rgba(0,0,0,.45);
 }
 .brand{
-  font-family:'Orbitron',sans-serif;font-size:.72rem;letter-spacing:.25em;
-  color:var(--cyan);text-shadow:0 0 12px rgba(0,229,255,.5);
-  padding-right:24px;border-right:1px solid rgba(0,229,255,.12);margin-right:8px;white-space:nowrap;
+  font-family:'Orbitron',sans-serif;font-size:.78rem;letter-spacing:.28em;
+  color:var(--cyan);text-shadow:var(--glow);white-space:nowrap;justify-self:start;
 }
+.nav-tabs{display:flex;align-items:center;justify-content:center;gap:4px}
 .tab{
-  font-family:'Orbitron',sans-serif;font-size:.58rem;letter-spacing:.22em;
-  text-transform:uppercase;padding:16px 22px;color:var(--tdim);
-  cursor:pointer;border:none;background:none;position:relative;transition:color .2s;
+  font-family:'Orbitron',sans-serif;font-size:.62rem;letter-spacing:.24em;
+  text-transform:uppercase;padding:18px 26px;color:rgba(90,140,170,.85);
+  cursor:pointer;border:none;background:none;position:relative;transition:color .2s,text-shadow .2s;
 }
 .tab::after{
-  content:'';position:absolute;bottom:0;left:0;right:0;height:2px;
-  background:var(--cyan);box-shadow:0 0 10px var(--cyan);
-  transform:scaleX(0);transition:transform .2s;
+  content:'';position:absolute;bottom:0;left:12%;right:12%;height:3px;
+  background:linear-gradient(90deg,transparent,var(--cyan),transparent);
+  box-shadow:0 0 14px var(--cyan),0 0 28px rgba(0,242,255,.4);
+  transform:scaleX(0);transition:transform .25s ease;
 }
-.tab:hover{color:var(--cyan)}
-.tab.active{color:var(--cyan)}
+.tab:hover{color:var(--cyan);text-shadow:0 0 12px rgba(0,242,255,.35)}
+.tab.active{color:var(--cyan);text-shadow:var(--glow)}
 .tab.active::after{transform:scaleX(1)}
 .nav-live{
-  margin-left:auto;display:flex;align-items:center;gap:6px;
-  font-family:'Share Tech Mono',monospace;font-size:.72rem;color:var(--green);
-  letter-spacing:.08em;text-shadow:0 0 12px rgba(0,255,65,.5);
+  justify-self:end;display:flex;align-items:center;gap:4px;
+  font-family:'Share Tech Mono',monospace;font-size:.78rem;font-weight:600;
+  color:var(--green);letter-spacing:.06em;
+  text-shadow:0 0 16px rgba(0,255,65,.7),0 0 32px rgba(0,255,65,.3);
 }
-.nav-live::before{content:'+';font-weight:700}
+.nav-live::before{content:'+';font-weight:700;margin-right:2px}
 @keyframes dp{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.6)}}
 .dp{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);animation:dp 1.4s ease-in-out infinite}
 
@@ -236,50 +247,86 @@ select.inp option{background:#060b14;color:var(--text)}
 .page{display:none}.page.active{display:block}
 
 /* SYSMON — circular pods (screenshot layout) */
-.sysmon-wrap{max-width:1280px;margin:0 auto;padding:28px 20px 48px}
-.sysmon-hero{text-align:center;margin-bottom:36px}
+.sysmon-wrap{
+  max-width:1320px;margin:0 auto;padding:32px 20px 56px;
+  position:relative;
+}
+.sysmon-hero{text-align:center;margin-bottom:clamp(28px,5vw,44px)}
 .sysmon-title{
   font-family:'Orbitron',sans-serif;font-weight:900;
-  font-size:clamp(1.8rem,4.5vw,2.75rem);letter-spacing:.22em;
+  font-size:clamp(1.85rem,5vw,3rem);letter-spacing:.2em;
   color:var(--cyan);text-transform:uppercase;
-  text-shadow:0 0 20px rgba(0,229,255,.7),0 0 50px rgba(0,229,255,.35),0 0 80px rgba(0,229,255,.15);
+  text-shadow:var(--title-glow);
 }
 .sysmon-host{
-  font-family:'Share Tech Mono',monospace;font-size:.72rem;
-  color:var(--tdim);margin-top:10px;letter-spacing:.1em;line-height:1.6;
+  font-family:'Share Tech Mono',monospace;font-size:.74rem;
+  color:var(--tdim);margin-top:12px;letter-spacing:.08em;line-height:1.65;
+  text-shadow:0 0 20px rgba(0,242,255,.15);
 }
 .pods-row{
-  display:flex;flex-wrap:wrap;justify-content:center;align-items:flex-start;
-  gap:clamp(12px,3vw,28px);margin-bottom:32px;
+  display:flex;flex-wrap:wrap;justify-content:center;align-items:flex-end;
+  gap:clamp(8px,2.5vw,20px);margin-bottom:40px;
+  padding:0 8px 24px;
+  position:relative;
+}
+.pods-row::after{
+  content:'';position:absolute;left:5%;right:5%;bottom:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(0,242,255,.35),transparent);
+  box-shadow:0 0 40px rgba(0,242,255,.25);
+  pointer-events:none;
 }
 .pod{
-  flex:1 1 260px;max-width:340px;min-width:240px;
+  flex:1 1 280px;max-width:360px;min-width:250px;
   display:flex;flex-direction:column;align-items:center;
-  padding:8px 12px 20px;
+  padding:0 10px 8px;
 }
+.pod-stage{
+  position:relative;width:min(100%,300px);
+  display:flex;flex-direction:column;align-items:center;
+  padding-bottom:18px;
+}
+.pod-pedestal{
+  position:absolute;bottom:0;left:50%;transform:translateX(-50%);
+  width:88%;height:28px;border-radius:50%;
+  background:radial-gradient(ellipse at 50% 50%,rgba(0,242,255,.55),rgba(0,120,180,.15) 45%,transparent 72%);
+  filter:blur(10px);opacity:.85;z-index:0;
+  animation:pedestalPulse 3.5s ease-in-out infinite;
+}
+.pod-stage::after{
+  content:'';position:absolute;bottom:6px;left:50%;transform:translateX(-50%);
+  width:74%;height:16px;border-radius:50%;z-index:0;pointer-events:none;
+  border:1px solid rgba(0,242,255,.45);
+  box-shadow:0 0 24px rgba(0,242,255,.35),inset 0 0 12px rgba(0,242,255,.12);
+}
+@keyframes pedestalPulse{0%,100%{opacity:.75;transform:translateX(-50%) scale(1)}50%{opacity:1;transform:translateX(-50%) scale(1.04)}}
 .pod-base{
-  position:relative;width:min(100%,280px);aspect-ratio:1;
+  position:relative;z-index:1;width:100%;aspect-ratio:1;
   display:flex;align-items:center;justify-content:center;
+  margin-bottom:-8px;
 }
 .pod-base::before{
-  content:'';position:absolute;inset:8%;border-radius:50%;
-  background:radial-gradient(circle at 50% 55%,rgba(0,229,255,.18),rgba(0,80,120,.08) 45%,transparent 70%);
-  box-shadow:0 0 60px rgba(0,229,255,.15),0 0 120px rgba(0,120,180,.08),inset 0 0 40px rgba(0,229,255,.06);
+  content:'';position:absolute;inset:6%;border-radius:50%;
+  background:radial-gradient(circle at 50% 58%,rgba(0,242,255,.22),rgba(0,60,100,.12) 50%,transparent 72%);
+  box-shadow:0 0 80px rgba(0,242,255,.2),0 0 140px rgba(0,100,160,.12),inset 0 0 50px rgba(0,242,255,.08);
+  animation:podGlow 4s ease-in-out infinite;
 }
 .pod-base::after{
   content:'';position:absolute;inset:0;border-radius:50%;
-  border:1px solid rgba(0,229,255,.25);
-  background:radial-gradient(circle at 30% 25%,rgba(255,255,255,.08),transparent 50%),
-              rgba(4,16,32,.55);
-  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  border:1px solid rgba(0,242,255,.35);
+  background:
+    radial-gradient(circle at 28% 22%,rgba(255,255,255,.22),transparent 42%),
+    radial-gradient(circle at 70% 78%,rgba(0,80,120,.25),transparent 45%),
+    radial-gradient(circle at 50% 50%,rgba(3,18,36,.65),rgba(1,8,18,.85) 100%);
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  box-shadow:inset 0 -20px 40px rgba(0,242,255,.06),inset 0 20px 30px rgba(255,255,255,.03);
 }
 .pod-glass{
-  position:relative;z-index:2;width:78%;aspect-ratio:1;
+  position:relative;z-index:2;width:76%;aspect-ratio:1;
   display:flex;flex-direction:column;align-items:center;justify-content:center;
   border-radius:50%;
-  background:radial-gradient(circle at 50% 30%,rgba(0,229,255,.12),rgba(2,12,24,.4) 60%);
-  border:1px solid rgba(0,229,255,.2);
-  box-shadow:inset 0 0 30px rgba(0,229,255,.08),0 8px 32px rgba(0,0,0,.4);
+  background:radial-gradient(circle at 42% 28%,rgba(0,242,255,.18),rgba(2,14,28,.55) 55%,rgba(0,8,16,.75) 100%);
+  border:1px solid rgba(0,242,255,.28);
+  box-shadow:inset 0 0 45px rgba(0,242,255,.12),inset 0 -8px 24px rgba(0,0,0,.35),0 12px 40px rgba(0,0,0,.45);
 }
 .pod-ring{position:absolute;inset:4%;z-index:3;width:92%;height:92%;pointer-events:none}
 .pod-ring circle{fill:none;stroke-width:5;stroke-linecap:round}
@@ -292,14 +339,14 @@ select.inp option{background:#060b14;color:var(--text)}
 .pod-ring .ring-fill.crit{stroke:var(--red);filter:drop-shadow(0 0 6px var(--red))}
 .pod-ring .ring-fill.ok{stroke:var(--green);filter:drop-shadow(0 0 6px var(--green))}
 .pod-pct{
-  font-family:'Orbitron',sans-serif;font-size:clamp(1.4rem,3.5vw,1.85rem);
-  font-weight:700;color:#fff;text-shadow:0 0 16px rgba(0,229,255,.6);
+  font-family:'Orbitron',sans-serif;font-size:clamp(1.5rem,3.8vw,2rem);
+  font-weight:700;color:#fff;text-shadow:0 0 20px rgba(0,242,255,.75),0 0 40px rgba(0,242,255,.35);
   line-height:1;
 }
 .pod-label{
-  font-family:'Orbitron',sans-serif;font-size:.58rem;letter-spacing:.28em;
-  color:var(--cyan);text-transform:uppercase;margin-top:14px;text-align:center;
-  text-shadow:0 0 10px rgba(0,229,255,.4);
+  font-family:'Orbitron',sans-serif;font-size:.6rem;letter-spacing:.32em;
+  color:var(--cyan);text-transform:uppercase;margin-top:16px;text-align:center;
+  text-shadow:0 0 12px rgba(0,242,255,.5);
 }
 .pod-sub{
   font-family:'Share Tech Mono',monospace;font-size:.65rem;color:var(--tdim);
@@ -322,9 +369,10 @@ select.inp option{background:#060b14;color:var(--text)}
 }
 .pod-cores span em{font-style:normal;color:var(--cyan);margin-left:4px}
 .proc-panel{
-  position:relative;background:var(--panel);border:1px solid var(--pb);
-  backdrop-filter:blur(10px);padding:18px 20px 8px;
-  box-shadow:0 0 40px rgba(0,229,255,.04),inset 0 0 60px rgba(0,229,255,.02);
+  position:relative;background:linear-gradient(180deg,rgba(2,14,28,.85),rgba(1,8,18,.92));
+  border:1px solid rgba(0,242,255,.22);
+  backdrop-filter:blur(12px);padding:20px 22px 10px;
+  box-shadow:0 0 50px rgba(0,242,255,.06),inset 0 0 80px rgba(0,242,255,.03);
 }
 .proc-panel::before,.proc-panel::after{
   content:'';position:absolute;width:14px;height:14px;
@@ -333,20 +381,25 @@ select.inp option{background:#060b14;color:var(--text)}
 .proc-panel::before{top:-1px;left:-1px;border-width:2px 0 0 2px}
 .proc-panel::after{bottom:-1px;right:-1px;border-width:0 2px 2px 0}
 @keyframes podGlow{0%,100%{opacity:.85}50%{opacity:1}}
-.pod-base::before{animation:podGlow 4s ease-in-out infinite}
-.tab.active::after{height:3px;box-shadow:0 0 14px var(--cyan)}
 .proc-head{
   display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;
-  gap:12px;margin-bottom:14px;
+  gap:12px;margin-bottom:16px;
 }
 .proc-head .ch{margin-bottom:0}
+.proc-head .ch>span:first-child{
+  display:inline-block;padding:6px 14px;
+  border:1px solid rgba(0,242,255,.35);
+  background:rgba(0,242,255,.06);
+  box-shadow:0 0 20px rgba(0,242,255,.08),inset 0 0 16px rgba(0,242,255,.04);
+}
+.proc-head .ch::after{display:none}
 .proc-filter{
   max-width:240px;padding:6px 10px;font-size:.78rem;
   background:rgba(0,12,24,.85);border:1px solid rgba(0,229,255,.2);
 }
 
 /* WEB.INSTALL — glass panels (как SYS.MONITOR) */
-.install-wrap{max-width:720px;margin:0 auto;padding:28px 20px 56px}
+.install-wrap{max-width:760px;margin:0 auto;padding:32px 20px 56px}
 .install-hero{text-align:center;margin-bottom:8px}
 .install-sub{
   font-family:'Orbitron',sans-serif;font-size:.62rem;letter-spacing:.42em;
@@ -421,6 +474,7 @@ select.inp option{background:#060b14;color:var(--text)}
 }
 .install-submit-wrap{margin-top:8px;padding:4px 0 8px}
 
+@media(max-width:900px){.col-extra{display:none}}
 @media(max-width:520px){.r2{grid-template-columns:1fr}.btn{clip-path:none}.btn.ok{clip-path:none}.panel-tag{font-size:.5rem;left:12px;padding:2px 10px}}
 @media(max-width:720px){.pods-row{flex-direction:column;align-items:center}.pod{max-width:320px}}
 </style>
@@ -432,8 +486,10 @@ select.inp option{background:#060b14;color:var(--text)}
 <div id="app">
 <nav>
   <div class="brand">CICADA<span class="blink">_</span></div>
-  <button class="tab active" onclick="switchTab('monitor',this)">SYS.MONITOR</button>
-  <button class="tab" onclick="switchTab('install',this)">WEB.INSTALL</button>
+  <div class="nav-tabs">
+    <button class="tab active" onclick="switchTab('monitor',this)">SYS.MONITOR</button>
+    <button class="tab" onclick="switchTab('install',this)">WEB.INSTALL</button>
+  </div>
   <div class="nav-live">ONLINE</div>
 </nav>
 
@@ -452,15 +508,18 @@ select.inp option{background:#060b14;color:var(--text)}
   <div class="pods-row">
 
     <article class="pod fu">
-      <div class="pod-base">
-        <svg class="pod-ring" viewBox="0 0 120 120" aria-hidden="true">
-          <circle class="ring-track" cx="60" cy="60" r="54"/>
-          <circle class="ring-fill" id="cpu-ring" cx="60" cy="60" r="54"
-            stroke-dasharray="339.292" stroke-dashoffset="339.292"
-            transform="rotate(-90 60 60)"/>
-        </svg>
-        <div class="pod-glass">
-          <div class="pod-pct" id="cpu-pct">--</div>
+      <div class="pod-stage">
+        <div class="pod-pedestal" aria-hidden="true"></div>
+        <div class="pod-base">
+          <svg class="pod-ring" viewBox="0 0 120 120" aria-hidden="true">
+            <circle class="ring-track" cx="60" cy="60" r="54"/>
+            <circle class="ring-fill" id="cpu-ring" cx="60" cy="60" r="54"
+              stroke-dasharray="339.292" stroke-dashoffset="339.292"
+              transform="rotate(-90 60 60)"/>
+          </svg>
+          <div class="pod-glass">
+            <div class="pod-pct" id="cpu-pct">--</div>
+          </div>
         </div>
       </div>
       <div class="pod-label">CPU COMPUTE</div>
@@ -469,15 +528,18 @@ select.inp option{background:#060b14;color:var(--text)}
     </article>
 
     <article class="pod fu" style="animation-delay:.12s">
-      <div class="pod-base">
-        <svg class="pod-ring" viewBox="0 0 120 120" aria-hidden="true">
-          <circle class="ring-track" cx="60" cy="60" r="54"/>
-          <circle class="ring-fill" id="mem-ring" cx="60" cy="60" r="54"
-            stroke-dasharray="339.292" stroke-dashoffset="339.292"
-            transform="rotate(-90 60 60)"/>
-        </svg>
-        <div class="pod-glass">
-          <div class="pod-pct" id="mem-pct">--</div>
+      <div class="pod-stage">
+        <div class="pod-pedestal" aria-hidden="true"></div>
+        <div class="pod-base">
+          <svg class="pod-ring" viewBox="0 0 120 120" aria-hidden="true">
+            <circle class="ring-track" cx="60" cy="60" r="54"/>
+            <circle class="ring-fill" id="mem-ring" cx="60" cy="60" r="54"
+              stroke-dasharray="339.292" stroke-dashoffset="339.292"
+              transform="rotate(-90 60 60)"/>
+          </svg>
+          <div class="pod-glass">
+            <div class="pod-pct" id="mem-pct">--</div>
+          </div>
         </div>
       </div>
       <div class="pod-label">MEM ARRAY</div>
@@ -486,15 +548,18 @@ select.inp option{background:#060b14;color:var(--text)}
     </article>
 
     <article class="pod fu" style="animation-delay:.24s">
-      <div class="pod-base">
-        <svg class="pod-ring" viewBox="0 0 120 120" aria-hidden="true">
-          <circle class="ring-track" cx="60" cy="60" r="54"/>
-          <circle class="ring-fill ok" id="swap-ring" cx="60" cy="60" r="54"
-            stroke-dasharray="339.292" stroke-dashoffset="339.292"
-            transform="rotate(-90 60 60)"/>
-        </svg>
-        <div class="pod-glass">
-          <div class="pod-pct" id="swap-pct">--</div>
+      <div class="pod-stage">
+        <div class="pod-pedestal" aria-hidden="true"></div>
+        <div class="pod-base">
+          <svg class="pod-ring" viewBox="0 0 120 120" aria-hidden="true">
+            <circle class="ring-track" cx="60" cy="60" r="54"/>
+            <circle class="ring-fill ok" id="swap-ring" cx="60" cy="60" r="54"
+              stroke-dasharray="339.292" stroke-dashoffset="339.292"
+              transform="rotate(-90 60 60)"/>
+          </svg>
+          <div class="pod-glass">
+            <div class="pod-pct" id="swap-pct">--</div>
+          </div>
         </div>
       </div>
       <div class="pod-label">SWAP SPACE</div>
@@ -531,9 +596,8 @@ select.inp option{background:#060b14;color:var(--text)}
 <div class="install-wrap">
 
   <header class="install-hero fu">
-    <h1 class="sysmon-title np">CICADA</h1>
-    <p class="install-sub"><span>//</span> STUDIO <span>//</span></p>
-    <p class="sysmon-host">WEB-INSTALLER · CICADA STUDIO</p>
+    <h1 class="sysmon-title np">CICADA_INSTALL</h1>
+    <p class="sysmon-host" id="install-host-line">WEB-INSTALLER // CICADA STUDIO</p>
     <div id="plat-badge" class="plat-badge">ОПРЕДЕЛЕНИЕ...</div>
   </header>
 
@@ -777,10 +841,10 @@ select.inp option{background:#060b14;color:var(--text)}
 // ════════════ PARTICLES ════════════
 (function(){
   const c=document.getElementById('particles');
-  for(let i=0;i<55;i++){
+  for(let i=0;i<72;i++){
     const p=document.createElement('div');
     p.className='pt';
-    const sz=(Math.random()*2.5+0.8).toFixed(1);
+    const sz=(Math.random()*3.2+0.6).toFixed(1);
     const dur=(Math.random()*5+4).toFixed(1);
     const op=(Math.random()*.35+.1).toFixed(2);
     const ty=-(Math.random()*80+30);
