@@ -332,6 +332,11 @@ fi
 # 0. ОПРЕДЕЛЕНИЕ ПЛАТФОРМЫ
 # ═══════════════════════════════════════════════════════════════
 detect_platform() {
+  # webinstall в proot-distro Ubuntu: не Termux, несмотря на PLATFORM=termux в .env
+  if [ -n "${CICADA_INSIDE_PROOT:-}" ]; then
+    echo "vps"
+    return
+  fi
   if [ -n "${WEBINSTALL_PLATFORM:-}" ]; then
     echo "$WEBINSTALL_PLATFORM"
     return
@@ -542,6 +547,9 @@ apply_webinstall_preset() {
   # shellcheck disable=SC1090
   source "$WEBINSTALL_ENV"
   set +a
+  if [ -n "${CICADA_INSIDE_PROOT:-}" ]; then
+    PLATFORM=vps
+  fi
   CONFIRM="${CONFIRM:-y}"
   USE_ADMIN_KEY="${USE_ADMIN_KEY:-y}"
   USE_JWT_SECRET="${USE_JWT_SECRET:-y}"
@@ -930,12 +938,20 @@ install_bot_python_runtime() {
     fi
   fi
 
+  _pip() {
+    if [ "$PLATFORM" = "termux" ]; then
+      python3 -m pip "$@"
+    else
+      pip "$@"
+    fi
+  }
+
   if [ -f "${APP_DIR}/requirements-bot.txt" ]; then
-    if pip install -q -r "${APP_DIR}/requirements-bot.txt" 2>/dev/null; then
+    if _pip install -q -r "${APP_DIR}/requirements-bot.txt" 2>/dev/null; then
       ok "aiogram установлен"
     else
       warn "Ошибка requirements-bot.txt — проверь сеть и зависимости"
-      pip install -q aiogram python-telegram-bot 2>/dev/null \
+      _pip install -q aiogram python-telegram-bot 2>/dev/null \
         || warn "Не удалось установить telegram-зависимости"
     fi
   else

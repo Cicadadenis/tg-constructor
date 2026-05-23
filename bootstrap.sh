@@ -259,9 +259,11 @@ if [ "$PLATFORM" = "termux" ] && [ -z "${CICADA_INSIDE_PROOT:-}" ]; then
     info "Обновляем пакеты Termux..."
     pkg update -y 2>/dev/null || true
 
-    info "Устанавливаем proot-distro, python, pip, git, curl..."
-    pkg install -y proot-distro python pip git curl openssl-tool 2>/dev/null \
+    info "Устанавливаем proot-distro, python, git, curl..."
+    pkg install -y proot-distro python git curl openssl-tool 2>/dev/null \
       || err "Не удалось установить базовые пакеты Termux"
+    python3 -m ensurepip --upgrade 2>/dev/null || true
+    python3 -m pip install --upgrade pip 2>/dev/null || true
 
     # Установка Ubuntu
     UBUNTU_ROOT="${PREFIX:-/data/data/com.termux/files/usr}/var/lib/proot-distro/installed-rootfs/ubuntu"

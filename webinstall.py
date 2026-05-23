@@ -350,7 +350,7 @@ def setup_termux_proot(push=None) -> tuple[Path, Path]:
     """
     Termux: устанавливает proot-distro Ubuntu, копирует/клонирует репозиторий внутрь.
     Возвращает (ubuntu_rootfs_path, repo_path_inside_ubuntu).
-    Установку можно пропустить: TERMUX_NO_PROOT=1.
+    Proot только при TERMUX_USE_PROOT=1; нативно — по умолчанию (TERMUX_NO_PROOT=1 — явный skip proot).
     """
     def log(msg: str) -> None:
         if push:
@@ -364,13 +364,22 @@ def setup_termux_proot(push=None) -> tuple[Path, Path]:
     # ── 1. Базовые пакеты Termux ──────────────────────────────────
     log("▸ [Termux] pkg update + установка базовых пакетов...")
     _stream_cmd(["pkg", "update", "-y"], push=push)
+    # pip в Termux не отдельный пакет — идёт с python (python -m pip)
     code = _stream_cmd(
         ["pkg", "install", "-y",
-         "proot-distro", "python", "pip", "git", "curl", "openssl-tool"],
+         "proot-distro", "python", "git", "curl", "openssl-tool"],
         push=push,
     )
     if code != 0:
         raise RuntimeError("Не удалось установить пакеты Termux (pkg install)")
+    _stream_cmd(
+        ["python3", "-m", "ensurepip", "--upgrade"],
+        push=push,
+    )
+    _stream_cmd(
+        ["python3", "-m", "pip", "install", "--upgrade", "pip"],
+        push=push,
+    )
 
     # ── 2. Ubuntu через proot-distro ──────────────────────────────
     if (ubuntu_root / "bin").is_dir():
@@ -820,8 +829,13 @@ def run_install_job(job_id: str, env_path: Path) -> None:
 
     bash = shutil.which("bash") or "/bin/bash"
 
-    # ── Termux: запуск через proot-distro Ubuntu ──────────────────
-    if detect_platform() == "termux" and not os.environ.get("TERMUX_NO_PROOT"):
+    # ── Termux: по умолчанию нативно (setup.sh); proot — только TERMUX_USE_PROOT=1
+    use_proot = (
+        detect_platform() == "termux"
+        and os.environ.get("TERMUX_USE_PROOT") == "1"
+        and not os.environ.get("TERMUX_NO_PROOT")
+    )
+    if use_proot:
         try:
             ubuntu_root, ubuntu_app = setup_termux_proot(push=push)
             # Копируем env-файл внутрь Ubuntu
@@ -831,7 +845,8 @@ def run_install_job(job_id: str, env_path: Path) -> None:
             ubuntu_env = "/root/cicada-webinstall.env"
             cmd = [
                 "proot-distro", "login", "ubuntu", "--",
-                bash, ubuntu_script, "--webinstall", ubuntu_env,
+                "bash", "-c",
+                f"export CICADA_INSIDE_PROOT=1; exec {bash} {ubuntu_script} --webinstall {ubuntu_env}",
             ]
             push(f"▸ Запуск внутри Ubuntu proot\n$ {' '.join(cmd)}\n\n")
         except Exception as exc:
@@ -887,8 +902,12 @@ def run_install_direct(env_path: Path) -> int:
 
     bash = shutil.which("bash") or "/bin/bash"
 
-    # ── Termux: запуск через proot-distro Ubuntu ──────────────────
-    if detect_platform() == "termux" and not os.environ.get("TERMUX_NO_PROOT"):
+    use_proot = (
+        detect_platform() == "termux"
+        and os.environ.get("TERMUX_USE_PROOT") == "1"
+        and not os.environ.get("TERMUX_NO_PROOT")
+    )
+    if use_proot:
         try:
             ubuntu_root, ubuntu_app = setup_termux_proot()
             ubuntu_env_file = ubuntu_root / "root" / "cicada-webinstall.env"
@@ -897,7 +916,8 @@ def run_install_direct(env_path: Path) -> int:
             ubuntu_env = "/root/cicada-webinstall.env"
             cmd = [
                 "proot-distro", "login", "ubuntu", "--",
-                bash, ubuntu_script, "--webinstall", ubuntu_env,
+                "bash", "-c",
+                f"export CICADA_INSIDE_PROOT=1; exec {bash} {ubuntu_script} --webinstall {ubuntu_env}",
             ]
             print(f"▸ Запуск внутри Ubuntu proot\n$ {' '.join(cmd)}\n")
         except Exception as exc:
