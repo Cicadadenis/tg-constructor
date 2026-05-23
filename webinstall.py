@@ -31,7 +31,7 @@ import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import quote, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 # errno: EADDRINUSE (Linux/macOS/WSL) and WSAEADDRINUSE (Windows)
 _ADDR_IN_USE = {98, 48, 10048}
@@ -49,6 +49,9 @@ _jobs_lock = threading.Lock()
 _install_lock = threading.Lock()
 
 _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "0.0.0.0", "::", ""})
+_TLS_HINT_REQUESTLINE = "- HTTPS/TLS on HTTP port -"
+_TLS_LOG_LAST: dict[str, float] = {}
+_TLS_LOG_INTERVAL_SEC = 300
 
 
 def _configure_console() -> None:
@@ -1014,9 +1017,20 @@ def _metrics_unix() -> dict:
     except OSError:
         pass
 
+    plat = detect_platform()
+    plat_labels = {"vps": "VPS / Linux", "wsl": "WSL", "termux": "Termux"}
+    is_root = False
+    try:
+        is_root = os.geteuid() == 0
+    except AttributeError:
+        pass
+
     return {
         "hostname": socket.gethostname(),
-        "platform": platform.platform(),
+        "platform": plat,
+        "platformLabel": plat_labels.get(plat, platform.platform()),
+        "isRoot": is_root,
+        "canSetupSwap": plat != "termux" and sys.platform != "win32",
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(now)),
         "uptime": uptime_s,
         "cpu": {
@@ -1111,9 +1125,15 @@ def _metrics_windows() -> dict:
 
     uptime_s = float(kernel32.GetTickCount64()) / 1000.0
 
+    plat = detect_platform()
+    plat_labels = {"vps": "VPS / Linux", "wsl": "WSL", "termux": "Termux"}
+
     return {
         "hostname": socket.gethostname(),
-        "platform": platform.platform(),
+        "platform": plat,
+        "platformLabel": plat_labels.get(plat, "Windows"),
+        "isRoot": False,
+        "canSetupSwap": False,
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(now)),
         "uptime": uptime_s,
         "cpu": {
@@ -1392,7 +1412,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _send_tls_on_http_hint(self) -> None:
         # parse_request() не вызывался — log_request() требует requestline (Python 3.14+)
-        self.requestline = "- HTTPS/TLS on HTTP port -"
+        self.requestline = _TLS_HINT_REQUESTLINE
         self.command = "-"
         self.request_version = "HTTP/1.0"
         host = resolve_public_host() or "127.0.0.1"
@@ -1436,12 +1456,37 @@ class Handler(BaseHTTPRequestHandler):
         method()
         self.wfile.flush()
 
+    def log_request(self, code: str = "-", size: str = "-") -> None:
+        if getattr(self, "requestline", "") == _TLS_HINT_REQUESTLINE:
+            ip = self.client_address[0]
+            now = time.time()
+            last = _TLS_LOG_LAST.get(ip, 0.0)
+            if now - last < _TLS_LOG_INTERVAL_SEC:
+                return
+            _TLS_LOG_LAST[ip] = now
+            host = resolve_public_host() or "127.0.0.1"
+            sys.stderr.write(
+                "%s - HTTPS на порт %s — откройте http://%s:%s/ (повторы с этого IP скрыты %d с)\n"
+                % (ip, PORT, host, PORT, _TLS_LOG_INTERVAL_SEC)
+            )
+            return
+        super().log_request(code, size)
+
     def log_message(self, fmt: str, *args) -> None:
         msg = (fmt % args) if args else fmt
+        if _TLS_HINT_REQUESTLINE in msg:
+            return
         if "Bad request version" in msg or "Bad HTTP" in msg:
+            ip = self.client_address[0]
+            now = time.time()
+            last = _TLS_LOG_LAST.get(ip, 0.0)
+            if now - last < _TLS_LOG_INTERVAL_SEC:
+                return
+            _TLS_LOG_LAST[ip] = now
+            host = resolve_public_host() or "127.0.0.1"
             sys.stderr.write(
-                "%s - HTTPS/TLS на HTTP-порт %s — откройте http:// (не https://)\n"
-                % (self.address_string(), PORT)
+                "%s - HTTPS/TLS на HTTP-порт %s — откройте http://%s:%s/\n"
+                % (ip, PORT, host, PORT)
             )
             return
         sys.stderr.write("%s - %s\n" % (self.address_string(), msg))
@@ -1519,8 +1564,6 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/files/list":
-            from urllib.parse import parse_qs
-
             qs = parse_qs(urlparse(self.path).query)
             rel = (qs.get("path") or [""])[0]
             try:
@@ -1532,8 +1575,6 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/files/read":
-            from urllib.parse import parse_qs
-
             qs = parse_qs(urlparse(self.path).query)
             rel = (qs.get("path") or [""])[0]
             if not rel:
