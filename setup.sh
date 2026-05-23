@@ -273,12 +273,20 @@ prune_legacy_core_paths() {
 
 nginx_ensure_dist_readable() {
   [ -d "$APP_DIR/dist" ] || return 0
-  chmod 755 "$APP_DIR" 2>/dev/null || true
-  find "$APP_DIR/dist" -type d -exec chmod 755 {} + 2>/dev/null || true
-  find "$APP_DIR/dist" -type f -exec chmod 644 {} + 2>/dev/null || true
+  local dir="$APP_DIR"
+  # www-data должен пройти по всей цепочке (часто /root = 700 → nginx 500)
+  while [ -n "$dir" ] && [ "$dir" != "/" ]; do
+    chmod a+rx "$dir" 2>/dev/null || $SUDO chmod a+rx "$dir" 2>/dev/null || true
+    dir=$(dirname "$dir")
+  done
+  find "$APP_DIR/dist" -type d -exec chmod a+rx {} + 2>/dev/null || true
+  find "$APP_DIR/dist" -type f -exec chmod a+r {} + 2>/dev/null || true
   if id www-data &>/dev/null; then
-    if ! sudo -u www-data test -r "$APP_DIR/dist/index.html" 2>/dev/null; then
-      $SUDO chmod -R a+rX "$APP_DIR/dist" 2>/dev/null || true
+    if $SUDO -u www-data test -r "$APP_DIR/dist/index.html" 2>/dev/null; then
+      ok "nginx (www-data) читает dist/index.html"
+    else
+      warn "www-data не читает ${APP_DIR}/dist — на сайте будет HTTP 500"
+      hint "sudo chmod a+rx /root $(dirname ${APP_DIR}); sudo chmod -R a+rX ${APP_DIR}/dist"
     fi
   fi
 }
@@ -1357,6 +1365,12 @@ if [ -f "package.json" ]; then
     npm install tsx@^4.22.3 --legacy-peer-deps --no-save 2>/dev/null \
       || npm install tsx --legacy-peer-deps 2>/dev/null \
       || err "Не найден пакет tsx — PM2 не сможет запустить server.mjs"
+  fi
+  if [ ! -x "$APP_DIR/node_modules/.bin/vite" ]; then
+    info "Доустанавливаем vite (devDependencies для npm run build)..."
+    env NPM_CONFIG_PRODUCTION=false NODE_ENV=development npm install vite@^5.2.0 --legacy-peer-deps --no-save 2>/dev/null \
+      || env NPM_CONFIG_PRODUCTION=false NODE_ENV=development npm install vite --legacy-peer-deps 2>/dev/null \
+      || err "Не найден vite — выполни: NPM_CONFIG_PRODUCTION=false NODE_ENV=development npm install --legacy-peer-deps"
   fi
   chmod -R 755 "$APP_DIR" 2>/dev/null || true
 else
