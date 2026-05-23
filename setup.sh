@@ -271,6 +271,138 @@ prune_legacy_core_paths() {
   fi
 }
 
+nginx_ensure_dist_readable() {
+  [ -d "$APP_DIR/dist" ] || return 0
+  chmod 755 "$APP_DIR" 2>/dev/null || true
+  find "$APP_DIR/dist" -type d -exec chmod 755 {} + 2>/dev/null || true
+  find "$APP_DIR/dist" -type f -exec chmod 644 {} + 2>/dev/null || true
+  if id www-data &>/dev/null; then
+    if ! sudo -u www-data test -r "$APP_DIR/dist/index.html" 2>/dev/null; then
+      $SUDO chmod -R a+rX "$APP_DIR/dist" 2>/dev/null || true
+    fi
+  fi
+}
+
+nginx_apply_prod_ssl_if_ready() {
+  if [ "$MODE" != "prod" ] || [ "$PLATFORM" = "termux" ]; then
+    return 0
+  fi
+  [ -n "${DOMAIN:-}" ] || return 0
+  [ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ] || return 0
+  NGINX_CONF="${NGINX_CONF:-/etc/nginx/sites-available/cicada}"
+  info "Nginx: полный PROD-конфиг с SSL (${DOMAIN})..."
+  nginx_ensure_dist_readable
+  $SUDO tee "$NGINX_CONF" > /dev/null << NGINX
+server {
+    listen 80;
+    server_name ${DOMAIN};
+    return 301 https://\$host\$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name ${DOMAIN};
+
+    ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    root ${APP_DIR}/dist;
+    index index.html;
+
+    location = /satana {
+        proxy_pass http://127.0.0.1:${API_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    location = /satana.html { return 301 /satana; }
+
+    location /api/firmware/build {
+        client_max_body_size 100M;
+        proxy_pass http://127.0.0.1:${API_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 900s;
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 900s;
+    }
+
+    location /firmware/ {
+        proxy_pass http://127.0.0.1:${API_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    location ^~ /flash/ {
+        proxy_pass http://127.0.0.1:${API_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    location ^~ /flash/jammer/ {
+        proxy_pass http://127.0.0.1:${API_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:${API_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+        proxy_read_timeout 120s;
+    }
+
+    location /run {
+        proxy_pass http://127.0.0.1:${API_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+    }
+
+    location / {
+        try_files \$uri \$uri/ /index.html;
+    }
+}
+NGINX
+  $SUDO ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/cicada
+  $SUDO rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+  if $SUDO nginx -t 2>"${CICADA_ERR_DIR}/cicada_nginx_err"; then
+    svc_reload nginx
+    ok "Nginx SSL-конфиг применён"
+  else
+    warn "Nginx: ошибка после SSL-конфига:"
+    cat "${CICADA_ERR_DIR}/cicada_nginx_err" 2>/dev/null | tail -5 >&2 || true
+  fi
+}
+
 # Согласовать .env с режимом prod/local (OAuth, NODE_ENV, venv, listen)
 sync_runtime_env_file() {
   local envf="${APP_DIR}/.env"
@@ -1517,6 +1649,7 @@ if [ -f "$APP_DIR/package.json" ]; then
     ok "Фронтенд собран (dist/)"
   fi
   chmod -R 755 "$APP_DIR/dist" 2>/dev/null || true
+  nginx_ensure_dist_readable
 fi
 
 # ═══════════════════════════════════════════════════════════════
@@ -1687,6 +1820,7 @@ NGINX
     cat ${CICADA_ERR_DIR}/cicada_nginx_err >&2 || true
     warn "Исправь конфиг вручную: ${NGINX_CONF}"
   else
+    nginx_ensure_dist_readable
     svc_reload nginx
     ok "Nginx настроен (/firmware/ и /flash/ → Node:${API_PORT})"
   fi
@@ -1768,6 +1902,7 @@ if [ "$MODE" = "prod" ] && [ "$PLATFORM" = "vps" ]; then
       hint "3) без «оранжевого облака» Cloudflare на время выпуска  4) повтор: sudo certbot --nginx -d ${DOMAIN}"
       hint "Временно без SSL: SKIP_LE_SSL=1 в .env и переустановка — сайт на http://${DOMAIN}"
     fi
+    nginx_apply_prod_ssl_if_ready
   fi
 fi
 
@@ -1973,6 +2108,32 @@ if [ "$PLATFORM" != "termux" ]; then
   svc_is_active nginx \
     && ok "Nginx: работает" \
     || warn "Nginx: не работает"
+fi
+
+if [ -f "$APP_DIR/dist/index.html" ]; then
+  ok "Фронтенд: dist/index.html на месте"
+  nginx_ensure_dist_readable 2>/dev/null || true
+else
+  warn "Нет dist/index.html — сайт даст 500/404. Выполни: cd ${APP_DIR} && npm run build"
+fi
+
+if curl -fsS --max-time 8 "http://127.0.0.1:${API_PORT}/api/health" >/dev/null 2>&1; then
+  ok "API: /api/health отвечает на порту ${API_PORT}"
+else
+  warn "API не отвечает на :${API_PORT} — pm2 logs cicada-server"
+fi
+
+if [ "$MODE" = "prod" ] && [ -n "${DOMAIN:-}" ] && command -v curl &>/dev/null; then
+  _site_code=$(curl -k -s -o /dev/null -w '%{http_code}' --max-time 12 "https://${DOMAIN}/" 2>/dev/null || echo "000")
+  case "$_site_code" in
+    200|301|302|304) ok "Сайт https://${DOMAIN}/ → HTTP ${_site_code}" ;;
+    500|502|503)
+      warn "Сайт https://${DOMAIN}/ → HTTP ${_site_code} (nginx/бэкенд)"
+      hint "sudo tail -20 /var/log/nginx/error.log"
+      hint "pm2 logs cicada-server --lines 40"
+      ;;
+    *) warn "Сайт https://${DOMAIN}/ → HTTP ${_site_code} (ожидали 200)" ;;
+  esac
 fi
 
 if [ -n "$ESPHOME_BIN_PATH" ] && [ -x "$ESPHOME_BIN_PATH" ]; then
