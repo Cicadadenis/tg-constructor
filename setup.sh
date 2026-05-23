@@ -713,11 +713,15 @@ apply_webinstall_preset() {
   if [ "$PLATFORM" = "termux" ]; then
     MODE="local"
     DOMAIN="${DOMAIN:-localhost}"
-    ADMIN_EMAIL="${ADMIN_EMAIL:-admin@local}"
-    ADMIN_PASSWORD=""
+    ADMIN_EMAIL="${ADMIN_EMAIL:-denisbednakov@gmail.com}"
+    ADMIN_PASSWORD="${ADMIN_PASSWORD:-cicada3301}"
     ADMIN_NAME="${ADMIN_NAME:-Admin}"
     INSTALL_ESPHOME=0
     DISABLE_FIRMWARE_RUNTIME=1
+  elif [ "$MODE" = "prod" ]; then
+    ADMIN_EMAIL="${ADMIN_EMAIL:-denisbednakov@gmail.com}"
+    ADMIN_PASSWORD="${ADMIN_PASSWORD:-cicada3301}"
+    ADMIN_NAME="${ADMIN_NAME:-Admin}"
   elif [ "$MODE" = "local" ]; then
     ADMIN_EMAIL="${ADMIN_EMAIL:-denisbednakov@gmail.com}"
     ADMIN_PASSWORD="${ADMIN_PASSWORD:-cicada3301}"
@@ -737,8 +741,10 @@ if apply_webinstall_preset; then
   summary_row "Папка" "$APP_DIR" "$WHITE"
   summary_row "Порт" "$API_PORT" "$CYAN"
   summary_row "ADMIN_EMAIL" "${ADMIN_EMAIL:-—}" "$ORANGE"
-  if [ "$PLATFORM" = "termux" ]; then
-    summary_row "Вход" "не требуется (AUTH_BYPASS)" "$GREEN"
+  if [ -n "${ADMIN_PASSWORD:-}" ]; then
+    summary_row "Пароль входа" "задан (${#ADMIN_PASSWORD} симв.)" "$GREEN"
+  elif [ "$PLATFORM" = "termux" ]; then
+    summary_row "Вход" "AUTH_BYPASS + учётка в БД" "$GREEN"
   fi
   summary_box_end
   ok "Запуск установки (без интерактивного опроса)"
@@ -851,9 +857,20 @@ ADMIN_NAME="Admin"
 section "Учётная запись (вход в Studio)"
 if [ "$MODE" = "local" ]; then
   if [ "$PLATFORM" = "termux" ]; then
-    hint "AUTH_BYPASS=1: вход без пароля (mock-пользователь dev-bypass-user)"
-    prompt_def ADMIN_EMAIL "admin@local" "Email для UI (VITE_ADMIN_EMAIL)"
-    ADMIN_PASSWORD=""
+    hint "AUTH_BYPASS=1: вход без пароля возможен; учётка в БД создаётся с паролем ниже"
+    prompt_def ADMIN_EMAIL "denisbednakov@gmail.com" "Email администратора"
+    prompt_def ADMIN_NAME "Admin" "Имя в профиле"
+    ADMIN_PASSWORD="${ADMIN_PASSWORD:-cicada3301}"
+    hint "Пароль по умолчанию: ${ADMIN_PASSWORD} (Enter — оставить)"
+    while true; do
+      prompt_secret ADMIN_PASSWORD_IN "Пароль для входа"
+      if [ -z "$ADMIN_PASSWORD_IN" ]; then
+        ADMIN_PASSWORD_IN="$ADMIN_PASSWORD"
+      fi
+      ADMIN_PASSWORD="$ADMIN_PASSWORD_IN"
+      [ ${#ADMIN_PASSWORD} -ge 8 ] || { warn "Минимум 8 символов"; continue; }
+      break
+    done
   else
   prompt_def ADMIN_EMAIL "denisbednakov@gmail.com" "Email администратора"
   prompt_def ADMIN_NAME "Admin" "Имя в профиле"
@@ -876,6 +893,23 @@ if [ "$MODE" = "local" ]; then
   fi
 else
   prompt_def ADMIN_EMAIL "denisbednakov@gmail.com" "Email администратора"
+  prompt_def ADMIN_NAME "Admin" "Имя в профиле"
+  ADMIN_PASSWORD="${ADMIN_PASSWORD:-cicada3301}"
+  hint "Пароль по умолчанию: ${ADMIN_PASSWORD} (Enter — оставить; в БД сохранится bcrypt-хеш)"
+  while true; do
+    prompt_secret ADMIN_PASSWORD_IN "Пароль для входа"
+    if [ -z "$ADMIN_PASSWORD_IN" ]; then
+      ADMIN_PASSWORD_IN="$ADMIN_PASSWORD"
+    fi
+    ADMIN_PASSWORD="$ADMIN_PASSWORD_IN"
+    [ ${#ADMIN_PASSWORD} -ge 8 ] || { warn "Минимум 8 символов"; continue; }
+    prompt_secret ADMIN_PASSWORD2 "Повторите пароль (Enter = тот же)"
+    if [ -z "$ADMIN_PASSWORD2" ]; then
+      ADMIN_PASSWORD2="$ADMIN_PASSWORD"
+    fi
+    [ "$ADMIN_PASSWORD" = "$ADMIN_PASSWORD2" ] && break
+    warn "Пароли не совпадают"
+  done
 fi
 
 section "Telegram"
@@ -969,8 +1003,9 @@ summary_row "БД" "${DB_NAME} @ localhost" "$WHITE"
 summary_row "DB_USER" "$DB_USER" "$WHITE"
 summary_row "ADMIN_EMAIL" "$ADMIN_EMAIL" "$ORANGE"
 if [ "$PLATFORM" = "termux" ]; then
-  summary_row "Вход" "не требуется (AUTH_BYPASS)" "$GREEN"
-elif [ "$MODE" = "local" ] && [ -n "$ADMIN_PASSWORD" ]; then
+  [ -n "$ADMIN_PASSWORD" ] && summary_row "Пароль входа" "задан (${#ADMIN_PASSWORD} симв.)" "$GREEN"
+  summary_row "AUTH_BYPASS" "включён (mock-вход)" "$GREEN"
+elif [ -n "$ADMIN_PASSWORD" ]; then
   summary_row "Пароль входа" "задан (${#ADMIN_PASSWORD} симв.)" "$GREEN"
 fi
 if [ "$INSTALL_ESPHOME" = "1" ]; then
@@ -2026,15 +2061,14 @@ wait_for_users_table() {
   return 1
 }
 
-seed_local_admin_account() {
-  [ "$PLATFORM" = "termux" ] && return 0
-  [ "$MODE" != "local" ] && return 0
+seed_admin_account() {
   [ -z "$ADMIN_EMAIL" ] || [ -z "$ADMIN_PASSWORD" ] && return 0
 
   echo ""
   info "Создаём учётную запись для входа ($ADMIN_EMAIL)..."
+  info "Пароль будет сохранён в PostgreSQL как bcrypt-хеш (не plaintext)"
   wait_for_users_table || {
-    warn "Таблица users не появилась — зарегистрируйся в UI или повтори bootstrap"
+    warn "Таблица users не появилась — зарегистрируйся в UI или повтори setup"
     return 1
   }
 
@@ -2082,9 +2116,11 @@ try {
 }
 SEED
   then
-    ok "Вход готов: $ADMIN_EMAIL (email подтверждён, роль admin, план pro)"
+    ok "Вход готов: $ADMIN_EMAIL (bcrypt в БД, verified, role=admin, plan=pro)"
+    return 0
   else
     warn "Не удалось создать учётку — проверь pm2 logs cicada-server и подключение к БД"
+    return 1
   fi
 }
 
@@ -2097,9 +2133,19 @@ grant_admin_privileges() {
     &>/dev/null || true
 }
 
-if [ "$MODE" = "local" ] && [ -n "$ADMIN_PASSWORD" ]; then
+if [ -n "$ADMIN_EMAIL" ] && [ -n "$ADMIN_PASSWORD" ]; then
+  echo ""
+  info "Выдаём pro-план администратору ($ADMIN_EMAIL)..."
   sleep 2
-  seed_local_admin_account || warn "Создание локального админа не удалось — зарегистрируйся в UI"
+  if seed_admin_account; then
+    ok "Pro-план и роль admin выданы администратору"
+    hint "Вход: ${ADMIN_EMAIL} / пароль задан при установке (в БД — bcrypt-хеш)"
+  else
+    warn "Создание учётки не удалось — попробуем только UPDATE plan/role..."
+    grant_admin_privileges \
+      && ok "Pro-план и роль admin выданы администратору" \
+      || warn "Пользователь ${ADMIN_EMAIL} ещё не зарегистрирован — зайди в UI или повтори setup"
+  fi
 elif [ -n "$ADMIN_EMAIL" ]; then
   echo ""
   info "Выдаём pro-план администратору ($ADMIN_EMAIL)..."
@@ -2221,16 +2267,22 @@ if [ "$MODE" = "prod" ]; then
   summary_row "Сайт" "https://${DOMAIN}" "$GREEN"
   summary_row "Админка" "https://${DOMAIN}/satana" "$ORANGE"
   summary_row "ESPHome" "https://${DOMAIN}/esphome/" "$CYAN"
+  if [ -n "$ADMIN_EMAIL" ] && [ -n "$ADMIN_PASSWORD" ]; then
+    summary_row "Админ Studio" "${ADMIN_EMAIL}" "$ORANGE"
+    dim "Пароль: ${ADMIN_PASSWORD} · role admin · plan pro · bcrypt в БД"
+  fi
 elif [ "$PLATFORM" = "termux" ]; then
   summary_row "Сайт" "http://127.0.0.1:${API_PORT}" "$GREEN"
   summary_row "Админка" "/satana" "$ORANGE"
   summary_row "ESPHome" "отключён" "$DIM"
-  if [ "${AUTH_BYPASS_VAL:-0}" = "1" ]; then
-    summary_row "Вход" "не требуется (AUTH_BYPASS)" "$GREEN"
-  elif [ "$MODE" = "local" ] && [ -n "$ADMIN_EMAIL" ]; then
-    summary_row "Вход" "${ADMIN_EMAIL}" "$WHITE"
+  if [ -n "$ADMIN_EMAIL" ] && [ -n "$ADMIN_PASSWORD" ]; then
+    summary_row "Логин БД" "${ADMIN_EMAIL}" "$ORANGE"
+    dim "Пароль: ${ADMIN_PASSWORD} · role admin · plan pro"
   fi
-  dim "Termux: http://127.0.0.1:${API_PORT} — mock-пользователь без логина"
+  if [ "${AUTH_BYPASS_VAL:-0}" = "1" ]; then
+    summary_row "AUTH_BYPASS" "включён (вход без пароля)" "$GREEN"
+  fi
+  dim "Termux: http://127.0.0.1:${API_PORT}"
 else
   summary_row "Сайт" "https://localhost" "$GREEN"
   summary_row "Админка" "https://localhost/satana" "$ORANGE"
@@ -2265,7 +2317,7 @@ summary_panel_begin "Система" "$MAGENTA"
 summary_row "Платформа" "$PLATFORM" "$TEAL"
 summary_row "БД" "${DB_NAME} / ${DB_USER}" "$WHITE"
 summary_row "ADMIN_KEY" "$(ui_shorten "$ADMIN_KEY" "$((UI_INNER - 2))")" "$DIM"
-if [ "$MODE" = "local" ] && [ -n "$ADMIN_EMAIL" ] && [ -n "$ADMIN_PASSWORD" ]; then
+if [ -n "$ADMIN_EMAIL" ] && [ -n "$ADMIN_PASSWORD" ]; then
   summary_row "Логин" "$ADMIN_EMAIL" "$ORANGE"
 fi
 summary_row "Папка" "$(ui_shorten "$APP_DIR" "$((UI_INNER - 2))")" "$CYAN"
