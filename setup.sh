@@ -451,6 +451,7 @@ sync_runtime_env_file() {
   _env_patch NODE_ENV "${NODE_ENV_VAL}"
   _env_patch APP_ENV "${APP_ENV_VAL}"
   _env_patch DEV_IDE_ADMIN "${DEV_IDE_ADMIN_VAL:-1}"
+  _env_patch DEV_ERRORS_ADMIN "${DEV_ERRORS_ADMIN_VAL:-1}"
   _env_patch API_HOST "$api_host"
   _env_patch API_LISTEN_HOST "$listen_host"
   _env_patch APP_URL "$app_url"
@@ -1510,6 +1511,7 @@ DSL_SANDBOX_NETWORK_VAL="host"
 NODE_ENV_VAL="production"
 AUTH_BYPASS_VAL="0"
 DEV_IDE_ADMIN_VAL="1"
+DEV_ERRORS_ADMIN_VAL="1"
 if [ "$APP_ENV_VAL" = "development" ]; then
   NODE_ENV_VAL="development"
 fi
@@ -1614,6 +1616,7 @@ NODE_ENV=${NODE_ENV_VAL}
 APP_ENV=${APP_ENV_VAL}
 AUTH_BYPASS=${AUTH_BYPASS_VAL}
 DEV_IDE_ADMIN=${DEV_IDE_ADMIN_VAL}
+DEV_ERRORS_ADMIN=${DEV_ERRORS_ADMIN_VAL}
 API_HOST=${API_HOST_VAL}
 API_LISTEN_HOST=${API_LISTEN_HOST_VAL}
 API_PORT=${API_PORT}
@@ -2026,7 +2029,7 @@ fi
 if [ "$PM2_NODE_ENV" = "development" ]; then
   hint "AI Debug IDE: http://127.0.0.1:${API_PORT}/debug.html (только development)"
 elif [ "$MODE" = "prod" ]; then
-  dim "AI Debug IDE: DEV_IDE_ADMIN=1 (в .env) + вход через /admin → /debug.html"
+  dim "Dev tools: DEV_IDE_ADMIN=1, DEV_ERRORS_ADMIN=1 (в .env) + вход /admin → /debug, /dev/errors"
 fi
 
 if $HAS_SYSTEMCTL && [ "$PLATFORM" = "vps" ]; then

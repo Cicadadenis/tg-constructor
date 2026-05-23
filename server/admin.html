@@ -638,7 +638,7 @@
     .filter-tab:active { opacity: 0.7; }
     .admin-section-tabs {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 10px;
     }
     .admin-section-tabs .filter-tab {
@@ -648,6 +648,15 @@
       min-height: 42px;
       text-align: center;
       white-space: normal;
+    }
+    a.filter-tab.dev-tool-link {
+      text-decoration: none;
+      color: inherit;
+      cursor: pointer;
+    }
+    a.filter-tab.dev-tool-link:hover {
+      border-color: rgba(251, 191, 36, 0.55);
+      background: rgba(251, 191, 36, 0.08);
     }
     .user-avatar,
     .user-card .card-avatar {
@@ -1404,7 +1413,7 @@
         flex: 0 0 auto;
       }
       #admin-panel .admin-section-tabs {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 8px;
       }
       #admin-panel .admin-section-tabs .filter-tab {
@@ -1794,6 +1803,8 @@
       <div class="filter-tab" data-section="product" onclick="setSection('product', this)">🤖 Боты / продукт</div>
       <div class="filter-tab" data-section="security" onclick="setSection('security', this)">🔒 Безопасность</div>
       <div class="filter-tab" data-section="system" onclick="setSection('system', this)">🖥 Система</div>
+      <a class="filter-tab dev-tool-link" href="/debug" target="_blank" rel="noopener" title="AI Debug IDE (DEV_IDE_ADMIN)">🦋 Debug</a>
+      <a class="filter-tab dev-tool-link" href="/dev/errors" target="_blank" rel="noopener" title="Панель ошибок (DEV_ERRORS_ADMIN)">⚠ Ошибки</a>
     </div>
 
     <div id="section-money">

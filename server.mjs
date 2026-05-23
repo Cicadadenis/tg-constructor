@@ -129,6 +129,9 @@ import {
 import {
   registerDevErrorsRoutes,
   registerDevErrorsPage,
+  logDevErrorsStartupBanner,
+  isDevErrorsApiPath,
+  setDevErrorsAdminAccessChecker,
 } from './server/devErrors.mjs';
 import {
   isDevIdeApiPath,
@@ -1159,6 +1162,7 @@ async function applyAdminAuth(req) {
 }
 
 setDevIdeAdminAccessChecker(applyAdminAuth);
+setDevErrorsAdminAccessChecker(applyAdminAuth);
 
 function isAdminPublicApiRoute(req) {
   const routePath = req.path || '';
@@ -1670,6 +1674,7 @@ const CSRF_PATH_EXEMPT = new Set(['/api/subscription/webhook']);
 function isCsrfExemptApiPath(path) {
   if (CSRF_PATH_EXEMPT.has(path)) return true;
   if (path === '/api/dev/log' && isDevLoggingEnabled()) return true;
+  if (isDevErrorsApiPath(path)) return true;
   if (isDevIdeApiPath(path)) return true;
   return path.startsWith('/api/firmware/');
 }
@@ -1679,6 +1684,7 @@ function shouldSkipGlobalRateLimit(req) {
   const p = req.path;
   if (p === '/api/health' || p === '/api/csrf-token') return true;
   if (p === '/api/dev/log' && isDevLoggingEnabled()) return true;
+  if (isDevErrorsApiPath(p)) return true;
   if (isDevIdeApiPath(p)) return true;
   if (p.startsWith('/api/auth/')) return true;
   if (p === '/api/bots' || p === '/api/bot/logs' || p === '/api/me') return true;
@@ -8850,6 +8856,7 @@ initDBWithRetry()
       logAuthBypassStartupWarning();
       logDevLoggingStartupBanner();
       logDevIdeStartupBanner();
+      logDevErrorsStartupBanner();
       console.log(`🚀 Server running on http://${displayHost}:${API_PORT}`);
     });
   })

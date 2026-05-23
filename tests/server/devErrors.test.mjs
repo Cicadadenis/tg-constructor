@@ -5,6 +5,7 @@ const saved = {
   APP_ENV: process.env.APP_ENV,
   NODE_ENV: process.env.NODE_ENV,
   AUTH_BYPASS: process.env.AUTH_BYPASS,
+  DEV_ERRORS_ADMIN: process.env.DEV_ERRORS_ADMIN,
 };
 
 function restoreEnv() {
@@ -78,9 +79,11 @@ try {
 
   process.env.APP_ENV = 'production';
   process.env.NODE_ENV = 'production';
-  const { isDevLoggingEnabled: isProdDevLogging } = await import('../../core/env.mjs');
+  delete process.env.DEV_ERRORS_ADMIN;
+  const { isDevLoggingEnabled: isProdDevLogging, isDevErrorsEnabled } = await import('../../core/env.mjs');
   await loadDevErrors();
   assert.equal(isProdDevLogging(), false);
+  assert.equal(isDevErrorsEnabled(), false);
 
   const prodApp = express();
   const prodMod = await loadDevErrors();
@@ -89,6 +92,29 @@ try {
     const res = await fetch(`http://127.0.0.1:${port}/api/dev/errors`);
     assert.equal(res.status, 404);
   });
+
+  process.env.DEV_ERRORS_ADMIN = '1';
+  const prodAdminMod = await loadDevErrors();
+  const prodAdminApp = express();
+  prodAdminApp.use(express.json());
+  prodAdminMod.setDevErrorsAdminAccessChecker(async () => false);
+  prodAdminMod.registerDevErrorsRoutes(prodAdminApp);
+  await withServer(prodAdminApp, async (port) => {
+    const denied = await fetch(`http://127.0.0.1:${port}/api/dev/errors`);
+    assert.equal(denied.status, 403);
+    prodAdminMod.setDevErrorsAdminAccessChecker(async () => true);
+    const post = await fetch(`http://127.0.0.1:${port}/api/dev/errors`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: 'backend', message: 'prod admin test' }),
+    });
+    assert.equal(post.status, 204);
+    const list = await fetch(`http://127.0.0.1:${port}/api/dev/errors`);
+    assert.equal(list.status, 200);
+    const data = await list.json();
+    assert.equal(data.total, 1);
+  });
+  delete process.env.DEV_ERRORS_ADMIN;
 
   console.log('devErrors.test.mjs: ok');
 } finally {

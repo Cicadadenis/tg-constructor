@@ -5,6 +5,7 @@ const saved = {
   APP_ENV: process.env.APP_ENV,
   NODE_ENV: process.env.NODE_ENV,
   DEV_IDE_ADMIN: process.env.DEV_IDE_ADMIN,
+  DEV_ERRORS_ADMIN: process.env.DEV_ERRORS_ADMIN,
   DISABLE_FIRMWARE_RUNTIME: process.env.DISABLE_FIRMWARE_RUNTIME,
   TRUST_PROXY: process.env.TRUST_PROXY,
   TRUST_PROXY_HOPS: process.env.TRUST_PROXY_HOPS,
@@ -63,6 +64,12 @@ try {
   assert.equal(prodIdeAdmin.isDevIdeEnabled(), true);
   assert.equal(prodIdeAdmin.isDevIdeAdminGated(), true);
   delete process.env.DEV_IDE_ADMIN;
+
+  process.env.DEV_ERRORS_ADMIN = '1';
+  const prodErrorsAdmin = await loadEnvModule();
+  assert.equal(prodErrorsAdmin.isDevErrorsEnabled(), true);
+  assert.equal(prodErrorsAdmin.isDevErrorsAdminGated(), true);
+  delete process.env.DEV_ERRORS_ADMIN;
 
   const prod = await loadAuthBypassModule();
   assert.equal(prod.isAuthBypassEnabled(), false);

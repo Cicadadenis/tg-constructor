@@ -212,6 +212,11 @@ Cicada DSL — декларативный русскоязычный синта�
 - Локально: `npm run dev:full` (`NODE_ENV=development`)
 - На production-домене: `DEV_IDE_ADMIN=1` в `.env`, затем вход через **`/admin`** (тот же `admin_session` / JWT админа). Без сессии API отвечает **403**
 
+### Панель ошибок (`/dev/errors`)
+
+- Локально: вместе с `npm run dev:full` (dev-логирование)
+- На production: `DEV_ERRORS_ADMIN=1` в `.env` + вход через **`/admin`**. Сбор ошибок бэкенда в store; просмотр/очистка — только админ
+
 ---
 
 ## 🖥️ Admin-панель

@@ -114,6 +114,12 @@ async function load() {
   try {
     const res = await fetch(API, { credentials: 'include' });
     if (res.status === 404) {
+      $('offline').textContent = 'Панель недоступна — локально: npm run dev:full. На сервере: DEV_ERRORS_ADMIN=1 в .env.';
+      $('offline').classList.add('show');
+      return;
+    }
+    if (res.status === 403) {
+      $('offline').textContent = 'Нужен вход администратора. Откройте /admin, войдите, затем обновите страницу.';
       $('offline').classList.add('show');
       return;
     }

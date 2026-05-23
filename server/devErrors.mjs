@@ -1,7 +1,12 @@
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isDevLoggingEnabled } from '../core/env.mjs';
+import {
+  isDevErrorsAdminGated,
+  isDevErrorsEnabled,
+  isDevLoggingEnabled,
+  readEnv,
+} from '../core/env.mjs';
 import { logApi, logBackend, logFrontend } from './devLog.mjs';
 import { sendHtmlWithCspNonce } from '../services/sendHtmlWithCspNonce.mjs';
 
@@ -22,6 +27,14 @@ const devErrorsJson = express.json({
   limit: '64kb',
   strict: false,
 });
+
+/** @type {((req: import('express').Request) => Promise<boolean>) | null} */
+let devErrorsAdminAccessChecker = null;
+
+/** Wired from server.mjs (same checker as Debug IDE). */
+export function setDevErrorsAdminAccessChecker(fn) {
+  devErrorsAdminAccessChecker = fn;
+}
 
 /** @typedef {'frontend'|'api'|'backend'} DevErrorSource */
 
@@ -49,6 +62,37 @@ export function isDevErrorsApiPath(pathname) {
   return base === DEV_ERRORS_PATH || base.endsWith(DEV_ERRORS_PATH);
 }
 
+async function assertDevErrorsReadAccess(req, res, { json = true } = {}) {
+  if (!isDevErrorsEnabled()) {
+    if (json) res.status(404).json({ error: 'Not found' });
+    else res.status(404).send('Not found');
+    return false;
+  }
+  if (!isDevErrorsAdminGated()) return true;
+  if (!devErrorsAdminAccessChecker) {
+    if (json) res.status(503).json({ error: 'Error dashboard admin auth not configured' });
+    else res.status(503).send('Error dashboard admin auth not configured');
+    return false;
+  }
+  try {
+    const ok = await devErrorsAdminAccessChecker(req);
+    if (ok) return true;
+    if (json) {
+      res.status(403).json({
+        error: 'Admin access required',
+        hint: 'Sign in at /admin, then reload this page.',
+      });
+    } else {
+      res.status(403).type('html').send(`<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>Ошибки</title></head><body style="font-family:system-ui;background:#0d0d12;color:#e8e8f0;padding:2rem"><h1>Нужен вход администратора</h1><p>Войдите в <a href="/admin" style="color:#7eb8ff">админ-панель</a> и обновите эту страницу.</p></body></html>`);
+    }
+    return false;
+  } catch {
+    if (json) res.status(500).json({ error: 'Auth check failed' });
+    else res.status(500).send('Auth check failed');
+    return false;
+  }
+}
+
 function mirrorToTerminal(record) {
   if (!isDevLoggingEnabled()) return;
   if (record.source === 'api') {
@@ -68,7 +112,7 @@ function mirrorToTerminal(record) {
  * @param {{ skipTerminal?: boolean }} [opts]
  */
 export function ingestDevError(input, opts = {}) {
-  if (!isDevLoggingEnabled()) return null;
+  if (!isDevErrorsEnabled()) return null;
   if (ingestDepth > 0) return null;
 
   const message = compactText(input?.message);
@@ -116,7 +160,7 @@ function parseBody(req) {
 
 function ingestHandler(req, res) {
   try {
-    if (isDevLoggingEnabled()) {
+    if (isDevErrorsEnabled()) {
       const body = parseBody(req);
       ingestDevError(body);
     }
@@ -126,11 +170,8 @@ function ingestHandler(req, res) {
   if (!res.headersSent) res.status(204).end();
 }
 
-function listHandler(_req, res) {
-  if (!isDevLoggingEnabled()) {
-    res.status(404).json({ error: 'Not found' });
-    return;
-  }
+async function listHandler(req, res) {
+  if (!(await assertDevErrorsReadAccess(req, res))) return;
   res.json({
     errors: store,
     total: store.length,
@@ -138,11 +179,8 @@ function listHandler(_req, res) {
   });
 }
 
-function clearHandler(_req, res) {
-  if (!isDevLoggingEnabled()) {
-    res.status(404).json({ error: 'Not found' });
-    return;
-  }
+async function clearHandler(req, res) {
+  if (!(await assertDevErrorsReadAccess(req, res))) return;
   store.length = 0;
   res.status(204).end();
 }
@@ -162,26 +200,27 @@ export function registerDevErrorsRoutes(app) {
 }
 
 export function registerDevErrorsPage(app) {
-  app.get('/dev/errors-app.js', (req, res) => {
-    if (!isDevLoggingEnabled()) {
-      res.status(404).end();
-      return;
-    }
+  app.get('/dev/errors-app.js', async (req, res) => {
+    if (!(await assertDevErrorsReadAccess(req, res, { json: false }))) return;
     res.sendFile(DASHBOARD_JS, (err) => {
       if (err && !res.headersSent) res.status(404).end();
     });
   });
-  app.get(/^\/dev\/errors\/?$/, (req, res) => {
+  app.get(/^\/dev\/errors\/?$/, async (req, res) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       res.status(405).send('Method Not Allowed');
       return;
     }
-    if (!isDevLoggingEnabled()) {
-      res.status(404).send('Not found');
-      return;
-    }
+    if (!(await assertDevErrorsReadAccess(req, res, { json: false }))) return;
     sendHtmlWithCspNonce(res, DASHBOARD_HTML);
   });
+}
+
+export function logDevErrorsStartupBanner() {
+  if (!isDevErrorsEnabled()) return;
+  const port = readEnv('API_PORT') || '3001';
+  const mode = isDevErrorsAdminGated() ? 'admin-only (DEV_ERRORS_ADMIN=1)' : 'development';
+  console.warn(`[dev-errors] Error dashboard [${mode}] → http://127.0.0.1:${port}/dev/errors`);
 }
 
 export function ingestBackendRouteError(err, req) {

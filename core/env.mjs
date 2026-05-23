@@ -57,6 +57,22 @@ export function isDevIdeAdminGated() {
   return isProduction() && isDevIdeEnabled();
 }
 
+/**
+ * Dev error dashboard (store + /dev/errors):
+ *   development — with dev logging
+ *   production  — DEV_ERRORS_ADMIN=1 (admin session for UI/API read; see server/devErrors.mjs)
+ */
+export function isDevErrorsEnabled() {
+  if (isDevLoggingEnabled()) return true;
+  if (isProduction()) return parseTruthyFlag(process.env.DEV_ERRORS_ADMIN);
+  return false;
+}
+
+/** Production error dashboard behind admin auth (DEV_ERRORS_ADMIN=1). */
+export function isDevErrorsAdminGated() {
+  return isProduction() && isDevErrorsEnabled() && !isDevLoggingEnabled();
+}
+
 /** Local mock-user bypass — never honored in production. */
 export function isAuthBypassEnabled() {
   if (isProduction()) return false;
