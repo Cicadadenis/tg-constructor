@@ -1,120 +1,261 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Cicada AI Debug IDE</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --bg: #1e1e1e;
-      --bg2: #252526;
-      --bg3: #2d2d30;
-      --border: #3e3e42;
-      --text: #cccccc;
-      --muted: #858585;
-      --accent: #007acc;
-      --accent2: #3794ff;
-      --green: #4ec9b0;
-      --orange: #ce9178;
-      --red: #f48771;
-      --yellow: #dcdcaa;
-      --mono: 'Cascadia Code', 'Consolas', 'JetBrains Mono', ui-monospace, monospace;
-      --ui: 'Segoe UI', system-ui, sans-serif;
-      --explorer-w: 260px;
-      --chat-w: 340px;
+      --bg-deep: #060818;
+      --bg: #0a0b1e;
+      --bg-panel: rgba(12, 14, 38, 0.82);
+      --bg-panel-solid: #0c0e2a;
+      --bg2: rgba(18, 22, 52, 0.9);
+      --bg3: rgba(24, 30, 68, 0.95);
+      --border: rgba(120, 140, 255, 0.22);
+      --border-glow: rgba(0, 242, 255, 0.35);
+      --text: #e8ecff;
+      --muted: #8b93c9;
+      --cyan: #00f2ff;
+      --purple: #bc00ff;
+      --magenta: #e040fb;
+      --accent: #3d5afe;
+      --accent2: #00e5ff;
+      --green: #69f0ae;
+      --orange: #ffb74d;
+      --red: #ff6e9a;
+      --mono: 'JetBrains Mono', 'Cascadia Code', ui-monospace, monospace;
+      --ui: 'Manrope', 'Segoe UI', system-ui, sans-serif;
+      --explorer-w: 268px;
+      --chat-w: 400px;
+      --chat-list-h: 128px;
+      --radius: 10px;
+      --glow: 0 0 12px rgba(0, 242, 255, 0.25), 0 0 28px rgba(188, 0, 255, 0.12);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; overflow: hidden; }
     body {
       font-family: var(--ui);
-      background: var(--bg);
+      background: var(--bg-deep);
       color: var(--text);
       display: flex;
       flex-direction: column;
+      position: relative;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 50% at 50% 100%, rgba(188, 0, 255, 0.18) 0%, transparent 55%),
+        radial-gradient(ellipse 60% 40% at 20% 90%, rgba(0, 242, 255, 0.12) 0%, transparent 50%),
+        radial-gradient(ellipse 50% 35% at 85% 85%, rgba(224, 64, 251, 0.1) 0%, transparent 45%),
+        linear-gradient(180deg, #060818 0%, #0a0b1e 40%, #0d1030 100%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(1px 1px at 10% 20%, rgba(255,255,255,0.35) 0%, transparent 100%),
+        radial-gradient(1px 1px at 80% 40%, rgba(255,255,255,0.2) 0%, transparent 100%),
+        radial-gradient(1.5px 1.5px at 45% 70%, rgba(0,242,255,0.4) 0%, transparent 100%),
+        radial-gradient(1px 1px at 65% 15%, rgba(188,0,255,0.35) 0%, transparent 100%);
+      opacity: 0.5;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .app-shell {
+      position: relative;
+      z-index: 1;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      margin: 8px;
+      border-radius: 12px;
+      border: 1px solid transparent;
+      background:
+        linear-gradient(var(--bg), var(--bg)) padding-box,
+        linear-gradient(135deg, var(--cyan), var(--purple), var(--magenta)) border-box;
+      box-shadow: var(--glow), inset 0 1px 0 rgba(255,255,255,0.06);
+      overflow: hidden;
     }
     .topbar {
-      height: 36px;
-      background: var(--bg3);
+      height: 48px;
+      background: linear-gradient(180deg, rgba(20, 24, 56, 0.95) 0%, rgba(10, 12, 32, 0.98) 100%);
       border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
-      padding: 0 12px;
-      gap: 12px;
+      padding: 0 14px;
+      gap: 14px;
       flex-shrink: 0;
     }
-    .topbar h1 { font-size: 13px; font-weight: 600; }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .brand-logo {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--purple), var(--cyan));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      box-shadow: 0 0 16px rgba(188, 0, 255, 0.45);
+      flex-shrink: 0;
+    }
+    .topbar h1 {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      background: linear-gradient(90deg, #fff 0%, #b8c4ff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      white-space: nowrap;
+    }
     .badge {
-      font-size: 10px;
+      font-size: 9px;
       font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--green);
-      border: 1px solid rgba(78, 201, 176, 0.35);
-      padding: 2px 6px;
-      border-radius: 4px;
+      letter-spacing: 0.08em;
+      color: var(--cyan);
+      border: 1px solid rgba(0, 242, 255, 0.4);
+      padding: 3px 8px;
+      border-radius: 20px;
+      background: rgba(0, 242, 255, 0.08);
+      box-shadow: 0 0 10px rgba(0, 242, 255, 0.15);
     }
-    .topbar a { color: var(--accent2); font-size: 12px; text-decoration: none; }
-    .topbar a:hover { text-decoration: underline; }
+    .nav-tabs {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-left: 8px;
+    }
+    .nav-tabs a {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+      text-decoration: none;
+      padding: 6px 14px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      transition: color 0.15s, background 0.15s, border-color 0.15s, box-shadow 0.15s;
+    }
+    .nav-tabs a:hover {
+      color: var(--text);
+      background: rgba(0, 242, 255, 0.08);
+      border-color: rgba(0, 242, 255, 0.2);
+    }
+    .nav-tabs a.active,
+    .nav-tabs .nav-tabs-current {
+      color: var(--text);
+      background: linear-gradient(135deg, rgba(0, 242, 255, 0.12), rgba(188, 0, 255, 0.12));
+      border-color: rgba(0, 242, 255, 0.35);
+      box-shadow: 0 0 12px rgba(0, 242, 255, 0.15);
+    }
+    .nav-tabs .nav-tabs-current {
+      font-size: 12px;
+      font-weight: 500;
+      padding: 6px 14px;
+      border-radius: 6px;
+      border: 1px solid rgba(0, 242, 255, 0.35);
+    }
+    .topbar-spacer { flex: 1; }
     .workspace {
       flex: 1;
       display: grid;
       grid-template-columns: var(--explorer-w) 1fr var(--chat-w);
+      gap: 8px;
+      padding: 8px;
       min-height: 0;
+      background: rgba(0, 0, 0, 0.2);
     }
     .panel {
       display: flex;
       flex-direction: column;
       min-height: 0;
-      border-right: 1px solid var(--border);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--bg-panel);
+      backdrop-filter: blur(12px);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 4px 24px rgba(0,0,0,0.35);
+      overflow: hidden;
     }
-    .panel:last-child { border-right: none; border-left: 1px solid var(--border); }
     .panel-head {
-      height: 32px;
-      padding: 0 10px;
+      height: 36px;
+      padding: 0 12px;
       font-size: 11px;
-      font-weight: 600;
+      font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: var(--muted);
-      background: var(--bg2);
+      letter-spacing: 0.1em;
+      color: var(--cyan);
+      background: linear-gradient(90deg, rgba(0, 242, 255, 0.08), rgba(188, 0, 255, 0.06));
       border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
       justify-content: space-between;
       flex-shrink: 0;
     }
+    .panel-head-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .panel-head-actions button {
+      font-size: 11px;
+      padding: 4px 10px;
+      text-transform: none;
+      letter-spacing: 0;
+      font-weight: 500;
+    }
     .explorer {
       overflow: auto;
-      padding: 6px 0;
+      padding: 8px 4px;
       font-size: 13px;
       flex: 1;
     }
     .tree-item {
       display: flex;
       align-items: center;
-      gap: 4px;
-      padding: 3px 8px 3px calc(8px + var(--indent, 0px));
+      gap: 6px;
+      padding: 4px 10px 4px calc(10px + var(--indent, 0px));
       cursor: pointer;
       user-select: none;
       white-space: nowrap;
+      border-radius: 4px;
+      margin: 1px 4px;
+      transition: background 0.12s, box-shadow 0.12s;
     }
-    .tree-item:hover { background: rgba(255,255,255,0.06); }
-    .tree-item.active { background: rgba(0, 122, 204, 0.35); }
-    .tree-item .icon { width: 16px; text-align: center; font-size: 11px; color: var(--muted); flex-shrink: 0; }
+    .tree-item:hover {
+      background: rgba(0, 242, 255, 0.08);
+    }
+    .tree-item.active {
+      background: linear-gradient(90deg, rgba(0, 242, 255, 0.2), rgba(188, 0, 255, 0.15));
+      box-shadow: 0 0 8px rgba(0, 242, 255, 0.2);
+    }
+    .tree-item .icon { width: 16px; text-align: center; font-size: 10px; color: var(--accent2); flex-shrink: 0; }
     .tree-item.file .icon { color: var(--orange); }
-    .editor-wrap {
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
-      background: var(--bg);
-    }
+    .tree-children.collapsed { display: none; }
+    .tree-item.dir.collapsed .icon { color: var(--muted); }
+    .editor-wrap { background: transparent; }
     .editor-toolbar {
-      height: 36px;
-      padding: 0 10px;
+      height: 38px;
+      padding: 0 12px;
       display: flex;
       align-items: center;
-      gap: 8px;
-      background: var(--bg2);
+      gap: 10px;
+      background: rgba(0, 0, 0, 0.25);
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
     }
@@ -128,423 +269,378 @@
       white-space: nowrap;
     }
     .status { font-size: 11px; color: var(--muted); min-width: 80px; text-align: right; }
-    .status.ok { color: var(--green); }
+    .status.ok { color: var(--green); text-shadow: 0 0 8px rgba(105, 240, 174, 0.4); }
     .status.err { color: var(--red); }
     button {
       font: inherit;
       font-size: 12px;
-      padding: 5px 10px;
-      border-radius: 4px;
+      font-weight: 500;
+      padding: 6px 12px;
+      border-radius: 6px;
       border: 1px solid var(--border);
-      background: var(--bg3);
+      background: rgba(30, 36, 80, 0.8);
       color: var(--text);
       cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
     }
-    button:hover { background: #3a3a3d; }
-    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-    button.primary:hover { background: #1a8ad4; }
-    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    button:hover {
+      background: rgba(50, 58, 110, 0.9);
+      border-color: rgba(0, 242, 255, 0.35);
+    }
+    button.primary {
+      background: linear-gradient(135deg, #3949ab, #7c4dff);
+      border-color: rgba(188, 0, 255, 0.5);
+      color: #fff;
+      box-shadow: 0 0 14px rgba(124, 77, 255, 0.35);
+    }
+    button.primary:hover {
+      background: linear-gradient(135deg, #5c6bc0, #9c5cff);
+      box-shadow: 0 0 18px rgba(188, 0, 255, 0.45);
+    }
+    button.ghost {
+      background: transparent;
+      border-color: rgba(0, 242, 255, 0.25);
+      color: var(--accent2);
+    }
+    button:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
     #editor {
       flex: 1;
       width: 100%;
       resize: none;
       border: none;
       outline: none;
-      padding: 12px 14px;
+      padding: 14px 16px;
       font-family: var(--mono);
       font-size: 13px;
-      line-height: 1.5;
-      background: var(--bg);
-      color: var(--text);
+      line-height: 1.55;
+      background: rgba(4, 6, 20, 0.6);
+      color: #d4daf8;
       tab-size: 2;
     }
+    #editor::placeholder { color: #5c6494; }
+    #editor:focus {
+      box-shadow: inset 0 0 0 1px rgba(0, 242, 255, 0.15);
+    }
+    .chat-panel { min-height: 0; }
+    .chat-sessions-wrap {
+      border-bottom: 1px solid var(--border);
+      background: rgba(0, 0, 0, 0.2);
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      max-height: var(--chat-list-h);
+    }
+    .chat-sessions-head {
+      padding: 6px 12px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .chat-sessions {
+      overflow: auto;
+      padding: 0 8px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .chat-session-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      border: 1px solid transparent;
+      transition: background 0.12s, border-color 0.12s;
+    }
+    .chat-session-item:hover {
+      background: rgba(188, 0, 255, 0.08);
+      border-color: rgba(188, 0, 255, 0.2);
+    }
+    .chat-session-item.active {
+      background: linear-gradient(90deg, rgba(0, 242, 255, 0.12), rgba(188, 0, 255, 0.15));
+      border-color: rgba(0, 242, 255, 0.35);
+      box-shadow: 0 0 10px rgba(0, 242, 255, 0.12);
+    }
+    .chat-session-item .title {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .chat-session-item .meta { font-size: 10px; color: var(--muted); flex-shrink: 0; }
+    .chat-session-item button.del {
+      padding: 0 5px;
+      font-size: 12px;
+      line-height: 1.2;
+      opacity: 0.45;
+      background: transparent;
+      border: none;
+    }
+    .chat-session-item button.del:hover { opacity: 1; color: var(--red); }
     .chat-messages {
       flex: 1;
       overflow: auto;
-      padding: 10px;
+      padding: 12px;
       display: flex;
       flex-direction: column;
       gap: 10px;
+      min-height: 0;
     }
     .msg {
       font-size: 13px;
-      line-height: 1.45;
-      padding: 8px 10px;
-      border-radius: 6px;
+      line-height: 1.5;
+      padding: 10px 12px;
+      border-radius: 8px;
       max-width: 100%;
       word-break: break-word;
     }
-    .msg.user { background: rgba(0, 122, 204, 0.2); align-self: flex-end; }
-    .msg.assistant { background: var(--bg3); border: 1px solid var(--border); }
-    .msg.system { background: transparent; color: var(--muted); font-size: 12px; font-style: italic; }
-    .msg pre {
-      margin-top: 8px;
-      padding: 8px;
-      background: #0d0d0d;
+    .msg.user {
+      background: linear-gradient(135deg, rgba(61, 90, 254, 0.35), rgba(124, 77, 255, 0.25));
+      border: 1px solid rgba(124, 77, 255, 0.35);
+      align-self: flex-end;
+    }
+    .msg.assistant {
+      background: rgba(18, 22, 52, 0.9);
+      border: 1px solid var(--border);
+    }
+    .msg.system {
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+      font-style: italic;
+      border: 1px dashed rgba(139, 147, 201, 0.25);
+    }
+    .msg-images { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .msg-images img, .attach-preview img {
+      max-width: 140px;
+      max-height: 100px;
+      border-radius: 6px;
+      border: 1px solid rgba(0, 242, 255, 0.3);
+      object-fit: contain;
+      background: #080a18;
+    }
+    .msg .code-block {
+      margin-top: 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(0, 242, 255, 0.22);
+      background: rgba(0, 0, 0, 0.5);
+      overflow: hidden;
+    }
+    .msg .code-block-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 6px 10px;
+      background: rgba(0, 242, 255, 0.06);
+      border-bottom: 1px solid rgba(0, 242, 255, 0.12);
+      font-size: 11px;
+    }
+    .msg .code-block-label {
+      color: var(--cyan);
+      font-family: var(--mono);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .msg .code-copy-btn {
+      flex-shrink: 0;
+      padding: 3px 10px;
+      font-size: 11px;
       border-radius: 4px;
+      border: 1px solid rgba(124, 77, 255, 0.45);
+      background: rgba(61, 90, 254, 0.2);
+      color: #c8d0ff;
+      cursor: pointer;
+    }
+    .msg .code-copy-btn:hover {
+      border-color: var(--cyan);
+      color: var(--cyan);
+    }
+    .msg .code-copy-btn.copied {
+      border-color: rgba(0, 255, 136, 0.5);
+      color: #7dffb8;
+    }
+    .msg .code-block-body {
+      margin: 0;
+      padding: 10px 12px;
       overflow: auto;
       font-family: var(--mono);
       font-size: 12px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
     }
-    .patch-bar {
-      margin-top: 8px;
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
+    .msg .code-block-body code { color: #e8ecff; }
+    .msg .inline-code {
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--border);
     }
+    .patch-bar { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
     .chat-input-wrap {
       border-top: 1px solid var(--border);
-      padding: 10px;
-      background: var(--bg2);
+      padding: 12px;
+      background: linear-gradient(180deg, rgba(12, 14, 38, 0.5), rgba(8, 10, 28, 0.9));
       flex-shrink: 0;
     }
     .chat-options {
       font-size: 11px;
       color: var(--muted);
-      margin-bottom: 6px;
+      margin-bottom: 8px;
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 8px;
+    }
+    .chat-options input[type="checkbox"] {
+      accent-color: var(--purple);
+    }
+    .attach-preview { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+    .attach-item { position: relative; }
+    .attach-item button {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      padding: 0 5px;
+      font-size: 11px;
+      background: rgba(0,0,0,0.8);
+      border-color: var(--border);
     }
     #chatInput {
       width: 100%;
-      min-height: 72px;
+      min-height: 76px;
       max-height: 160px;
       resize: vertical;
       font-family: var(--ui);
       font-size: 13px;
-      padding: 8px;
-      border-radius: 4px;
-      border: 1px solid var(--border);
-      background: var(--bg);
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(0, 242, 255, 0.2);
+      background: rgba(4, 6, 22, 0.85);
       color: var(--text);
-      margin-bottom: 8px;
+      margin-bottom: 10px;
+      transition: border-color 0.15s, box-shadow 0.15s;
     }
-    .chat-actions { display: flex; gap: 8px; justify-content: flex-end; }
+    #chatInput:focus {
+      outline: none;
+      border-color: rgba(188, 0, 255, 0.45);
+      box-shadow: 0 0 12px rgba(188, 0, 255, 0.15);
+    }
+    #chatInput::placeholder { color: #5c6494; }
+    .chat-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .chat-actions .left { margin-right: auto; display: flex; gap: 6px; }
+    #imageInput { display: none; }
     .offline-banner {
       display: none;
-      padding: 8px 12px;
-      background: #5a1e1e;
-      color: #ffb4b4;
+      padding: 10px 14px;
+      background: linear-gradient(90deg, rgba(90, 20, 40, 0.95), rgba(60, 10, 50, 0.95));
+      color: #ffb4d4;
       font-size: 12px;
       text-align: center;
+      border-bottom: 1px solid rgba(255, 110, 154, 0.4);
+      position: relative;
+      z-index: 2;
     }
     .offline-banner.show { display: block; }
-    @media (max-width: 1000px) {
-      .workspace { grid-template-columns: 200px 1fr; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+    ::-webkit-scrollbar-thumb {
+      background: linear-gradient(180deg, rgba(0,242,255,0.35), rgba(188,0,255,0.35));
+      border-radius: 4px;
+    }
+    @media (max-width: 1100px) {
+      .workspace { grid-template-columns: 220px 1fr; }
       .panel.chat-panel { display: none; }
     }
   </style>
 </head>
 <body>
   <div id="offline" class="offline-banner"></div>
-  <header class="topbar">
-    <h1>Cicada AI Debug IDE</h1>
-    <span class="badge">dev only</span>
-    <a href="/">← Studio</a>
-    <a href="/dev/errors">Errors</a>
-  </header>
-  <div class="workspace">
-    <aside class="panel">
-      <div class="panel-head">
-        <span>Explorer</span>
-        <button type="button" id="refreshTree" title="Refresh">↻</button>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-logo" aria-hidden="true">🦋</div>
+        <h1>Cicada AI Debug IDE</h1>
+        <span class="badge">только dev</span>
       </div>
-      <div id="explorer" class="explorer"></div>
-    </aside>
-    <section class="panel editor-wrap">
-      <div class="panel-head"><span>Editor</span></div>
-      <div class="editor-toolbar">
-        <span class="path" id="currentPath">No file open</span>
-        <span class="status" id="saveStatus"></span>
-        <button type="button" id="saveBtn" class="primary" disabled>Save</button>
-      </div>
-      <textarea id="editor" spellcheck="false" placeholder="Open a file from the explorer…" disabled></textarea>
-    </section>
-    <aside class="panel chat-panel">
-      <div class="panel-head"><span>AI Assistant</span></div>
-      <div id="chatMessages" class="chat-messages"></div>
-      <div class="chat-input-wrap">
-        <label class="chat-options">
-          <input type="checkbox" id="includeFile" checked />
-          Include open file in context
-        </label>
-        <textarea id="chatInput" placeholder="Ask about the code, bugs, or request a patch…"></textarea>
-        <div class="chat-actions">
-          <button type="button" id="clearChat">Clear</button>
-          <button type="button" id="sendChat" class="primary">Send</button>
-        </div>
-      </div>
-    </aside>
-  </div>
-  <script>
-    const API_FILES = '/api/files';
-    const API_CHAT = '/api/ai/chat';
-
-    const $ = (id) => document.getElementById(id);
-    let openPath = null;
-    let dirty = false;
-    let chatHistory = [];
-    let sending = false;
-
-    function setOffline(msg) {
-      const el = $('offline');
-      if (msg) {
-        el.textContent = msg;
-        el.classList.add('show');
-      } else {
-        el.classList.remove('show');
-      }
-    }
-
-    async function api(path, opts = {}) {
-      const res = await fetch(path, {
-        credentials: 'include',
-        ...opts,
-        headers: {
-          'Content-Type': 'application/json',
-          ...(opts.headers || {}),
-        },
-      });
-      if (res.status === 404) {
-        setOffline('AI Debug IDE is disabled. Run backend with NODE_ENV=development (npm run server:dev).');
-        throw new Error('not available');
-      }
-      setOffline('');
-      const ct = res.headers.get('content-type') || '';
-      if (!ct.includes('application/json')) {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return null;
-      }
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-      return data;
-    }
-
-    function setSaveStatus(text, kind = '') {
-      const el = $('saveStatus');
-      el.textContent = text;
-      el.className = 'status' + (kind ? ` ${kind}` : '');
-    }
-
-    function renderTreeNode(node, depth = 0) {
-      const indent = depth * 12;
-      if (node.type === 'dir') {
-        const children = (node.children || []).map((c) => renderTreeNode(c, depth + 1)).join('');
-        return `
-          <div class="tree-item dir" style="--indent:${indent}px" data-path="${esc(node.path)}" data-type="dir">
-            <span class="icon">▾</span><span>${esc(node.name)}</span>
+      <nav class="nav-tabs">
+        <a href="/" class="nav-link-studio">← Студия</a>
+        <a href="/dev/errors" class="nav-link-errors">Ошибки</a>
+        <span class="nav-tabs-current active" aria-current="page">Debug IDE</span>
+      </nav>
+      <div class="topbar-spacer"></div>
+    </header>
+    <div class="workspace">
+      <aside class="panel">
+        <div class="panel-head">
+          <span>Проводник</span>
+          <div class="panel-head-actions">
+            <button type="button" id="toggleTreeAll" class="ghost" title="Свернуть или раскрыть все папки">Раскрыть всё</button>
+            <button type="button" id="refreshTree" class="ghost" title="Обновить дерево">↻</button>
           </div>
-          ${children}
-        `;
-      }
-      return `
-        <div class="tree-item file${openPath === node.path ? ' active' : ''}" style="--indent:${indent}px" data-path="${esc(node.path)}" data-type="file">
-          <span class="icon">📄</span><span>${esc(node.name)}</span>
         </div>
-      `;
-    }
-
-    function esc(s) {
-      return String(s)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/"/g, '&quot;');
-    }
-
-    function bindExplorer() {
-      $('explorer').querySelectorAll('.tree-item.file').forEach((el) => {
-        el.addEventListener('click', () => openFile(el.dataset.path));
-      });
-    }
-
-    async function loadTree() {
-      try {
-        const data = await api(`${API_FILES}/tree`);
-        const html = (data.roots || []).map((r) => renderTreeNode(r, 0)).join('');
-        $('explorer').innerHTML = html || '<p style="padding:12px;color:#858585">Empty tree</p>';
-        bindExplorer();
-        if (data.truncated) {
-          setOffline('File tree truncated (too many entries).');
-        }
-      } catch (err) {
-        $('explorer').innerHTML = `<p style="padding:12px;color:#f48771">${esc(err.message)}</p>`;
-      }
-    }
-
-    async function openFile(path) {
-      if (dirty && !confirm('Discard unsaved changes?')) return;
-      try {
-        const data = await api(`${API_FILES}/read?path=${encodeURIComponent(path)}`);
-        openPath = data.path;
-        dirty = false;
-        $('editor').value = data.content;
-        $('editor').disabled = false;
-        $('saveBtn').disabled = false;
-        $('currentPath').textContent = openPath;
-        setSaveStatus('');
-        document.querySelectorAll('.tree-item.file').forEach((el) => {
-          el.classList.toggle('active', el.dataset.path === openPath);
-        });
-      } catch (err) {
-        setSaveStatus(err.message, 'err');
-      }
-    }
-
-    async function saveFile() {
-      if (!openPath) return;
-      $('saveBtn').disabled = true;
-      setSaveStatus('Saving…');
-      try {
-        await api(`${API_FILES}/write`, {
-          method: 'POST',
-          body: JSON.stringify({ path: openPath, content: $('editor').value }),
-        });
-        dirty = false;
-        setSaveStatus('Saved', 'ok');
-      } catch (err) {
-        setSaveStatus(err.message, 'err');
-      } finally {
-        $('saveBtn').disabled = false;
-      }
-    }
-
-    function parseMarkdownLite(text) {
-      let html = esc(text);
-      html = html.replace(/```(\w+)?(?::([^\n]+))?\n([\s\S]*?)```/g, (_m, _lang, file, code) => {
-        const label = file ? esc(file.trim()) : 'code';
-        return `<pre data-patch-path="${file ? esc(file.trim()) : ''}"><strong>${label}</strong>\n${esc(code.trim())}</pre>`;
-      });
-      html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-      html = html.replace(/\n/g, '<br>');
-      return html;
-    }
-
-    function extractPatchesFromReply(reply) {
-      const patches = [];
-      const re = /```(?:patch|diff)?(?::([^\n]+))?\n([\s\S]*?)```/gi;
-      let m;
-      while ((m = re.exec(reply))) {
-        const p = (m[1] || '').trim();
-        if (!p) continue;
-        patches.push({ path: p, content: m[2].trim() });
-      }
-      return patches;
-    }
-
-    function applyPatch(patch) {
-      const applyToEditor = () => {
-        $('editor').value = patch.content;
-        dirty = true;
-        $('editor').disabled = false;
-        $('saveBtn').disabled = false;
-        setSaveStatus('Patch in editor — click Save to persist', 'ok');
-      };
-      if (openPath === patch.path) {
-        applyToEditor();
-        return;
-      }
-      if (!confirm(`Apply patch to ${patch.path}?`)) return;
-      openFile(patch.path).then(applyToEditor).catch(() => {
-        openPath = patch.path;
-        $('currentPath').textContent = patch.path;
-        applyToEditor();
-      });
-    }
-
-    function renderChat() {
-      const root = $('chatMessages');
-      root.innerHTML = chatHistory.map((m, msgIdx) => {
-        if (m.role === 'system') {
-          return `<div class="msg system">${esc(m.content)}</div>`;
-        }
-        const body = m.role === 'assistant' ? parseMarkdownLite(m.content) : esc(m.content);
-        let patchHtml = '';
-        if (m.role === 'assistant' && m.patches?.length) {
-          patchHtml = '<div class="patch-bar">' + m.patches.map((p, i) =>
-            `<button type="button" data-msg-idx="${msgIdx}" data-patch-idx="${i}">Apply: ${esc(p.path)}</button>`
-          ).join('') + '</div>';
-        }
-        return `<div class="msg ${m.role}">${body}${patchHtml}</div>`;
-      }).join('');
-      root.scrollTop = root.scrollHeight;
-
-      root.querySelectorAll('[data-patch-idx]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const msg = chatHistory[Number(btn.dataset.msgIdx)];
-          const patch = msg?.patches?.[Number(btn.dataset.patchIdx)];
-          if (patch) applyPatch(patch);
-        });
-      });
-    }
-
-    async function sendChat() {
-      const text = $('chatInput').value.trim();
-      if (!text || sending) return;
-      $('chatInput').value = '';
-      chatHistory.push({ role: 'user', content: text });
-      renderChat();
-
-      const body = {
-        messages: chatHistory.filter((m) => m.role === 'user' || m.role === 'assistant'),
-      };
-      if ($('includeFile').checked && openPath) {
-        body.filePath = openPath;
-        body.fileContent = $('editor').value;
-      }
-
-      sending = true;
-      $('sendChat').disabled = true;
-      chatHistory.push({ role: 'assistant', content: '…' });
-      renderChat();
-
-      try {
-        const data = await api(API_CHAT, { method: 'POST', body: JSON.stringify(body) });
-        chatHistory.pop();
-        const reply = data.reply || '';
-        const patches = extractPatchesFromReply(reply);
-        chatHistory.push({ role: 'assistant', content: reply, patches });
-      } catch (err) {
-        chatHistory.pop();
-        chatHistory.push({ role: 'assistant', content: `Error: ${err.message}` });
-      } finally {
-        sending = false;
-        $('sendChat').disabled = false;
-        renderChat();
-      }
-    }
-
-    $('editor').addEventListener('input', () => {
-      dirty = true;
-      setSaveStatus('Modified');
-    });
-    $('saveBtn').addEventListener('click', saveFile);
-    $('refreshTree').addEventListener('click', loadTree);
-    $('sendChat').addEventListener('click', sendChat);
-    $('clearChat').addEventListener('click', () => {
-      chatHistory = [{ role: 'system', content: 'Chat cleared. Ask about your open file or project code.' }];
-      renderChat();
-    });
-    $('chatInput').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        sendChat();
-      }
-    });
-
-    document.addEventListener('keydown', (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault();
-        saveFile();
-      }
-    });
-
-    chatHistory = [{
-      role: 'system',
-      content: 'Anthropic assistant ready. Open a file, ask questions, or request a patch (Ctrl+Enter to send).',
-    }];
-    renderChat();
-    loadTree();
-  </script>
+        <div id="explorer" class="explorer"></div>
+      </aside>
+      <section class="panel editor-wrap">
+        <div class="panel-head"><span>Редактор</span></div>
+        <div class="editor-toolbar">
+          <span class="path" id="currentPath">Файл не открыт</span>
+          <span class="status" id="saveStatus"></span>
+          <button type="button" id="saveBtn" class="primary" disabled>Сохранить</button>
+        </div>
+        <textarea id="editor" spellcheck="false" placeholder="Кликните по файлу в проводнике слева, чтобы открыть и редактировать…" disabled></textarea>
+      </section>
+      <aside class="panel chat-panel">
+        <div class="panel-head">
+          <span>ИИ-помощник</span>
+          <div class="panel-head-actions">
+            <button type="button" id="newChat" class="primary" title="Новый диалог">+ Новый чат</button>
+          </div>
+        </div>
+        <div class="chat-sessions-wrap">
+          <div class="chat-sessions-head"><span>История</span><span id="chatCount"></span></div>
+          <div id="chatSessions" class="chat-sessions"></div>
+        </div>
+        <div id="chatMessages" class="chat-messages"></div>
+        <div class="chat-input-wrap">
+          <label class="chat-options">
+            <input type="checkbox" id="includeProject" checked />
+            Весь проект (дерево + package.json)
+          </label>
+          <label class="chat-options">
+            <input type="checkbox" id="includeFile" checked />
+            Открытый файл в контексте
+          </label>
+          <div id="attachPreview" class="attach-preview"></div>
+          <textarea id="chatInput" placeholder="Вопрос о коде, ошибке или правка… Ctrl+V — вставить скриншот"></textarea>
+          <input type="file" id="imageInput" accept="image/png,image/jpeg,image/webp,image/gif" multiple />
+          <div class="chat-actions">
+            <div class="left">
+              <button type="button" id="pickImage" class="ghost" title="Прикрепить изображение">📷 Скрин</button>
+            </div>
+            <button type="button" id="clearChat" class="ghost">🗑 Очистить</button>
+            <button type="button" id="sendChat" class="primary">Отправить</button>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+  <script src="/debug-ide-app.js"></script>
 </body>
 </html>

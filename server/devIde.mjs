@@ -6,15 +6,16 @@ import { fileURLToPath } from 'node:url';
 import rateLimit from 'express-rate-limit';
 import { isDevIdeEnabled, readEnv } from '../core/env.mjs';
 import { atomicWriteFile, readFileUtf8 } from '../services/secureFs.mjs';
+import { sendHtmlWithCspNonce } from '../services/sendHtmlWithCspNonce.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const DEBUG_HTML = path.resolve(PROJECT_ROOT, 'public/debug.html');
+const DEBUG_JS = path.resolve(PROJECT_ROOT, 'public/debug-ide-app.js');
 
 export const DEV_IDE_FILE_API = '/api/files';
 export const DEV_IDE_CHAT_API = '/api/ai/chat';
 
-const ALLOWED_ROOTS = ['src', 'server', 'public'];
 const BLOCKED_DIR_NAMES = new Set([
   'node_modules',
   '.git',
@@ -24,6 +25,7 @@ const BLOCKED_DIR_NAMES = new Set([
   '.cache',
   '__pycache__',
   '.cursor',
+  '.dev-backups',
 ]);
 const BLOCKED_FILE_NAMES = new Set([
   '.env',
@@ -37,8 +39,11 @@ const MAX_TREE_ENTRIES = 2500;
 const MAX_READ_BYTES = 512 * 1024;
 const MAX_WRITE_BYTES = 512 * 1024;
 const MAX_CHAT_CONTEXT_CHARS = 48_000;
+const MAX_TREE_CONTEXT_CHARS = 14_000;
+const CHAT_MANIFEST_FILES = ['package.json', 'server.mjs', 'vite.config.js', 'tsconfig.json'];
 
 const ideJson = express.json({ limit: '600kb', strict: false });
+const ideChatJson = express.json({ limit: '12mb', strict: false });
 
 function trimEnv(value) {
   return String(value ?? '').trim();
@@ -78,8 +83,6 @@ function normalizeRelPath(raw) {
     if (BLOCKED_DIR_NAMES.has(part)) throw new Error('path not allowed');
     if (part.startsWith('.') && part !== '.gitkeep') throw new Error('hidden paths blocked');
   }
-  const root = parts[0];
-  if (!ALLOWED_ROOTS.includes(root)) throw new Error('path outside allowed roots');
   const baseName = parts[parts.length - 1];
   if (BLOCKED_FILE_NAMES.has(baseName)) throw new Error('file not allowed');
   const ext = path.extname(baseName).toLowerCase();
@@ -156,39 +159,97 @@ async function readDirectoryNode(absDir, relDir, depth) {
 async function buildFileTree() {
   treeCounter = 0;
   const roots = [];
-  for (const rootName of ALLOWED_ROOTS) {
-    const abs = path.join(PROJECT_ROOT, rootName);
+  let entries = [];
+  try {
+    entries = await fsp.readdir(PROJECT_ROOT, { withFileTypes: true });
+  } catch {
+    return { roots, truncated: false };
+  }
+  entries.sort((a, b) => {
+    if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+  for (const ent of entries) {
+    if (treeCounter >= MAX_TREE_ENTRIES) break;
+    if (!isAllowedDirectoryEntry(ent.name)) continue;
+    const rel = ent.name;
     try {
-      const st = await fsp.stat(abs);
-      if (!st.isDirectory()) continue;
+      normalizeRelPath(rel);
     } catch {
       continue;
     }
-    const node = await readDirectoryNode(abs, rootName, 1);
-    roots.push({
-      name: rootName,
-      path: rootName,
-      type: 'dir',
-      children: node?.children || [],
-    });
+    if (ent.isDirectory()) {
+      treeCounter += 1;
+      const sub = await readDirectoryNode(path.join(PROJECT_ROOT, ent.name), rel, 1);
+      roots.push({
+        name: rel,
+        path: rel,
+        type: 'dir',
+        children: sub?.children || [],
+      });
+    } else if (ent.isFile()) {
+      treeCounter += 1;
+      roots.push({ name: rel, path: rel, type: 'file' });
+    }
   }
   return { roots, truncated: treeCounter >= MAX_TREE_ENTRIES };
+}
+
+function stripImageBase64(data) {
+  const s = String(data ?? '').trim();
+  const m = s.match(/^data:image\/[a-z0-9+.-]+;base64,(.+)$/i);
+  return (m ? m[1] : s).slice(0, 2_400_000);
+}
+
+function normalizeUserBlocks(message) {
+  const text = String(message?.content ?? '').trim().slice(0, 16_000);
+  const images = Array.isArray(message?.images) ? message.images.slice(0, 4) : [];
+  const blocks = [];
+  for (const img of images) {
+    const media = String(img?.media_type || 'image/jpeg').toLowerCase();
+    if (!/^image\/(jpe?g|png|gif|webp)$/.test(media)) continue;
+    const data = stripImageBase64(img?.data);
+    if (!data) continue;
+    blocks.push({
+      type: 'image',
+      source: { type: 'base64', media_type: media, data },
+    });
+  }
+  if (text) blocks.push({ type: 'text', text });
+  if (!blocks.length) blocks.push({ type: 'text', text: '(скриншот)' });
+  return blocks;
 }
 
 function openAiMessagesToAnthropic(messages) {
   const systemParts = [];
   const tail = [];
   for (const m of messages) {
-    const role = m.role;
-    const content = typeof m.content === 'string' ? m.content : String(m.content ?? '');
-    if (role === 'system') systemParts.push(content);
-    else if (role === 'user' || role === 'assistant') tail.push({ role, content });
+    const role = m?.role;
+    if (role === 'system') {
+      systemParts.push(typeof m.content === 'string' ? m.content : String(m.content ?? ''));
+      continue;
+    }
+    if (role === 'assistant') {
+      tail.push({ role: 'assistant', content: String(m.content ?? '').slice(0, 16_000) });
+      continue;
+    }
+    if (role === 'user') {
+      if (Array.isArray(m.images) && m.images.length) {
+        tail.push({ role: 'user', content: normalizeUserBlocks(m) });
+      } else {
+        tail.push({ role: 'user', content: String(m.content ?? '').slice(0, 16_000) });
+      }
+    }
   }
   const merged = [];
   for (const m of tail) {
     const last = merged[merged.length - 1];
-    if (last && last.role === m.role) last.content = `${last.content}\n\n${m.content}`;
-    else merged.push({ role: m.role, content: m.content });
+    const canMerge = last
+      && last.role === m.role
+      && typeof last.content === 'string'
+      && typeof m.content === 'string';
+    if (canMerge) last.content = `${last.content}\n\n${m.content}`;
+    else merged.push(m);
   }
   return {
     system: systemParts.length ? systemParts.join('\n\n') : undefined,
@@ -278,18 +339,78 @@ const devIdeWriteRateLimit = rateLimit({
   },
 });
 
-const DEV_IDE_SYSTEM = `You are the Cicada AI Debug IDE assistant (development only).
-Help the developer analyze, explain, and fix code in this Telegram bot constructor project.
-Rules:
-- Be concise and technical.
-- When suggesting code changes, NEVER claim you saved files.
-- Propose patches in fenced blocks with a path label on the first line, e.g.:
+const DEV_IDE_SYSTEM = `Ты — ассистент Cicada AI Debug IDE (только режим разработки).
+Помогай разбирать, объяснять и исправлять код конструктора Telegram-ботов.
+Правила:
+- Отвечай по-русски, кратко и по делу.
+- В контексте ниже могут быть дерево проекта, package.json и открытый файл — используй их.
+- Не проси пользователя «прислать» или «вставить» файлы вручную, если структура уже в контексте.
+- Для детального разбора конкретного модуля попроси открыть файл в проводнике (любой путь в репозитории, кроме node_modules и .env).
+- Если приложены скриншоты — опиши, что видишь, и предложи исправления.
+- Не утверждай, что файлы уже сохранены на диске.
+- Правки кода — только в блоках с путём, например:
 \`\`\`patch:src/example.js
-// full file or unified diff
+// полный файл или diff
 \`\`\`
-- Prefer minimal, safe fixes.
-- No shell commands, no network calls, no instructions to edit files outside src/, server/, or public/.
-- If context is missing, ask clarifying questions.`;
+- Команды терминала (npm, node, git и т.д.) — только в отдельных блоках, одна команда на строку:
+\`\`\`bash
+npm run dev:full
+\`\`\`
+- Не пиши команды просто текстом в абзаце — всегда в \`\`\`bash.
+- Минимальные безопасные изменения.
+- Не предлагай правки в .env, node_modules, .dev-backups.`;
+
+async function readProjectFileForContext(relPath) {
+  const { normalized, abs } = resolveIdeAbsolute(relPath);
+  const st = await fsp.stat(abs);
+  if (!st.isFile()) throw new Error('not a file');
+  if (st.size > MAX_READ_BYTES) throw new Error('file too large');
+  return { normalized, content: await readFileUtf8(abs, MAX_READ_BYTES) };
+}
+
+function formatTreeLines(nodes, depth = 0) {
+  const lines = [];
+  for (const node of nodes || []) {
+    if (treeCounter > MAX_TREE_ENTRIES) break;
+    const indent = '  '.repeat(depth);
+    if (node.type === 'dir') {
+      lines.push(`${indent}${node.name}/`);
+      lines.push(...formatTreeLines(node.children, depth + 1));
+    } else {
+      lines.push(`${indent}${node.path}`);
+    }
+  }
+  return lines;
+}
+
+async function buildProjectContextBlock({ includeProjectTree = false, includeManifest = false } = {}) {
+  const parts = [];
+  if (includeProjectTree) {
+    treeCounter = 0;
+    const tree = await buildFileTree();
+    const lines = formatTreeLines(tree.roots);
+    let text = lines.join('\n');
+    if (text.length > MAX_TREE_CONTEXT_CHARS) {
+      text = `${text.slice(0, MAX_TREE_CONTEXT_CHARS)}\n… (обрезано)`;
+    }
+    parts.push(
+      `Дерево файлов проекта (весь репозиторий, кроме node_modules/.env — откройте файл в IDE для полного кода):\n\`\`\`\n${text || '(пусто)'}\n\`\`\``,
+    );
+    if (tree.truncated) parts.push('Примечание: полное дерево обрезано по лимиту записей.');
+  }
+  if (includeManifest) {
+    for (const rel of CHAT_MANIFEST_FILES) {
+      try {
+        const { normalized, content } = await readProjectFileForContext(rel);
+        const lang = rel.endsWith('.json') ? 'json' : 'text';
+        parts.push(`${normalized}:\n\`\`\`${lang}\n${content.slice(0, 10_000)}\n\`\`\``);
+      } catch {
+        // skip missing or blocked
+      }
+    }
+  }
+  return parts.length ? `\n\n---\nКонтекст проекта\n\n${parts.join('\n\n')}` : '';
+}
 
 async function treeHandler(_req, res) {
   try {
@@ -347,7 +468,13 @@ async function writeHandler(req, res) {
 
 async function chatHandler(req, res) {
   try {
-    const { messages, filePath, fileContent } = req.body || {};
+    const {
+      messages,
+      filePath,
+      fileContent,
+      includeProjectTree = false,
+      includeManifest = false,
+    } = req.body || {};
     if (!Array.isArray(messages) || !messages.length) {
       res.status(400).json({ error: 'messages array required' });
       return;
@@ -355,22 +482,37 @@ async function chatHandler(req, res) {
 
     const convo = messages
       .slice(-24)
-      .map((m) => ({
-        role: m?.role === 'assistant' ? 'assistant' : m?.role === 'system' ? 'system' : 'user',
-        content: String(m?.content ?? '').slice(0, 16_000),
-      }))
-      .filter((m) => m.content.trim());
+      .map((m) => {
+        const role = m?.role === 'assistant' ? 'assistant' : m?.role === 'system' ? 'system' : 'user';
+        if (role === 'user' && Array.isArray(m?.images) && m.images.length) {
+          return {
+            role,
+            content: String(m?.content ?? '').slice(0, 16_000),
+            images: m.images.slice(0, 4),
+          };
+        }
+        return { role, content: String(m?.content ?? '').slice(0, 16_000) };
+      })
+      .filter((m) => {
+        if (m.role === 'assistant') return Boolean(m.content?.trim());
+        if (m.images?.length) return true;
+        return Boolean(m.content?.trim());
+      });
 
-    let contextBlock = '';
+    const contextParts = [];
+    if (includeProjectTree || includeManifest) {
+      contextParts.push(await buildProjectContextBlock({ includeProjectTree, includeManifest }));
+    }
     if (filePath && fileContent) {
       try {
         const { normalized } = resolveIdeAbsolute(filePath);
         const clipped = String(fileContent).slice(0, MAX_CHAT_CONTEXT_CHARS);
-        contextBlock = `\n\n---\nOpen file: ${normalized}\n\`\`\`\n${clipped}\n\`\`\``;
+        contextParts.push(`\n\n---\nОткрытый файл: ${normalized}\n\`\`\`\n${clipped}\n\`\`\``);
       } catch {
         // ignore invalid path in context
       }
     }
+    const contextBlock = contextParts.join('');
 
     const apiMessages = [
       { role: 'system', content: DEV_IDE_SYSTEM + contextBlock },
@@ -394,23 +536,32 @@ export function registerDevIdeRoutes(app) {
   app.get(`${DEV_IDE_FILE_API}/tree`, guard, treeHandler);
   app.get(`${DEV_IDE_FILE_API}/read`, guard, readHandler);
   app.post(`${DEV_IDE_FILE_API}/write`, ideJson, guard, devIdeWriteRateLimit, writeHandler);
-  app.post(DEV_IDE_CHAT_API, ideJson, guard, devIdeAiRateLimit, chatHandler);
+  app.post(DEV_IDE_CHAT_API, ideChatJson, guard, devIdeAiRateLimit, chatHandler);
+}
+
+function serveDebugIdePage(req, res) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.status(405).send('Method Not Allowed');
+    return;
+  }
+  if (!isDevIdeEnabled()) {
+    res.status(404).send('Not found');
+    return;
+  }
+  sendHtmlWithCspNonce(res, DEBUG_HTML);
 }
 
 export function registerDevIdePage(app) {
-  app.get(/^\/debug\.html$/, (req, res) => {
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
-      res.status(405).send('Method Not Allowed');
-      return;
-    }
+  app.get('/debug-ide-app.js', (req, res) => {
     if (!isDevIdeEnabled()) {
-      res.status(404).send('Not found');
+      res.status(404).end();
       return;
     }
-    res.sendFile(DEBUG_HTML, (err) => {
-      if (err && !res.headersSent) res.status(404).send('Not found');
+    res.sendFile(DEBUG_JS, (err) => {
+      if (err && !res.headersSent) res.status(404).end();
     });
   });
+  app.get(/^\/debug(?:\.html)?\/?$/, serveDebugIdePage);
 }
 
 export function logDevIdeStartupBanner() {

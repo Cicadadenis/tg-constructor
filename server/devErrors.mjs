@@ -3,12 +3,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDevLoggingEnabled } from '../core/env.mjs';
 import { logApi, logBackend, logFrontend } from './devLog.mjs';
+import { sendHtmlWithCspNonce } from '../services/sendHtmlWithCspNonce.mjs';
 
 export const DEV_ERRORS_PATH = '/api/dev/errors';
 export const DEV_ERRORS_PAGE = '/dev/errors';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DASHBOARD_HTML = path.resolve(__dirname, '../public/dev/errors.html');
+const DASHBOARD_JS = path.resolve(__dirname, '../public/dev/errors-app.js');
 
 const MAX_STORED = 200;
 /** @type {import('./devErrors.mjs').DevErrorRecord[]} */
@@ -160,6 +162,15 @@ export function registerDevErrorsRoutes(app) {
 }
 
 export function registerDevErrorsPage(app) {
+  app.get('/dev/errors-app.js', (req, res) => {
+    if (!isDevLoggingEnabled()) {
+      res.status(404).end();
+      return;
+    }
+    res.sendFile(DASHBOARD_JS, (err) => {
+      if (err && !res.headersSent) res.status(404).end();
+    });
+  });
   app.get(/^\/dev\/errors\/?$/, (req, res) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       res.status(405).send('Method Not Allowed');
@@ -169,9 +180,7 @@ export function registerDevErrorsPage(app) {
       res.status(404).send('Not found');
       return;
     }
-    res.sendFile(DASHBOARD_HTML, (err) => {
-      if (err && !res.headersSent) res.status(404).send('Not found');
-    });
+    sendHtmlWithCspNonce(res, DASHBOARD_HTML);
   });
 }
 

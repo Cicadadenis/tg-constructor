@@ -115,7 +115,7 @@ import {
 } from './core/ai/irSkeletonFactory.mjs';
 import { isPlaceholderBotToken } from './core/botTokenPlaceholders.mjs';
 import compileRouter from './server/routes/compile.mjs';
-import { isProduction } from './core/env.mjs';
+import { isProduction, resolveTrustProxySetting } from './core/env.mjs';
 import {
   devApiRequestLogger,
   devErrorHandler,
@@ -141,7 +141,7 @@ const { Pool } = pg;
 
 const app = express();
 app.disable('x-powered-by');
-app.set('trust proxy', process.env.TRUST_PROXY === 'false' ? false : true);
+app.set('trust proxy', resolveTrustProxySetting());
 
 registerDevLogRoutes(app);
 registerDevErrorsRoutes(app);
@@ -390,7 +390,8 @@ registerCleanUrlRouting(app);
 registerDevErrorsPage(app);
 registerDevIdePage(app);
 
-app.all(/^\/(?:satana|debug)(?:\/|\.|$)/, authAdminPage, (req, res) => {
+// Legacy /satana → /admin. Do not match /debug — that is the dev AI IDE (registerDevIdePage).
+app.all(/^\/satana(?:\/|\.|$)/, authAdminPage, (req, res) => {
   res.redirect(302, '/admin');
 });
 

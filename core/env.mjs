@@ -58,3 +58,22 @@ export function isAuthBypassEnabled() {
 export function isFirmwareRuntimeEnabled() {
   return !parseTruthyFlag(process.env.DISABLE_FIRMWARE_RUNTIME);
 }
+
+/**
+ * Express `trust proxy` value. Never use bare `true` — express-rate-limit rejects it
+ * (ERR_ERL_PERMISSIVE_TRUST_PROXY). Use hop count (1) behind a single reverse proxy.
+ */
+export function resolveTrustProxySetting() {
+  const raw = readEnv('TRUST_PROXY').toLowerCase();
+  if (['false', '0', 'off', 'no'].includes(raw)) return false;
+  if (/^\d+$/.test(raw)) return Number(raw);
+  if (['true', '1', 'on', 'yes'].includes(raw)) {
+    const hops = readEnv('TRUST_PROXY_HOPS');
+    return /^\d+$/.test(hops) ? Number(hops) : 1;
+  }
+  if (readEnv('NODE_ENV').toLowerCase() === 'production') {
+    const hops = readEnv('TRUST_PROXY_HOPS');
+    return /^\d+$/.test(hops) ? Number(hops) : 1;
+  }
+  return false;
+}

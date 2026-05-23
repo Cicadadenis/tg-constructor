@@ -1,3 +1,6 @@
+# Local dev snapshots (npm run dev:full)
+.dev-backups/
+
 # Dependencies & build
 node_modules/
 dist/

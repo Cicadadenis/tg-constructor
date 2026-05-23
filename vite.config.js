@@ -82,7 +82,12 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: true,
         },
-        '/debug.html': {
+        '/debug': {
+          target: apiTarget,
+          changeOrigin: true,
+          secure: true,
+        },
+        '/debug-ide-app.js': {
           target: apiTarget,
           changeOrigin: true,
           secure: true,

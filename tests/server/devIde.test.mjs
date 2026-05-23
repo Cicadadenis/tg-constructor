@@ -64,8 +64,11 @@ try {
     assert.equal(bad2.status, 400);
 
     const rel = 'tests/server/fixtures-dev-ide/src/dev-ide-fixture.txt';
-    const blockedOutside = await fetch(`${base}/api/files/read?path=${encodeURIComponent(rel)}`);
-    assert.equal(blockedOutside.status, 400);
+    const fixtureRead = await fetch(`${base}/api/files/read?path=${encodeURIComponent(rel)}`);
+    assert.equal(fixtureRead.status, 200);
+
+    const blockedBackup = await fetch(`${base}/api/files/read?path=${encodeURIComponent('.dev-backups/foo')}`);
+    assert.equal(blockedBackup.status, 400);
 
     const writeBlocked = await fetch(`${base}/api/files/write`, {
       method: 'POST',

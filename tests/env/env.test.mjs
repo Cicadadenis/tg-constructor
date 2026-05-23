@@ -5,6 +5,8 @@ const saved = {
   APP_ENV: process.env.APP_ENV,
   NODE_ENV: process.env.NODE_ENV,
   DISABLE_FIRMWARE_RUNTIME: process.env.DISABLE_FIRMWARE_RUNTIME,
+  TRUST_PROXY: process.env.TRUST_PROXY,
+  TRUST_PROXY_HOPS: process.env.TRUST_PROXY_HOPS,
 };
 
 function restoreEnv() {
@@ -64,6 +66,21 @@ try {
   const legacyProd = await loadEnvModule();
   assert.equal(legacyProd.isProduction(), true);
   assert.equal(legacyProd.isAuthBypassEnabled(), false);
+
+  delete process.env.TRUST_PROXY;
+  delete process.env.TRUST_PROXY_HOPS;
+  process.env.NODE_ENV = 'development';
+  process.env.APP_ENV = 'production';
+  const messyDev = await loadEnvModule();
+  assert.equal(messyDev.resolveTrustProxySetting(), false);
+
+  process.env.NODE_ENV = 'production';
+  const prodProxy = await loadEnvModule();
+  assert.equal(prodProxy.resolveTrustProxySetting(), 1);
+
+  process.env.TRUST_PROXY = 'true';
+  const explicitTrue = await loadEnvModule();
+  assert.equal(explicitTrue.resolveTrustProxySetting(), 1);
 
   console.log('env.test.mjs: ok');
 } finally {

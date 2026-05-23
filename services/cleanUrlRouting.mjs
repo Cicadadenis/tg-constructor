@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { sendHtmlWithCspNonce } from './sendHtmlWithCspNonce.mjs';
 
 /** Paths that must never be rewritten or stripped of `.html`. */
 const REDIRECT_EXCLUDE_PREFIXES = ['/api/', '/firmware/'];
@@ -73,11 +74,12 @@ export function registerCleanUrlRouting(app, { distRoot = 'dist', publicRoot = '
     if (p.startsWith('/api') || p.startsWith('/firmware')) return next();
     const base = path.basename(p);
     if (base.includes('.') && base !== '') return next();
+    const rel = p.replace(/^\//, '');
     const fp = firstExistingFile([
-      path.join(dist, `${p}.html`),
-      path.join(pub, `${p}.html`),
+      path.join(dist, rel + '.html'),
+      path.join(pub, rel + '.html'),
     ]);
     if (!fp) return next();
-    return res.sendFile(fp);
+    return sendHtmlWithCspNonce(res, fp);
   });
 }
