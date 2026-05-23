@@ -1443,11 +1443,13 @@ elif [ "$PLATFORM" = "termux" ]; then
   VITE_API_TARGET="http://127.0.0.1:${API_PORT}"
   APP_URL_VAL="http://127.0.0.1:${API_PORT}"
   APP_ENV_VAL="development"
+  GOOGLE_CALLBACK_URL="${GOOGLE_CALLBACK_URL:-${APP_URL_VAL}/api/auth/google/callback}"
 else
   VITE_API_URL="https://localhost/api"
   VITE_API_TARGET="https://localhost"
   APP_URL_VAL="https://localhost"
   APP_ENV_VAL="development"
+  GOOGLE_CALLBACK_URL="${GOOGLE_CALLBACK_URL:-${APP_URL_VAL}/api/auth/google/callback}"
 fi
 
 DSL_SANDBOX_MODE_VAL="auto"
@@ -1552,6 +1554,9 @@ FIRMWARE_WS_LINE="# FIRMWARE_WORKSPACE_ROOT=${APP_DIR}"
 CORS_LINE="# CORS_ORIGINS=${APP_URL_VAL}"
 [ -n "$CORS_ORIGINS" ] && CORS_LINE="CORS_ORIGINS=${CORS_ORIGINS}"
 
+# Platform-блоки (.env) — только через ${FIRMWARE_ENV_BLOCK} ДО heredoc.
+# Нельзя вкладывать if/cat >> внутрь << ENV: иначе heredoc «съедает» nginx/PM2
+# и set -u падает на NGINX_CONF (см. битый in.sh ~строка 1243).
 cat > "$APP_DIR/.env" << ENV
 # ─── Server ──────────────────────────────────────────────────
 NODE_ENV=${NODE_ENV_VAL}
@@ -1630,11 +1635,14 @@ ENV
 chmod 600 "$APP_DIR/.env"
 ok ".env создан (права 600)"
 
-# Termux: очистка битых строк ESPHome/JAMMER из старых .env
+# Termux: очистка битых строк ESPHome/JAMMER/shell из старых .env (in.sh)
 if [ "$PLATFORM" = "termux" ] && [ -f "$APP_DIR/.env" ]; then
   _env_tmp="${APP_DIR}/.env.termux-fix.$$"
-  grep -v -E '^(ESPHOME_BIN|PIO_BIN|ESPHOME_JOBS_ROOT|JAMMER_FIRMWARE_BIN|FIRMWARE_WORKSPACE_ROOT|DB_TYPE)=' \
-    "$APP_DIR/.env" 2>/dev/null | grep -v -E '^(if |cat |ENV_ESP|fi$)' >"$_env_tmp" || cp "$APP_DIR/.env" "$_env_tmp"
+  grep -v -E '^(ESPHOME_BIN|PIO_BIN|ESPHOME_JOBS_ROOT|JAMMER_FIRMWARE_BIN|FIRMWARE_WORKSPACE_ROOT|DB_TYPE|ESPHOME_MAX_CONCURRENT_BUILDS|FIRMWARE_DOWNLOAD_TTL_MS|ESPHOME_CLEANUP_INTERVAL_MS|FIRMWARE_BUILD_TIMEOUT_MS|ESPHOME_PLATFORMIO_HOME|ESPHOME_PUBLIC_BUILD)=' \
+    "$APP_DIR/.env" 2>/dev/null \
+    | grep -v -E '^(if |cat |ENV_ESP|fi$|else$|server \{|listen |location |proxy_pass )' \
+    | grep -v -E '^# ─── ESPHome / прошивки \(только на VPS' \
+    >"$_env_tmp" || cp "$APP_DIR/.env" "$_env_tmp"
   if ! grep -q '^DISABLE_FIRMWARE_RUNTIME=1' "$_env_tmp" 2>/dev/null; then
     echo "DISABLE_FIRMWARE_RUNTIME=1" >>"$_env_tmp"
   fi
@@ -1655,9 +1663,15 @@ sync_runtime_env_file
 if [ -f "$APP_DIR/package.json" ]; then
   install_phase "Сборка фронтенда (Vite)"
   prune_legacy_core_paths
-  info "npm run build..."
+  if [ "$PLATFORM" = "termux" ]; then
+    info "Termux: npm run build (NODE_OPTIONS=--max-old-space-size=2048)..."
+    _build_cmd=(env NODE_OPTIONS="--max-old-space-size=2048" npm run build)
+  else
+    info "npm run build..."
+    _build_cmd=(npm run build)
+  fi
   cd "$APP_DIR"
-  if ! npm run build 2>${CICADA_ERR_DIR}/cicada_build_err; then
+  if ! "${_build_cmd[@]}" 2>${CICADA_ERR_DIR}/cicada_build_err; then
     warn "Сборка фронтенда не удалась. Причина:"
     tail -20 ${CICADA_ERR_DIR}/cicada_build_err >&2 || true
     warn "Для ручного запуска: cd ${APP_DIR} && npm run build"
