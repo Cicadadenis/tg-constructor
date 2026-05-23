@@ -28,13 +28,17 @@ export default defineConfig(({ mode }) => {
   const isDevMode = mode !== 'production'
   const apiTarget = env.VITE_API_TARGET || 'http://127.0.0.1:3001'
   const devPort = Number(env.VITE_DEV_PORT) || 5173
-  const authBypassDev = isDevMode && parseTruthyFlag(env.AUTH_BYPASS || env.VITE_AUTH_BYPASS)
+  const localInstallBypass =
+    parseTruthyFlag(env.AUTH_BYPASS || env.VITE_AUTH_BYPASS)
+    && (env.APP_ENV === 'development' || env.NODE_ENV === 'development');
+  const authBypassActive = parseTruthyFlag(env.AUTH_BYPASS || env.VITE_AUTH_BYPASS)
+    && (isDevMode || localInstallBypass);
 
   return {
     base: './',
     plugins: [react(), devServerBanner()],
     define: {
-      'import.meta.env.VITE_AUTH_BYPASS': JSON.stringify(authBypassDev ? '1' : '0'),
+      'import.meta.env.VITE_AUTH_BYPASS': JSON.stringify(authBypassActive ? '1' : '0'),
       'import.meta.env.VITE_APP_MODE': JSON.stringify(isDevMode ? 'development' : 'production'),
     },
     resolve: {

@@ -8,24 +8,28 @@
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#030308;--bg2:#060b14;--panel:rgba(2,10,20,.92);
-  --pb:rgba(0,229,255,.18);--pbh:rgba(0,229,255,.5);
-  --cyan:#00e5ff;--cdim:rgba(0,229,255,.1);
+  --bg:#02040c;--bg2:#061018;--panel:rgba(4,14,28,.72);
+  --pb:rgba(0,229,255,.22);--pbh:rgba(0,229,255,.55);
+  --cyan:#00e5ff;--cdim:rgba(0,229,255,.12);
   --green:#00ff41;--gdim:rgba(0,255,65,.1);
   --magenta:#ff006e;--yellow:#ffbe00;--ydim:rgba(255,190,0,.1);
-  --text:#b8d8e8;--tdim:#3a6070;--red:#ff2257;--rdim:rgba(255,34,87,.12);
+  --text:#c8e8f8;--tdim:#4a7088;--red:#ff2257;--rdim:rgba(255,34,87,.12);
+  --ring-r:54;--ring-c:339.292;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
 body{
   min-height:100vh;font-family:'Rajdhani',sans-serif;
-  background:var(--bg);color:var(--text);overflow-x:hidden;font-size:15px;
+  background:radial-gradient(ellipse 120% 80% at 50% -20%,rgba(0,80,120,.35),transparent 55%),
+             radial-gradient(ellipse 80% 50% at 50% 100%,rgba(0,40,80,.25),transparent 50%),
+             linear-gradient(180deg,#02040c 0%,#030810 40%,#02060e 100%);
+  color:var(--text);overflow-x:hidden;font-size:15px;
 }
 body::before{
   content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
-  background-image:linear-gradient(rgba(0,229,255,.025) 1px,transparent 1px),
-                   linear-gradient(90deg,rgba(0,229,255,.025) 1px,transparent 1px);
-  background-size:52px 52px;
+  background-image:linear-gradient(rgba(0,229,255,.04) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(0,229,255,.04) 1px,transparent 1px);
+  background-size:48px 48px;
 }
 body::after{
   content:'';position:fixed;inset:0;z-index:1;pointer-events:none;
@@ -64,9 +68,11 @@ nav{
 .tab.active{color:var(--cyan)}
 .tab.active::after{transform:scaleX(1)}
 .nav-live{
-  margin-left:auto;display:flex;align-items:center;gap:8px;
-  font-family:'Share Tech Mono',monospace;font-size:.68rem;color:var(--green);
+  margin-left:auto;display:flex;align-items:center;gap:6px;
+  font-family:'Share Tech Mono',monospace;font-size:.72rem;color:var(--green);
+  letter-spacing:.08em;text-shadow:0 0 12px rgba(0,255,65,.5);
 }
+.nav-live::before{content:'+';font-weight:700}
 @keyframes dp{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.6)}}
 .dp{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);animation:dp 1.4s ease-in-out infinite}
 
@@ -229,7 +235,194 @@ select.inp option{background:#060b14;color:var(--text)}
 /* PAGES */
 .page{display:none}.page.active{display:block}
 
-@media(max-width:520px){.r2{grid-template-columns:1fr}.btn{clip-path:none}.btn.ok{clip-path:none}}
+/* SYSMON — circular pods (screenshot layout) */
+.sysmon-wrap{max-width:1280px;margin:0 auto;padding:28px 20px 48px}
+.sysmon-hero{text-align:center;margin-bottom:36px}
+.sysmon-title{
+  font-family:'Orbitron',sans-serif;font-weight:900;
+  font-size:clamp(1.8rem,4.5vw,2.75rem);letter-spacing:.22em;
+  color:var(--cyan);text-transform:uppercase;
+  text-shadow:0 0 20px rgba(0,229,255,.7),0 0 50px rgba(0,229,255,.35),0 0 80px rgba(0,229,255,.15);
+}
+.sysmon-host{
+  font-family:'Share Tech Mono',monospace;font-size:.72rem;
+  color:var(--tdim);margin-top:10px;letter-spacing:.1em;line-height:1.6;
+}
+.pods-row{
+  display:flex;flex-wrap:wrap;justify-content:center;align-items:flex-start;
+  gap:clamp(12px,3vw,28px);margin-bottom:32px;
+}
+.pod{
+  flex:1 1 260px;max-width:340px;min-width:240px;
+  display:flex;flex-direction:column;align-items:center;
+  padding:8px 12px 20px;
+}
+.pod-base{
+  position:relative;width:min(100%,280px);aspect-ratio:1;
+  display:flex;align-items:center;justify-content:center;
+}
+.pod-base::before{
+  content:'';position:absolute;inset:8%;border-radius:50%;
+  background:radial-gradient(circle at 50% 55%,rgba(0,229,255,.18),rgba(0,80,120,.08) 45%,transparent 70%);
+  box-shadow:0 0 60px rgba(0,229,255,.15),0 0 120px rgba(0,120,180,.08),inset 0 0 40px rgba(0,229,255,.06);
+}
+.pod-base::after{
+  content:'';position:absolute;inset:0;border-radius:50%;
+  border:1px solid rgba(0,229,255,.25);
+  background:radial-gradient(circle at 30% 25%,rgba(255,255,255,.08),transparent 50%),
+              rgba(4,16,32,.55);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+}
+.pod-glass{
+  position:relative;z-index:2;width:78%;aspect-ratio:1;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  border-radius:50%;
+  background:radial-gradient(circle at 50% 30%,rgba(0,229,255,.12),rgba(2,12,24,.4) 60%);
+  border:1px solid rgba(0,229,255,.2);
+  box-shadow:inset 0 0 30px rgba(0,229,255,.08),0 8px 32px rgba(0,0,0,.4);
+}
+.pod-ring{position:absolute;inset:4%;z-index:3;width:92%;height:92%;pointer-events:none}
+.pod-ring circle{fill:none;stroke-width:5;stroke-linecap:round}
+.pod-ring .ring-track{stroke:rgba(0,229,255,.12)}
+.pod-ring .ring-fill{
+  stroke:var(--cyan);filter:drop-shadow(0 0 6px var(--cyan));
+  transition:stroke-dashoffset .6s ease,stroke .3s;
+}
+.pod-ring .ring-fill.warn{stroke:var(--yellow);filter:drop-shadow(0 0 6px var(--yellow))}
+.pod-ring .ring-fill.crit{stroke:var(--red);filter:drop-shadow(0 0 6px var(--red))}
+.pod-ring .ring-fill.ok{stroke:var(--green);filter:drop-shadow(0 0 6px var(--green))}
+.pod-pct{
+  font-family:'Orbitron',sans-serif;font-size:clamp(1.4rem,3.5vw,1.85rem);
+  font-weight:700;color:#fff;text-shadow:0 0 16px rgba(0,229,255,.6);
+  line-height:1;
+}
+.pod-label{
+  font-family:'Orbitron',sans-serif;font-size:.58rem;letter-spacing:.28em;
+  color:var(--cyan);text-transform:uppercase;margin-top:14px;text-align:center;
+  text-shadow:0 0 10px rgba(0,229,255,.4);
+}
+.pod-sub{
+  font-family:'Share Tech Mono',monospace;font-size:.65rem;color:var(--tdim);
+  margin-top:6px;text-align:center;letter-spacing:.06em;
+  max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 8px;
+}
+.pod-stats{
+  width:100%;margin-top:14px;padding:0 4px;
+  font-family:'Share Tech Mono',monospace;font-size:.72rem;
+}
+.pod-stat{
+  display:flex;justify-content:space-between;padding:6px 0;
+  border-bottom:1px solid rgba(0,229,255,.08);
+}
+.pod-stat span:first-child{color:var(--tdim);letter-spacing:.06em}
+.pod-stat span:last-child{color:var(--cyan)}
+.pod-cores{
+  display:flex;flex-wrap:wrap;gap:8px 14px;justify-content:center;
+  margin-top:12px;font-family:'Share Tech Mono',monospace;font-size:.68rem;color:var(--tdim);
+}
+.pod-cores span em{font-style:normal;color:var(--cyan);margin-left:4px}
+.proc-panel{
+  position:relative;background:var(--panel);border:1px solid var(--pb);
+  backdrop-filter:blur(10px);padding:18px 20px 8px;
+  box-shadow:0 0 40px rgba(0,229,255,.04),inset 0 0 60px rgba(0,229,255,.02);
+}
+.proc-panel::before,.proc-panel::after{
+  content:'';position:absolute;width:14px;height:14px;
+  border-color:var(--cyan);border-style:solid;opacity:.4;pointer-events:none;
+}
+.proc-panel::before{top:-1px;left:-1px;border-width:2px 0 0 2px}
+.proc-panel::after{bottom:-1px;right:-1px;border-width:0 2px 2px 0}
+@keyframes podGlow{0%,100%{opacity:.85}50%{opacity:1}}
+.pod-base::before{animation:podGlow 4s ease-in-out infinite}
+.tab.active::after{height:3px;box-shadow:0 0 14px var(--cyan)}
+.proc-head{
+  display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;
+  gap:12px;margin-bottom:14px;
+}
+.proc-head .ch{margin-bottom:0}
+.proc-filter{
+  max-width:240px;padding:6px 10px;font-size:.78rem;
+  background:rgba(0,12,24,.85);border:1px solid rgba(0,229,255,.2);
+}
+
+/* WEB.INSTALL — glass panels (как SYS.MONITOR) */
+.install-wrap{max-width:720px;margin:0 auto;padding:28px 20px 56px}
+.install-hero{text-align:center;margin-bottom:8px}
+.install-sub{
+  font-family:'Orbitron',sans-serif;font-size:.62rem;letter-spacing:.42em;
+  color:var(--tdim);margin-top:6px;text-transform:uppercase;
+}
+.install-sub span{opacity:.45}
+.plat-badge{
+  display:inline-block;margin-top:14px;padding:5px 22px;
+  font-family:'Orbitron',sans-serif;font-size:.58rem;letter-spacing:.3em;
+  color:var(--cyan);background:rgba(0,229,255,.08);
+  border:1px solid rgba(0,229,255,.35);
+  box-shadow:0 0 20px rgba(0,229,255,.15),inset 0 0 12px rgba(0,229,255,.06);
+  clip-path:polygon(12px 0%,calc(100% - 12px) 0%,100% 50%,calc(100% - 12px) 100%,12px 100%,0% 50%);
+  transition:border-color .3s,color .3s,box-shadow .3s;
+}
+.plat-badge.ok{color:var(--green);border-color:rgba(0,255,65,.45);background:var(--gdim);box-shadow:0 0 20px rgba(0,255,65,.2)}
+.plat-badge.err{color:var(--tdim);border-color:rgba(74,112,136,.4);background:transparent;box-shadow:none}
+.glass-panel{
+  position:relative;margin-bottom:22px;padding:26px 22px 20px;
+  background:var(--panel);border:1px solid var(--pb);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  box-shadow:0 0 40px rgba(0,229,255,.05),inset 0 0 50px rgba(0,229,255,.02);
+  transition:border-color .3s,box-shadow .3s;
+}
+.glass-panel:hover{border-color:var(--pbh);box-shadow:0 0 50px rgba(0,229,255,.08),inset 0 0 60px rgba(0,229,255,.03)}
+.glass-panel::before,.glass-panel::after{
+  content:'';position:absolute;width:14px;height:14px;
+  border-color:var(--cyan);border-style:solid;opacity:.42;pointer-events:none;z-index:2;
+}
+.glass-panel::before{top:-1px;left:-1px;border-width:2px 0 0 2px}
+.glass-panel::after{bottom:-1px;right:-1px;border-width:0 2px 2px 0}
+.panel-tag{
+  position:absolute;top:0;left:18px;transform:translateY(-50%);
+  padding:3px 14px;
+  font-family:'Orbitron',sans-serif;font-size:.56rem;letter-spacing:.24em;
+  text-transform:uppercase;color:var(--cyan);
+  background:linear-gradient(180deg,#071420 0%,rgba(4,14,28,.98) 100%);
+  border:1px solid rgba(0,229,255,.35);
+  box-shadow:0 0 14px rgba(0,229,255,.12);
+  white-space:nowrap;z-index:3;
+}
+.panel-desc{font-size:.8rem;color:var(--tdim);margin-bottom:14px;line-height:1.55;padding-top:4px}
+.warn-panel{
+  position:relative;margin-bottom:22px;padding:14px 18px 14px 20px;
+  background:rgba(48,6,14,.55);border:1px solid rgba(255,34,87,.4);
+  backdrop-filter:blur(10px);color:#ff8aa8;font-size:.84rem;line-height:1.55;
+  box-shadow:0 0 30px rgba(255,34,87,.08),inset 0 0 24px rgba(255,34,87,.04);
+}
+.warn-panel::before,.warn-panel::after{
+  content:'';position:absolute;width:10px;height:10px;
+  border-color:var(--red);border-style:solid;opacity:.5;pointer-events:none;
+}
+.warn-panel::before{top:-1px;left:-1px;border-width:2px 0 0 2px}
+.warn-panel::after{bottom:-1px;right:-1px;border-width:0 2px 2px 0}
+.install-wrap .inp{
+  background:rgba(0,10,22,.75);
+  border-color:rgba(0,229,255,.22);
+  box-shadow:inset 0 2px 8px rgba(0,0,0,.35);
+}
+.install-wrap .inp:focus{
+  border-color:rgba(0,229,255,.65);
+  box-shadow:0 0 0 1px rgba(0,229,255,.15),0 0 20px rgba(0,229,255,.12),inset 0 2px 8px rgba(0,0,0,.4);
+}
+.install-wrap .steps{
+  background:rgba(0,8,18,.6);border:1px solid rgba(0,229,255,.12);
+  border-radius:0;backdrop-filter:blur(6px);
+}
+.install-footer{
+  text-align:center;margin-top:36px;
+  font-family:'Share Tech Mono',monospace;font-size:.62rem;
+  color:rgba(74,112,136,.55);letter-spacing:.18em;
+}
+.install-submit-wrap{margin-top:8px;padding:4px 0 8px}
+
+@media(max-width:520px){.r2{grid-template-columns:1fr}.btn{clip-path:none}.btn.ok{clip-path:none}.panel-tag{font-size:.5rem;left:12px;padding:2px 10px}}
+@media(max-width:720px){.pods-row{flex-direction:column;align-items:center}.pod{max-width:320px}}
 </style>
 </head>
 <body>
@@ -241,78 +434,80 @@ select.inp option{background:#060b14;color:var(--text)}
   <div class="brand">CICADA<span class="blink">_</span></div>
   <button class="tab active" onclick="switchTab('monitor',this)">SYS.MONITOR</button>
   <button class="tab" onclick="switchTab('install',this)">WEB.INSTALL</button>
-  <div class="nav-live"><span class="dp"></span>ONLINE</div>
+  <div class="nav-live">ONLINE</div>
 </nav>
 
 <!-- ═══════════════════ MONITOR PAGE ═══════════════════ -->
 <div id="page-monitor" class="page active">
-<div style="max-width:1400px;margin:0 auto;padding:24px 20px 60px">
+<div class="sysmon-wrap">
 
-  <header style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:28px">
-    <div>
-      <h1 class="glitch np" style="font-family:'Orbitron',sans-serif;font-weight:900;font-size:clamp(1.4rem,3vw,2.2rem);color:var(--cyan);letter-spacing:.18em;text-transform:uppercase">
-        CICADA<span style="color:var(--green)">_</span>SYSMON
-      </h1>
-      <p id="m-host" style="font-family:'Share Tech Mono',monospace;font-size:.72rem;color:var(--tdim);margin-top:6px;letter-spacing:.12em">
-        ESTABLISHING UPLINK...
-      </p>
-    </div>
-    <div style="text-align:right;font-family:'Share Tech Mono',monospace">
-      <div style="font-size:.68rem;color:var(--green);display:flex;align-items:center;gap:8px;justify-content:flex-end">
-        <span class="dp"></span>LIVE TELEMETRY
-      </div>
-      <div id="m-time" style="font-size:.72rem;color:var(--cyan);margin-top:4px">--:--:--</div>
-      <div id="m-up" style="font-size:.65rem;color:var(--tdim);margin-top:2px;letter-spacing:.1em">UP: -- -- -- --</div>
-    </div>
+  <header class="sysmon-hero fu">
+    <h1 class="sysmon-title np">CICADA_SYSMON</h1>
+    <p id="m-host" class="sysmon-host">ESTABLISHING UPLINK...</p>
+    <p id="m-meta" class="sysmon-host" style="margin-top:4px;font-size:.65rem">
+      <span id="m-time">--:--:--</span> · <span id="m-up">UP: --</span>
+    </p>
   </header>
 
-  <div class="div" style="margin-bottom:24px"><div class="dd"></div></div>
+  <div class="pods-row">
 
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:20px">
-
-    <div class="card fu" style="padding:18px 20px">
-      <div class="ch"><span>CPU.COMPUTE</span><span id="cpu-pct" style="margin-left:auto;font-family:'Orbitron',sans-serif;color:var(--cyan)">--</span></div>
-      <div id="cpu-model" style="font-size:.72rem;color:var(--tdim);margin-bottom:10px;font-family:'Share Tech Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">loading...</div>
-      <div class="track" style="height:8px;margin-bottom:14px"><div id="cpu-bar" class="bar bc" style="width:0%"></div></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px">
-        <div style="background:rgba(0,229,255,.04);border:1px solid rgba(0,229,255,.1);padding:8px 6px;text-align:center">
-          <div style="font-family:'Share Tech Mono',monospace;font-size:.58rem;color:var(--tdim);margin-bottom:4px">1M</div>
-          <div id="la1" style="font-family:'Orbitron',sans-serif;font-size:.8rem;color:var(--cyan)">--</div>
-        </div>
-        <div style="background:rgba(0,229,255,.04);border:1px solid rgba(0,229,255,.1);padding:8px 6px;text-align:center">
-          <div style="font-family:'Share Tech Mono',monospace;font-size:.58rem;color:var(--tdim);margin-bottom:4px">5M</div>
-          <div id="la5" style="font-family:'Orbitron',sans-serif;font-size:.8rem;color:var(--cyan)">--</div>
-        </div>
-        <div style="background:rgba(0,229,255,.04);border:1px solid rgba(0,229,255,.1);padding:8px 6px;text-align:center">
-          <div style="font-family:'Share Tech Mono',monospace;font-size:.58rem;color:var(--tdim);margin-bottom:4px">15M</div>
-          <div id="la15" style="font-family:'Orbitron',sans-serif;font-size:.8rem;color:var(--cyan)">--</div>
+    <article class="pod fu">
+      <div class="pod-base">
+        <svg class="pod-ring" viewBox="0 0 120 120" aria-hidden="true">
+          <circle class="ring-track" cx="60" cy="60" r="54"/>
+          <circle class="ring-fill" id="cpu-ring" cx="60" cy="60" r="54"
+            stroke-dasharray="339.292" stroke-dashoffset="339.292"
+            transform="rotate(-90 60 60)"/>
+        </svg>
+        <div class="pod-glass">
+          <div class="pod-pct" id="cpu-pct">--</div>
         </div>
       </div>
-      <div style="font-size:.6rem;font-family:'Share Tech Mono',monospace;color:var(--tdim);letter-spacing:.1em;margin-bottom:8px">CORE.LOAD</div>
-      <div id="cores" style="max-height:100px;overflow-y:auto;display:flex;flex-direction:column;gap:5px"></div>
-    </div>
+      <div class="pod-label">CPU COMPUTE</div>
+      <div class="pod-sub" id="cpu-model" title="">loading...</div>
+      <div class="pod-cores" id="cores"></div>
+    </article>
 
-    <div class="card fu" style="padding:18px 20px;animation-delay:.1s">
-      <div class="ch"><span>MEM.ARRAY</span><span id="mem-pct" style="margin-left:auto;font-family:'Orbitron',sans-serif;color:var(--cyan)">--</span></div>
-      <div id="mem-total" style="font-size:.72rem;color:var(--tdim);margin-bottom:10px;font-family:'Share Tech Mono',monospace">loading...</div>
-      <div class="track" style="height:14px;margin-bottom:16px"><div id="mem-bar" class="bar bc" style="width:0%"></div></div>
-      <div id="mem-rows"></div>
-    </div>
+    <article class="pod fu" style="animation-delay:.12s">
+      <div class="pod-base">
+        <svg class="pod-ring" viewBox="0 0 120 120" aria-hidden="true">
+          <circle class="ring-track" cx="60" cy="60" r="54"/>
+          <circle class="ring-fill" id="mem-ring" cx="60" cy="60" r="54"
+            stroke-dasharray="339.292" stroke-dashoffset="339.292"
+            transform="rotate(-90 60 60)"/>
+        </svg>
+        <div class="pod-glass">
+          <div class="pod-pct" id="mem-pct">--</div>
+        </div>
+      </div>
+      <div class="pod-label">MEM ARRAY</div>
+      <div class="pod-sub" id="mem-total">loading...</div>
+      <div class="pod-stats" id="mem-rows"></div>
+    </article>
 
-    <div class="card fu" style="padding:18px 20px;animation-delay:.2s">
-      <div class="ch"><span>SWAP.SPACE</span><span id="swap-pct" style="margin-left:auto;font-family:'Orbitron',sans-serif;color:var(--cyan)">--</span></div>
-      <div id="swap-total" style="font-size:.72rem;color:var(--tdim);margin-bottom:10px;font-family:'Share Tech Mono',monospace">loading...</div>
-      <div class="track" style="height:14px;margin-bottom:16px"><div id="swap-bar" class="bar bg" style="width:0%"></div></div>
-      <div id="swap-rows"></div>
-    </div>
+    <article class="pod fu" style="animation-delay:.24s">
+      <div class="pod-base">
+        <svg class="pod-ring" viewBox="0 0 120 120" aria-hidden="true">
+          <circle class="ring-track" cx="60" cy="60" r="54"/>
+          <circle class="ring-fill ok" id="swap-ring" cx="60" cy="60" r="54"
+            stroke-dasharray="339.292" stroke-dashoffset="339.292"
+            transform="rotate(-90 60 60)"/>
+        </svg>
+        <div class="pod-glass">
+          <div class="pod-pct" id="swap-pct">--</div>
+        </div>
+      </div>
+      <div class="pod-label">SWAP SPACE</div>
+      <div class="pod-sub" id="swap-total">loading...</div>
+      <div class="pod-stats" id="swap-rows"></div>
+    </article>
+
   </div>
 
-  <div class="div" style="margin-bottom:20px"><div class="dd"></div></div>
-
-  <div class="card fu" style="padding:18px 20px;animation-delay:.3s">
-    <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px">
-      <div class="ch" style="margin-bottom:0"><span>ACTIVE.SUBROUTINES</span><span id="proc-count" style="font-family:'Share Tech Mono',monospace;font-size:.7rem;color:var(--tdim)">[-- PROC]</span></div>
-      <input class="inp" id="proc-filter" style="max-width:220px;padding:6px 10px;font-size:.8rem" placeholder="// FILTER BY NAME OR USER" oninput="filterProcs()">
+  <section class="proc-panel fu" style="animation-delay:.35s">
+    <div class="proc-head">
+      <div class="ch"><span>ACTIVE SUBROUTINES</span><span id="proc-count" style="font-family:'Share Tech Mono',monospace;font-size:.7rem;color:var(--tdim);margin-left:8px">[-- PROC]</span></div>
+      <input class="inp proc-filter" id="proc-filter" placeholder="// FILTER" oninput="filterProcs()">
     </div>
     <div style="overflow-x:auto">
       <table class="tbl">
@@ -320,44 +515,40 @@ select.inp option{background:#060b14;color:var(--text)}
           <th onclick="sortProcs('pid')">PID <span id="s-pid"></span></th>
           <th onclick="sortProcs('name')">IDENTIFIER <span id="s-name"></span></th>
           <th onclick="sortProcs('user')">USER <span id="s-user"></span></th>
-          <th onclick="sortProcs('status')">STATE <span id="s-status"></span></th>
-          <th onclick="sortProcs('cpu')" style="text-align:right">CPU% <span id="s-cpu">▼</span></th>
-          <th onclick="sortProcs('memMb')" style="text-align:right">MEM.MB <span id="s-memMb"></span></th>
+          <th onclick="sortProcs('cpu')" class="col-extra" style="text-align:right">CPU% <span id="s-cpu">▼</span></th>
+          <th onclick="sortProcs('memMb')" class="col-extra" style="text-align:right">MEM <span id="s-memMb"></span></th>
         </tr></thead>
         <tbody id="proc-body"></tbody>
       </table>
     </div>
-  </div>
+  </section>
 
 </div>
 </div><!-- /monitor -->
 
 <!-- ═══════════════════ INSTALL PAGE ═══════════════════ -->
 <div id="page-install" class="page">
-<div style="max-width:640px;margin:0 auto;padding:24px 16px 60px">
+<div class="install-wrap">
 
-  <header style="text-align:center;padding-bottom:24px">
-    <h1 class="glitch" style="font-family:'Orbitron',sans-serif;font-weight:900;font-size:clamp(1.6rem,4vw,2.4rem);color:var(--cyan);letter-spacing:.18em;text-transform:uppercase;text-shadow:0 0 20px rgba(0,229,255,.5),0 0 40px rgba(0,229,255,.2)">CICADA</h1>
-    <div style="font-family:'Orbitron',sans-serif;font-size:.6rem;letter-spacing:.4em;color:var(--tdim);margin-top:4px"><span style="opacity:.5">//</span> STUDIO <span style="opacity:.5">//</span></div>
-    <p style="font-family:'Share Tech Mono',monospace;font-size:.75rem;color:var(--tdim);margin-top:8px;letter-spacing:.06em">WEB-INSTALLER · CICADA STUDIO</p>
-    <div id="plat-badge" style="display:inline-block;margin-top:10px;padding:4px 18px;border:1px solid var(--cyan);font-family:'Orbitron',sans-serif;font-size:.58rem;letter-spacing:.28em;color:var(--cyan);background:var(--cdim);clip-path:polygon(10px 0%,calc(100% - 10px) 0%,100% 50%,calc(100% - 10px) 100%,10px 100%,0% 50%)">
-      ОПРЕДЕЛЕНИЕ...
-    </div>
+  <header class="install-hero fu">
+    <h1 class="sysmon-title np">CICADA</h1>
+    <p class="install-sub"><span>//</span> STUDIO <span>//</span></p>
+    <p class="sysmon-host">WEB-INSTALLER · CICADA STUDIO</p>
+    <div id="plat-badge" class="plat-badge">ОПРЕДЕЛЕНИЕ...</div>
   </header>
 
-  <div class="div" style="margin-bottom:20px"><div class="dd"></div></div>
+  <div class="div" style="margin-bottom:22px"><div class="dd"></div></div>
 
-  <!-- API base config -->
-  <div class="card" style="padding:14px 16px;margin-bottom:14px">
-    <div class="ch">WEBINSTALL.SERVER</div>
+  <section class="glass-panel fu">
+    <span class="panel-tag">WEBINSTALL.SERVER</span>
     <div class="f" style="margin-bottom:0">
       <label class="lbl">URL сервера webinstall.py</label>
       <input class="inp" id="api-base" value="" placeholder="оставьте пустым = этот сервер" oninput="loadPlatform()">
       <p class="hint">Адрес запущенного <code>python3 webinstall.py</code>. Пусто = тот же хост (порт 7700 по умолчанию).</p>
     </div>
-  </div>
+  </section>
 
-  <div id="inst-warn" class="warn hidden"></div>
+  <div id="inst-warn" class="warn-panel hidden"></div>
 
   <!-- FORM -->
   <div id="inst-form">
@@ -393,9 +584,9 @@ select.inp option{background:#060b14;color:var(--text)}
   <form id="install-form" onsubmit="startInstall(event)" novalidate>
 
     <!-- MODE -->
-    <div class="card fu" style="padding:18px 16px;margin-bottom:12px">
-      <div class="ch">РЕЖИМ.УСТАНОВКИ</div>
-      <p style="font-size:.78rem;color:var(--tdim);margin-bottom:12px">PROD — сервер с доменом и SSL. LOCAL — localhost / WSL / тест.</p>
+    <section class="glass-panel fu">
+      <span class="panel-tag">РЕЖИМ.УСТАНОВКИ</span>
+      <p class="panel-desc">PROD — сервер с доменом и SSL. LOCAL — localhost / WSL / тест.</p>
       <div class="f">
         <label class="lbl">Режим</label>
         <select id="mode" name="mode" class="inp" onchange="onModeChange()">
@@ -419,11 +610,11 @@ select.inp option{background:#060b14;color:var(--text)}
         <label class="lbl">Порт Node.js (API)</label>
         <input name="api_port" type="number" class="inp" value="3001" min="1024" max="65535">
       </div>
-    </div>
+    </section>
 
     <!-- POSTGRESQL -->
-    <div class="card fu" style="padding:18px 16px;margin-bottom:12px;animation-delay:.08s">
-      <div class="ch">POSTGRESQL</div>
+    <section class="glass-panel fu" style="animation-delay:.08s">
+      <span class="panel-tag">POSTGRESQL</span>
       <div class="r2">
         <div class="f"><label class="lbl">Имя БД</label><input name="db_name" class="inp" value="cicada"></div>
         <div class="f"><label class="lbl">Пользователь БД</label><input name="db_user" class="inp" value="cicada_user"></div>
@@ -432,12 +623,12 @@ select.inp option{background:#060b14;color:var(--text)}
         <label class="lbl">Пароль БД</label>
         <input name="db_password" type="password" class="inp" required minlength="8" autocomplete="new-password">
       </div>
-    </div>
+    </section>
 
     <!-- SECURITY -->
-    <div class="card fu" style="padding:18px 16px;margin-bottom:12px;animation-delay:.16s">
-      <div class="ch">БЕЗОПАСНОСТЬ</div>
-      <p style="font-size:.78rem;color:var(--tdim);margin-bottom:10px">ADMIN_KEY — доступ к админ-API. JWT_SECRET — сессии входа.</p>
+    <section class="glass-panel fu" style="animation-delay:.16s">
+      <span class="panel-tag">БЕЗОПАСНОСТЬ</span>
+      <p class="panel-desc">ADMIN_KEY — доступ к админ-API. JWT_SECRET — сессии входа.</p>
       <label class="chk"><input type="checkbox" id="auto-admin-key" checked onchange="toggleField('admin-key-field',!this.checked)">Сгенерировать ADMIN_KEY автоматически (рекомендуется)</label>
       <div id="admin-key-field" class="f hidden">
         <label class="lbl">ADMIN_KEY <span class="opt">свой</span></label>
@@ -458,56 +649,56 @@ select.inp option{background:#060b14;color:var(--text)}
         <input name="admin_totp_secret" class="inp" placeholder="Base32 секрет для Google Authenticator" autocomplete="off">
         <p class="hint">Доп. защита /satana. Секрет из приложения-аутентификатора.</p>
       </div>
-    </div>
+    </section>
 
     <!-- ACCOUNT -->
-    <div class="card fu" style="padding:18px 16px;margin-bottom:12px;animation-delay:.24s">
-      <div class="ch">УЧЁТНАЯ ЗАПИСЬ.STUDIO</div>
+    <section class="glass-panel fu" style="animation-delay:.24s">
+      <span class="panel-tag">УЧЁТНАЯ ЗАПИСЬ</span>
       <div id="local-account">
-        <p style="font-size:.78rem;color:var(--tdim);margin-bottom:10px">LOCAL: email и пароль для входа в Studio.</p>
-        <div class="f"><label class="lbl">Email администратора</label><input name="admin_email" type="email" class="inp" placeholder="admin@localhost"></div>
+        <p class="panel-desc">LOCAL: email и пароль для входа в Studio.</p>
+        <div class="f"><label class="lbl">Email администратора</label><input name="admin_email" type="email" class="inp" value="denisbednakov@gmail.com" placeholder="denisbednakov@gmail.com"></div>
         <div class="f"><label class="lbl">Имя в профиле</label><input name="admin_name" class="inp" value="Admin"></div>
-        <div class="f" style="margin-bottom:0"><label class="lbl">Пароль для входа</label><input name="admin_password" type="password" class="inp" minlength="8" autocomplete="new-password"></div>
+        <div class="f" style="margin-bottom:0"><label class="lbl">Пароль для входа</label><input name="admin_password" type="password" class="inp" minlength="8" placeholder="cicada3301" autocomplete="new-password"></div>
       </div>
       <div id="prod-account" class="hidden">
-        <p style="font-size:.78rem;color:var(--tdim);margin-bottom:10px">PROD: email для уведомлений. Вход — через OAuth / регистрацию.</p>
+        <p class="panel-desc">PROD: email для уведомлений. Вход — через OAuth / регистрацию.</p>
         <div class="f" style="margin-bottom:0"><label class="lbl">Email администратора</label><input name="admin_email_prod" type="email" class="inp" placeholder="admin@example.com"></div>
       </div>
-    </div>
+    </section>
 
     <!-- TELEGRAM -->
-    <div class="card fu" style="padding:18px 16px;margin-bottom:12px;animation-delay:.32s">
-      <div class="ch">TELEGRAM</div>
+    <section class="glass-panel fu" style="animation-delay:.32s">
+      <span class="panel-tag">TELEGRAM</span>
       <p class="hint" style="margin-bottom:12px">Бот для DSL и уведомлений. <a href="https://t.me/BotFather" target="_blank">@BotFather</a> → /newbot → скопируйте токен.</p>
       <div class="f"><label class="lbl">TG_BOT_TOKEN <span class="opt">необяз.</span></label><input name="tg_bot_token" class="inp" placeholder="123456:ABC..." autocomplete="off"></div>
       <div class="f" style="margin-bottom:0"><label class="lbl">Имя бота (без @) <span class="opt">необяз.</span></label><input name="tg_bot_name" class="inp" placeholder="MyCicadaBot" autocomplete="off"></div>
-    </div>
+    </section>
 
     <!-- PROD-ONLY -->
     <div id="prod-only" class="hidden">
-      <div class="card fu" style="padding:18px 16px;margin-bottom:12px">
-        <div class="ch">EMAIL.RESEND</div>
+      <section class="glass-panel fu">
+        <span class="panel-tag">EMAIL.RESEND</span>
         <p class="hint" style="margin-bottom:12px">Письма (верификация, сброс пароля). <a href="https://resend.com/api-keys" target="_blank">resend.com/api-keys</a></p>
         <div class="f"><label class="lbl">RESEND_API_KEY <span class="opt">необяз.</span></label><input name="resend_api_key" class="inp" placeholder="re_..." autocomplete="off"></div>
         <div class="f" style="margin-bottom:0"><label class="lbl">EMAIL_FROM</label><input name="email_from" class="inp" placeholder="noreply@yourdomain.com"><p class="hint">Домен должен быть верифицирован в Resend.</p></div>
-      </div>
-      <div class="card fu" style="padding:18px 16px;margin-bottom:12px">
-        <div class="ch">CRYPTOBOT.ОПЛАТА</div>
+      </section>
+      <section class="glass-panel fu">
+        <span class="panel-tag">CRYPTOBOT</span>
         <p class="hint" style="margin-bottom:12px">Crypto Pay API. <a href="https://t.me/CryptoBot" target="_blank">@CryptoBot</a> → Crypto Pay → Create App → API Token.</p>
         <div class="f" style="margin-bottom:0"><label class="lbl">CRYPTOBOT_TOKEN <span class="opt">необяз.</span></label><input name="cryptobot_token" class="inp" placeholder="..." autocomplete="off"></div>
-      </div>
-      <div class="card fu" style="padding:18px 16px;margin-bottom:12px">
-        <div class="ch">GOOGLE.OAUTH</div>
+      </section>
+      <section class="glass-panel fu">
+        <span class="panel-tag">GOOGLE.OAUTH</span>
         <p class="hint" style="margin-bottom:12px">Вход через Google. <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a> → OAuth client ID (Web).</p>
         <div class="f"><label class="lbl">GOOGLE_CLIENT_ID <span class="opt">необяз.</span></label><input name="google_client_id" class="inp" placeholder="....apps.googleusercontent.com" autocomplete="off"></div>
         <div class="f"><label class="lbl">GOOGLE_CLIENT_SECRET <span class="opt">необяз.</span></label><input name="google_client_secret" type="password" class="inp" autocomplete="off"></div>
         <div class="f" style="margin-bottom:0"><label class="lbl">GOOGLE_CALLBACK_URL</label><input name="google_callback_url" class="inp" placeholder="авто из домена"></div>
-      </div>
+      </section>
     </div>
 
     <!-- AI -->
-    <div class="card fu" style="padding:18px 16px;margin-bottom:12px;animation-delay:.4s">
-      <div class="ch">AI.STUDIO / DSL</div>
+    <section class="glass-panel fu" style="animation-delay:.4s">
+      <span class="panel-tag">AI.STUDIO / DSL</span>
       <div class="f">
         <label class="lbl">AI_PROVIDER</label>
         <select name="ai_provider" class="inp" id="ai-provider" onchange="onAiChange()">
@@ -544,26 +735,28 @@ select.inp option{background:#060b14;color:var(--text)}
           <div class="f"><label class="lbl">OLLAMA_MODEL</label><input name="ollama_model" class="inp" value="llama-3.3-70b-versatile"></div>
         </div>
       </div>
-    </div>
+    </section>
 
     <!-- ESPHOME -->
-    <div class="card fu" style="padding:18px 16px;margin-bottom:20px;animation-delay:.48s">
-      <div class="ch">ESPHOME</div>
-      <p style="font-size:.78rem;color:var(--tdim);margin-bottom:10px">Сборка прошивок /esphome на сервере (.venv-esphome).</p>
+    <section id="esphome-card" class="glass-panel fu" style="animation-delay:.48s">
+      <span class="panel-tag">ESPHOME</span>
+      <p class="panel-desc">Сборка прошивок /esphome на сервере (.venv-esphome).</p>
       <label class="chk"><input type="checkbox" id="inst-esp" checked onchange="toggleField('esp-pin-field',this.checked)">Установить ESPHome CLI в .venv-esphome</label>
       <div id="esp-pin-field" class="f" style="margin-top:8px;margin-bottom:0">
         <label class="lbl">Версия esphome на PyPI <span class="opt">пусто = последняя</span></label>
         <input name="esphome_pin" class="inp" placeholder="например 2024.4.5">
       </div>
-    </div>
+    </section>
 
-    <button type="submit" class="btn" id="install-btn">// ЗАПУСТИТЬ УСТАНОВКУ //</button>
+    <div class="install-submit-wrap">
+      <button type="submit" class="btn" id="install-btn">// ЗАПУСТИТЬ УСТАНОВКУ //</button>
+    </div>
   </form>
   </div><!-- /inst-form -->
 
   <!-- LOG VIEW -->
-  <div id="inst-log" class="hidden card fu" style="padding:18px 16px">
-    <div class="ch">ХОД.УСТАНОВКИ</div>
+  <section id="inst-log" class="hidden glass-panel fu">
+    <span class="panel-tag">ХОД.УСТАНОВКИ</span>
     <div id="log-status" class="ist"><span class="sd"></span><span id="log-status-text">ЗАПУСК...</span></div>
     <div class="logp" style="margin-bottom:0"><div class="logb" id="log-bar"></div></div>
     <ul class="steps" id="inst-steps" style="margin-bottom:14px"></ul>
@@ -572,11 +765,9 @@ select.inp option{background:#060b14;color:var(--text)}
     <div style="display:flex;gap:10px;margin-top:12px">
       <button type="button" class="btn sec" onclick="resetInstall()">← НОВАЯ УСТАНОВКА</button>
     </div>
-  </div>
+  </section>
 
-  <footer style="text-align:center;margin-top:32px;font-family:'Share Tech Mono',monospace;font-size:.6rem;color:rgba(58,96,112,.4);letter-spacing:.15em">
-    // CICADA STUDIO // WEB INSTALLER //
-  </footer>
+  <footer class="install-footer">// CICADA STUDIO // WEB INSTALLER //</footer>
 </div>
 </div><!-- /install -->
 
@@ -586,7 +777,7 @@ select.inp option{background:#060b14;color:var(--text)}
 // ════════════ PARTICLES ════════════
 (function(){
   const c=document.getElementById('particles');
-  for(let i=0;i<35;i++){
+  for(let i=0;i<55;i++){
     const p=document.createElement('div');
     p.className='pt';
     const sz=(Math.random()*2.5+0.8).toFixed(1);
@@ -618,10 +809,18 @@ function formatUptime(s){
   const d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60),sec=Math.floor(s%60);
   return `${d}D ${String(h).padStart(2,'0')}H ${String(m).padStart(2,'0')}M ${String(sec).padStart(2,'0')}S`;
 }
-function barCls(p){return p>85?'br':p>65?'by':'bc'}
-function applyBarCls(el,p){el.className='bar '+barCls(p)}
-function metricRow(label,val,color){
-  return `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(0,229,255,.07);font-family:'Share Tech Mono',monospace;font-size:.82rem"><span style="color:var(--tdim)">${label}</span><span style="color:${color}">${val}</span></div>`;
+const RING_LEN=339.292;
+function ringCls(p){return p>85?'crit':p>65?'warn':''}
+function setRing(el,pct,lowIsGood){
+  if(!el)return;
+  const p=Math.max(0,Math.min(100,pct));
+  el.style.strokeDashoffset=String(RING_LEN*(1-p/100));
+  el.classList.remove('warn','crit','ok');
+  if(lowIsGood&&p<=50) el.classList.add('ok');
+  else{ const c=ringCls(p); if(c) el.classList.add(c); }
+}
+function podStat(label,val){
+  return `<div class="pod-stat"><span>${label}</span><span>${val}</span></div>`;
 }
 
 async function fetchMetrics(){
@@ -633,38 +832,35 @@ async function fetchMetrics(){
     document.getElementById('m-time').textContent=new Date(d.timestamp).toLocaleTimeString();
     document.getElementById('m-up').textContent='UP: '+formatUptime(d.uptime);
     const cp=d.cpu.usagePercent;
-    document.getElementById('cpu-pct').textContent=cp.toFixed(1)+'%';
-    document.getElementById('cpu-pct').style.color=cp>85?'var(--red)':cp>65?'var(--yellow)':'var(--cyan)';
-    document.getElementById('cpu-model').textContent=d.cpu.model;
-    const cb=document.getElementById('cpu-bar');
-    applyBarCls(cb,cp); cb.style.width=cp+'%';
-    document.getElementById('la1').textContent=d.cpu.loadAvg1.toFixed(2);
-    document.getElementById('la5').textContent=d.cpu.loadAvg5.toFixed(2);
-    document.getElementById('la15').textContent=d.cpu.loadAvg15.toFixed(2);
+    const cpuPctEl=document.getElementById('cpu-pct');
+    cpuPctEl.textContent=cp.toFixed(1)+'%';
+    cpuPctEl.style.color=cp>85?'var(--red)':cp>65?'var(--yellow)':'#fff';
+    const cpuModel=document.getElementById('cpu-model');
+    cpuModel.textContent=d.cpu.model;
+    cpuModel.title=d.cpu.model;
+    setRing(document.getElementById('cpu-ring'),cp);
     const cores=document.getElementById('cores');
-    cores.innerHTML=d.cpu.perCore.map(c=>`
-      <div style="display:flex;align-items:center;gap:8px;font-family:'Share Tech Mono',monospace;font-size:.65rem">
-        <span style="width:28px;color:var(--tdim);flex-shrink:0">C${String(c.core).padStart(2,'0')}</span>
-        <div class="track" style="flex:1;height:5px"><div class="bar ${barCls(c.load)}" style="width:${c.load}%"></div></div>
-        <span style="width:32px;text-align:right;color:var(--cyan);flex-shrink:0">${Math.round(c.load)}%</span>
-      </div>`).join('');
+    cores.innerHTML=d.cpu.perCore.map(c=>
+      `<span>C${c.core}:<em>${Math.round(c.load)}%</em></span>`
+    ).join('');
     const mp=d.memory.usedPercent;
     document.getElementById('mem-pct').textContent=mp.toFixed(1)+'%';
     document.getElementById('mem-total').textContent=(d.memory.totalMb/1024).toFixed(1)+' GB TOTAL';
-    const mb=document.getElementById('mem-bar'); applyBarCls(mb,mp); mb.style.width=mp+'%';
+    setRing(document.getElementById('mem-ring'),mp);
     document.getElementById('mem-rows').innerHTML=
-      metricRow('ALLOCATED',(d.memory.usedMb/1024).toFixed(2)+' GB','var(--cyan)')+
-      metricRow('AVAILABLE',(d.memory.freeMb/1024).toFixed(2)+' GB','var(--green)')+
-      metricRow('TOTAL',(d.memory.totalMb/1024).toFixed(2)+' GB','var(--tdim)');
+      podStat('ALLOCATED',(d.memory.usedMb/1024).toFixed(2)+' GB')+
+      podStat('AVAILABLE',(d.memory.freeMb/1024).toFixed(2)+' GB')+
+      podStat('TOTAL',(d.memory.totalMb/1024).toFixed(2)+' GB');
     const sp=d.swap.usedPercent;
     document.getElementById('swap-pct').textContent=sp.toFixed(1)+'%';
     document.getElementById('swap-total').textContent=(d.swap.totalMb/1024).toFixed(1)+' GB TOTAL';
-    const sb=document.getElementById('swap-bar');
-    sb.className='bar '+(sp>50?'by':'bg'); sb.style.width=sp+'%';
-    let swapHtml=metricRow('ALLOCATED',(d.swap.usedMb/1024).toFixed(2)+' GB','var(--cyan)')+
-                 metricRow('AVAILABLE',(d.swap.freeMb/1024).toFixed(2)+' GB','var(--green)')+
-                 metricRow('TOTAL',(d.swap.totalMb/1024).toFixed(2)+' GB','var(--tdim)');
-    if(d.swap.totalMb===0) swapHtml+=`<div style="margin-top:14px;padding:8px 12px;background:rgba(255,190,0,.07);border:1px solid rgba(255,190,0,.2);font-size:.75rem;color:var(--yellow);font-family:'Share Tech Mono',monospace">// SWAP NOT CONFIGURED</div>`;
+    const swapRing=document.getElementById('swap-ring');
+    setRing(swapRing,sp,true);
+    let swapHtml=
+      podStat('ALLOCATED',(d.swap.usedMb/1024).toFixed(2)+' GB')+
+      podStat('AVAILABLE',(d.swap.freeMb/1024).toFixed(2)+' GB')+
+      podStat('TOTAL',(d.swap.totalMb/1024).toFixed(2)+' GB');
+    if(d.swap.totalMb===0) swapHtml+=`<div style="margin-top:10px;padding:8px 10px;background:rgba(255,190,0,.07);border:1px solid rgba(255,190,0,.2);font-size:.7rem;color:var(--yellow);text-align:center">// SWAP NOT CONFIGURED</div>`;
     document.getElementById('swap-rows').innerHTML=swapHtml;
   }catch(e){}
 }
@@ -699,15 +895,13 @@ function renderProcs(){
       if(av>bv)return sortDir==='asc'?1:-1;
       return 0;
     }).slice(0,50);
-  const sc=s=>s.includes('run')?'br-run':s.includes('zombie')?'br-zb':s.includes('sleep')?'br-sl':'br-ot';
   document.getElementById('proc-body').innerHTML=rows.map(p=>`
     <tr>
       <td style="color:var(--tdim)">${p.pid}</td>
-      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.command}">${p.name}</td>
+      <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)" title="${p.command}">${p.name}</td>
       <td style="color:var(--tdim)">${p.user}</td>
-      <td><span class="badge ${sc(p.status)}">${p.status}</span></td>
-      <td style="text-align:right;color:${p.cpu>50?'var(--red)':p.cpu>20?'var(--yellow)':'var(--cyan)'}">${p.cpu.toFixed(1)}</td>
-      <td style="text-align:right">${p.memMb.toFixed(0)}</td>
+      <td class="col-extra" style="text-align:right;color:${p.cpu>50?'var(--red)':p.cpu>20?'var(--yellow)':'var(--cyan)'}">${p.cpu.toFixed(1)}</td>
+      <td class="col-extra" style="text-align:right;color:var(--tdim)">${p.memMb.toFixed(0)}</td>
     </tr>`).join('');
 }
 
@@ -725,18 +919,45 @@ function getBase(){
   return u.origin;
 }
 
+function applyTermuxInstallUi(){
+  document.getElementById('esphome-card')?.classList.add('hidden');
+  const esp=document.getElementById('inst-esp');
+  if(esp){esp.checked=false;esp.disabled=true}
+  document.getElementById('mode').value='local';
+  const prodOpt=document.querySelector('#mode option[value="prod"]');
+  if(prodOpt) prodOpt.disabled=true;
+  document.getElementById('local-account')?.classList.add('hidden');
+  const warn=document.getElementById('inst-warn');
+  if(warn){
+    warn.textContent='Termux: вход без пароля (AUTH_BYPASS). PROD и ESPHome отключены.';
+    warn.classList.remove('hidden');
+  }
+}
+
+function applyLocalInstallUi(){
+  const warn=document.getElementById('inst-warn');
+  if(warn){
+    warn.textContent='LOCAL (WSL/VPS): denisbednakov@gmail.com / cicada3301, AUTH_BYPASS — вход без окна логина, кнопка Admin в Studio.';
+    warn.classList.remove('hidden');
+  }
+}
+
 async function loadPlatform(){
   const badge=document.getElementById('plat-badge');
   badge.textContent='ОПРЕДЕЛЕНИЕ...';
+  badge.className='plat-badge';
   try{
     const r=await fetch(getBase()+'/api/info',{signal:AbortSignal.timeout(4000)});
     if(!r.ok) throw new Error();
     const d=await r.json();
+    installPlatform=d.platform||'';
     badge.textContent=(d.display_platform||d.platform||'unknown').toUpperCase();
-    badge.style.borderColor='var(--green)';badge.style.color='var(--green)';badge.style.background='var(--gdim)';
+    badge.classList.add('ok');
+    if(d.termux||d.platform==='termux') applyTermuxInstallUi();
+    else if(d.platform==='wsl'||d.platform==='vps') applyLocalInstallUi();
   }catch(e){
     badge.textContent='НЕДОСТУПЕН';
-    badge.style.borderColor='var(--tdim)';badge.style.color='var(--tdim)';badge.style.background='transparent';
+    badge.classList.add('err');
   }
 }
 loadPlatform();
@@ -765,6 +986,7 @@ let instStatus='idle';
 let errors=[];
 let progress=0;
 let openUrl='https://localhost';
+let installPlatform='';
 let es=null;
 
 const PHASE_RE=/\[(\d+)\/(\d+)\]\s+(.+)/;
@@ -1039,18 +1261,22 @@ async function startInstall(e){
   const warn=document.getElementById('inst-warn');
   warn.classList.add('hidden');
 
+  const isTermux=installPlatform==='termux';
   if(get('db_password').length<8){warn.textContent='Пароль БД — минимум 8 символов';warn.classList.remove('hidden');return}
-  if(mode==='local'&&get('admin_password').length<8){warn.textContent='Пароль входа — минимум 8 символов (LOCAL)';warn.classList.remove('hidden');return}
+  if(mode==='local'&&!isTermux&&get('admin_password').length<8){warn.textContent='Пароль входа — минимум 8 символов (LOCAL)';warn.classList.remove('hidden');return}
   if(mode==='prod'&&!get('domain')){warn.textContent='Укажите домен для PROD';warn.classList.remove('hidden');return}
 
   const domain=mode==='prod'?get('domain'):'localhost';
-  openUrl=mode==='prod'&&domain?`https://${domain}`:'https://localhost';
+  openUrl=isTermux?`http://127.0.0.1:${get('api_port')||'3001'}`:(mode==='prod'&&domain?`https://${domain}`:'https://localhost');
 
+  const localEmail=mode==='prod'?get('admin_email_prod'):get('admin_email');
+  const localPass=get('admin_password');
   const body={
     mode,domain,le_email:get('le_email'),api_port:get('api_port'),
     db_name:get('db_name'),db_user:get('db_user'),db_password:get('db_password'),
-    admin_email:mode==='prod'?get('admin_email_prod'):get('admin_email'),
-    admin_name:get('admin_name'),admin_password:get('admin_password'),
+    admin_email:mode==='prod'?localEmail:(localEmail||'denisbednakov@gmail.com'),
+    admin_name:get('admin_name')||'Admin',
+    admin_password:mode==='local'&&!isTermux?(localPass||'cicada3301'):localPass,
     auto_admin_key:document.getElementById('auto-admin-key').checked,admin_key:get('admin_key'),
     auto_jwt:document.getElementById('auto-jwt').checked,jwt_secret:get('jwt_secret'),
     jwt_expires_sec:get('jwt_expires_sec'),admin_totp_secret:get('admin_totp_secret'),
@@ -1063,7 +1289,7 @@ async function startInstall(e){
     groq_token:get('groq_token'),groq_token_2:get('groq_token_2'),groq_token_3:get('groq_token_3'),
     groq_model:get('groq_model'),default_chat_id:get('default_chat_id'),
     ollama_url:get('ollama_url'),ollama_model:get('ollama_model'),
-    install_esphome:document.getElementById('inst-esp').checked,esphome_pin:get('esphome_pin'),
+    install_esphome:!isTermux&&document.getElementById('inst-esp').checked,esphome_pin:get('esphome_pin'),
   };
 
   steps=[];curStep=-1;errors=[];instStatus='running';

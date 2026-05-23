@@ -14,7 +14,7 @@ export function createDevBypassUser(overrides = {}) {
     verified: true,
     plan: 'pro',
     subscriptionExp: Date.now() + yearMs,
-    role: 'user',
+    role: 'admin',
     accessLevel: 'basic',
     banned: false,
     uiLanguage: 'ru',

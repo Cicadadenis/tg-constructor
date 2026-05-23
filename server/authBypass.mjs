@@ -1,4 +1,4 @@
-import { createDevBypassUser, DEV_BYPASS_USER_ID } from '../core/auth/devBypassUser.mjs';
+import { createDevBypassUser } from '../core/auth/devBypassUser.mjs';
 import {
   isAuthBypassEnabled,
   isDevelopment,
@@ -12,17 +12,43 @@ export function isProductionEnv() {
   return isProduction();
 }
 
+/** Sync fallback (tests / until DB is ready). */
 export function getDevBypassUser() {
   if (!isAuthBypassEnabled()) return null;
-  return createDevBypassUser();
+  const email = String(process.env.ADMIN_EMAIL || process.env.VITE_ADMIN_EMAIL || '').trim().toLowerCase();
+  const name = String(process.env.ADMIN_NAME || 'Admin').trim().slice(0, 64) || 'Admin';
+  return createDevBypassUser({
+    ...(email ? { email } : {}),
+    name,
+    role: 'admin',
+    plan: 'pro',
+  });
 }
 
-export function applyDevAuthBypassToRequest(req) {
-  const user = getDevBypassUser();
-  if (!user?.id) return false;
-  req.authUserId = DEV_BYPASS_USER_ID;
-  req.authUser = user;
-  req.user = user;
+/**
+ * Prefer seeded ADMIN_EMAIL user from PostgreSQL (stable id, projects, admin UI).
+ * @param {(email: string) => Promise<object|null>} findByEmail
+ */
+export async function resolveDevBypassUser(findByEmail) {
+  if (!isAuthBypassEnabled()) return null;
+  const email = String(process.env.ADMIN_EMAIL || process.env.VITE_ADMIN_EMAIL || '').trim().toLowerCase();
+  if (email && typeof findByEmail === 'function') {
+    try {
+      const row = await findByEmail(email);
+      if (row?.id) return row;
+    } catch {
+      // DB not ready — use mock below
+    }
+  }
+  return getDevBypassUser();
+}
+
+export function applyDevAuthBypassToRequest(req, user = null) {
+  const resolved = user || getDevBypassUser();
+  if (!resolved?.id) return false;
+  req.authUserId = String(resolved.id);
+  req.authUser = resolved;
+  req.user = resolved;
   req.authBypass = true;
   return true;
 }

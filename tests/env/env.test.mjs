@@ -4,6 +4,7 @@ const saved = {
   AUTH_BYPASS: process.env.AUTH_BYPASS,
   APP_ENV: process.env.APP_ENV,
   NODE_ENV: process.env.NODE_ENV,
+  DISABLE_FIRMWARE_RUNTIME: process.env.DISABLE_FIRMWARE_RUNTIME,
 };
 
 function restoreEnv() {
@@ -35,6 +36,12 @@ try {
   assert.equal(env.isAuthBypassEnabled(), true);
   assert.equal(env.isDevLoggingEnabled(), true);
   assert.equal(env.isDevIdeEnabled(), true);
+  assert.equal(env.isFirmwareRuntimeEnabled(), true);
+
+  process.env.DISABLE_FIRMWARE_RUNTIME = '1';
+  const fwOff = await loadEnvModule();
+  assert.equal(fwOff.isFirmwareRuntimeEnabled(), false);
+  delete process.env.DISABLE_FIRMWARE_RUNTIME;
 
   const dev = await loadAuthBypassModule();
   assert.equal(dev.isAuthBypassEnabled(), true);

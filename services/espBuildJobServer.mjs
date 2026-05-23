@@ -8,7 +8,7 @@ import { atomicWriteFile } from './secureFs.mjs';
 import { buildEspWebManifest, yamlSupportsImprovWifi } from './espManifest.mjs';
 
 const JOBS_ROOT = path.resolve(
-  process.env.ESPHOME_JOBS_ROOT || '/tmp/esphome-jobs',
+  trimEnv(process.env.ESPHOME_JOBS_ROOT) || '/tmp/esphome-jobs',
 );
 const DOWNLOAD_TTL_MS = Math.max(
   60_000,

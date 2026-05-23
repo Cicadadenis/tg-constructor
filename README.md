@@ -273,7 +273,9 @@ bash setup.sh
 bash scripts/termux-setup.sh
 ```
 
-На Termux скрипт выбирает режим **LOCAL**, в `.env` пишет **`AUTH_BYPASS=1`** и **`NODE_ENV=development`** — вход в Studio **без пароля** (mock-пользователь `dev-bypass-user`). API: `http://127.0.0.1:3001` (не `https://localhost`). Nginx и ESPHome на устройстве не ставятся.
+На Termux скрипт выбирает режим **LOCAL**, в `.env` пишет **`AUTH_BYPASS=1`**, **`DISABLE_FIRMWARE_RUNTIME=1`** и **`NODE_ENV=development`** — вход в Studio **без пароля** (mock-пользователь). API: `http://127.0.0.1:3001` (не `https://localhost`). Nginx, ESPHome и сборка прошивок на устройстве не ставятся.
+
+**LOCAL на WSL / VPS:** по умолчанию создаётся администратор **`denisbednakov@gmail.com`** / **`cicada3301`** (bcrypt в PostgreSQL, роль `admin`, план `pro`). В `.env` включается **`AUTH_BYPASS=1`** — Studio открывается без окна входа, в шапке рядом с **Premium** появляется **Admin**. При необходимости войти вручную — те же email и пароль.
 
 Скрипт:
 

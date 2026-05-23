@@ -501,6 +501,13 @@ apply_webinstall_preset() {
     ADMIN_EMAIL="${ADMIN_EMAIL:-admin@local}"
     ADMIN_PASSWORD=""
     ADMIN_NAME="${ADMIN_NAME:-Admin}"
+    INSTALL_ESPHOME=0
+    DISABLE_FIRMWARE_RUNTIME=1
+  elif [ "$MODE" = "local" ]; then
+    ADMIN_EMAIL="${ADMIN_EMAIL:-denisbednakov@gmail.com}"
+    ADMIN_PASSWORD="${ADMIN_PASSWORD:-cicada3301}"
+    ADMIN_NAME="${ADMIN_NAME:-Admin}"
+    AUTH_BYPASS_VAL="1"
   fi
   return 0
 }
@@ -633,22 +640,27 @@ if [ "$MODE" = "local" ]; then
     prompt_def ADMIN_EMAIL "admin@local" "Email для UI (VITE_ADMIN_EMAIL)"
     ADMIN_PASSWORD=""
   else
+  prompt_def ADMIN_EMAIL "denisbednakov@gmail.com" "Email администратора"
+  prompt_def ADMIN_NAME "Admin" "Имя в профиле"
+  ADMIN_PASSWORD="${ADMIN_PASSWORD:-cicada3301}"
+  hint "Пароль по умолчанию: ${ADMIN_PASSWORD} (Enter — оставить)"
   while true; do
-    prompt ADMIN_EMAIL "Email администратора"
-    [ -n "$ADMIN_EMAIL" ] && break
-    warn "Email обязателен для локального входа"
-  done
-  prompt_def ADMIN_NAME Admin "Имя в профиле"
-  while true; do
-    prompt_secret ADMIN_PASSWORD "Пароль для входа (мин. 8 символов)"
+    prompt_secret ADMIN_PASSWORD_IN "Пароль для входа"
+    if [ -z "$ADMIN_PASSWORD_IN" ]; then
+      ADMIN_PASSWORD_IN="$ADMIN_PASSWORD"
+    fi
+    ADMIN_PASSWORD="$ADMIN_PASSWORD_IN"
     [ ${#ADMIN_PASSWORD} -ge 8 ] || { warn "Минимум 8 символов"; continue; }
-    prompt_secret ADMIN_PASSWORD2 "Повторите пароль"
+    prompt_secret ADMIN_PASSWORD2 "Повторите пароль (Enter = тот же)"
+    if [ -z "$ADMIN_PASSWORD2" ]; then
+      ADMIN_PASSWORD2="$ADMIN_PASSWORD"
+    fi
     [ "$ADMIN_PASSWORD" = "$ADMIN_PASSWORD2" ] && break
     warn "Пароли не совпадают"
   done
   fi
 else
-  prompt ADMIN_EMAIL "Email администратора"
+  prompt_def ADMIN_EMAIL "denisbednakov@gmail.com" "Email администратора"
 fi
 
 section "Telegram"
@@ -705,12 +717,15 @@ else
   hint "Termux: TOTP для админки пропущен"
 fi
 
-section "ESPHome (/esphome, сборка прошивок)"
 INSTALL_ESPHOME=0
 ESPHOME_PIN="${ESPHOME_PIN:-}"
+DISABLE_FIRMWARE_RUNTIME="${DISABLE_FIRMWARE_RUNTIME:-0}"
 if [ "$PLATFORM" = "termux" ]; then
-  warn "На Termux ESPHome не ставится автоматически — конструктор есть, compile на сервере нет"
+  INSTALL_ESPHOME=0
+  DISABLE_FIRMWARE_RUNTIME=1
+  hint "Termux: ESPHome и сборка прошивок отключены (DISABLE_FIRMWARE_RUNTIME=1)"
 else
+  section "ESPHome (/esphome, сборка прошивок)"
   prompt_yn INSTALL_ESPHOME_ANS y "Установить ESPHome в .venv-esphome"
   if [ "${INSTALL_ESPHOME_ANS,,}" != "n" ]; then
     INSTALL_ESPHOME=1
@@ -1023,48 +1038,48 @@ else
 fi
 
 mkdir -p "$APP_DIR/uploads/media" "$APP_DIR/bots" "$APP_DIR/data/firmware-cache" \
-  "$APP_DIR/public/firmware" "$APP_DIR/public/flash/jammer" "$APP_DIR/.cache/platformio" \
   2>/dev/null || true
-if [ "$PLATFORM" = "termux" ]; then
-  mkdir -p "$HOME/esphome-jobs" 2>/dev/null || true
-else
-  mkdir -p /tmp/esphome-jobs 2>/dev/null || true
+if [ "$PLATFORM" != "termux" ]; then
+  mkdir -p "$APP_DIR/public/firmware" "$APP_DIR/public/flash/jammer" "$APP_DIR/.cache/platformio" \
+    /tmp/esphome-jobs 2>/dev/null || true
 fi
 ok "Рабочие каталоги (bots/, uploads/, firmware/) созданы"
 
-# Канонический путь к .bin (пишется в .env; publish читает отсюда)
-JAMMER_FIRMWARE_BIN="${APP_DIR}/public/firmware/esp8266_deauther.bin"
-mkdir -p "$(dirname "$JAMMER_FIRMWARE_BIN")"
+# Jammer / ESPHome артефакты — только VPS/WSL (на Termux прошивки отключены)
+if [ "$PLATFORM" != "termux" ]; then
+  JAMMER_FIRMWARE_BIN="${APP_DIR}/public/firmware/esp8266_deauther.bin"
+  mkdir -p "$(dirname "$JAMMER_FIRMWARE_BIN")"
 
-JAMMER_SRC=""
-for _jammer_candidate in \
-  "$JAMMER_FIRMWARE_BIN" \
-  "$APP_DIR/esp8266_deauther.bin" \
-  "$APP_DIR/public/flash/jammer/esp8266_deauther.bin"; do
-  if [ -f "$_jammer_candidate" ]; then
-    JAMMER_SRC="$_jammer_candidate"
-    break
+  JAMMER_SRC=""
+  for _jammer_candidate in \
+    "$JAMMER_FIRMWARE_BIN" \
+    "$APP_DIR/esp8266_deauther.bin" \
+    "$APP_DIR/public/flash/jammer/esp8266_deauther.bin"; do
+    if [ -f "$_jammer_candidate" ]; then
+      JAMMER_SRC="$_jammer_candidate"
+      break
+    fi
+  done
+
+  if [ -f "$APP_DIR/esp8266_deauther.bin" ] && [ ! -f "$JAMMER_FIRMWARE_BIN" ]; then
+    cp -f "$APP_DIR/esp8266_deauther.bin" "$JAMMER_FIRMWARE_BIN"
+    JAMMER_SRC="$JAMMER_FIRMWARE_BIN"
+    ok "Прошивка скопирована в ${JAMMER_FIRMWARE_BIN}"
+  elif [ -f "$APP_DIR/public/flash/jammer/esp8266_deauther.bin" ] && [ ! -f "$JAMMER_FIRMWARE_BIN" ]; then
+    cp -f "$APP_DIR/public/flash/jammer/esp8266_deauther.bin" "$JAMMER_FIRMWARE_BIN"
+    JAMMER_SRC="$JAMMER_FIRMWARE_BIN"
+    ok "Прошивка скопирована в ${JAMMER_FIRMWARE_BIN}"
   fi
-done
 
-if [ -f "$APP_DIR/esp8266_deauther.bin" ] && [ ! -f "$JAMMER_FIRMWARE_BIN" ]; then
-  cp -f "$APP_DIR/esp8266_deauther.bin" "$JAMMER_FIRMWARE_BIN"
-  JAMMER_SRC="$JAMMER_FIRMWARE_BIN"
-  ok "Прошивка скопирована в ${JAMMER_FIRMWARE_BIN}"
-elif [ -f "$APP_DIR/public/flash/jammer/esp8266_deauther.bin" ] && [ ! -f "$JAMMER_FIRMWARE_BIN" ]; then
-  cp -f "$APP_DIR/public/flash/jammer/esp8266_deauther.bin" "$JAMMER_FIRMWARE_BIN"
-  JAMMER_SRC="$JAMMER_FIRMWARE_BIN"
-  ok "Прошивка скопирована в ${JAMMER_FIRMWARE_BIN}"
-fi
-
-if [ -f "$JAMMER_SRC" ]; then
-  if cd "$APP_DIR" && JAMMER_FIRMWARE_BIN="$JAMMER_FIRMWARE_BIN" npm run jammer:publish &>/dev/null; then
-    ok "Прошивка глушилки: опубликована (источник: $JAMMER_SRC)"
+  if [ -f "$JAMMER_SRC" ]; then
+    if cd "$APP_DIR" && JAMMER_FIRMWARE_BIN="$JAMMER_FIRMWARE_BIN" npm run jammer:publish &>/dev/null; then
+      ok "Прошивка глушилки: опубликована (источник: $JAMMER_SRC)"
+    else
+      warn "Прошивка глушилки: файл есть, но npm run jammer:publish не удался"
+    fi
   else
-    warn "Прошивка глушилки: файл есть, но npm run jammer:publish не удался"
+    warn "Jammer .bin missing: put esp8266_deauther.bin in ${JAMMER_FIRMWARE_BIN} then npm run jammer:publish"
   fi
-else
-  warn "Jammer .bin missing: put esp8266_deauther.bin in ${JAMMER_FIRMWARE_BIN} then npm run jammer:publish"
 fi
 
 # ═══════════════════════════════════════════════════════════════
@@ -1115,24 +1130,33 @@ if [ "$APP_ENV_VAL" = "development" ]; then
 fi
 if [ "$PLATFORM" = "termux" ]; then
   AUTH_BYPASS_VAL="1"
+elif [ "$MODE" = "local" ]; then
+  AUTH_BYPASS_VAL="1"
 fi
 
-ESPHOME_BIN_VAL="${ESPHOME_BIN:-}"
-if [ -z "$ESPHOME_BIN_VAL" ] && [ -n "${ESPHOME_BIN_PATH:-}" ] && [ -f "$ESPHOME_BIN_PATH" ]; then
-  ESPHOME_BIN_VAL="$ESPHOME_BIN_PATH"
-fi
-if [ -z "$ESPHOME_BIN_VAL" ] && [ -x "${APP_DIR}/.venv-esphome/bin/esphome" ]; then
-  ESPHOME_BIN_VAL="${APP_DIR}/.venv-esphome/bin/esphome"
-fi
+ESPHOME_BIN_VAL=""
+PIO_BIN_VAL=""
+DISABLE_FIRMWARE_RUNTIME_VAL="${DISABLE_FIRMWARE_RUNTIME:-0}"
+if [ "$PLATFORM" = "termux" ]; then
+  DISABLE_FIRMWARE_RUNTIME_VAL=1
+else
+  ESPHOME_BIN_VAL="${ESPHOME_BIN:-}"
+  if [ -z "$ESPHOME_BIN_VAL" ] && [ -n "${ESPHOME_BIN_PATH:-}" ] && [ -f "$ESPHOME_BIN_PATH" ]; then
+    ESPHOME_BIN_VAL="$ESPHOME_BIN_PATH"
+  fi
+  if [ -z "$ESPHOME_BIN_VAL" ] && [ -x "${APP_DIR}/.venv-esphome/bin/esphome" ]; then
+    ESPHOME_BIN_VAL="${APP_DIR}/.venv-esphome/bin/esphome"
+  fi
 
-PIO_BIN_VAL="${PIO_BIN:-}"
-if [ -z "$PIO_BIN_VAL" ] && [ -n "${PIO_BIN_PATH:-}" ] && [ -f "$PIO_BIN_PATH" ]; then
-  PIO_BIN_VAL="$PIO_BIN_PATH"
+  PIO_BIN_VAL="${PIO_BIN:-}"
+  if [ -z "$PIO_BIN_VAL" ] && [ -n "${PIO_BIN_PATH:-}" ] && [ -f "$PIO_BIN_PATH" ]; then
+    PIO_BIN_VAL="$PIO_BIN_PATH"
+  fi
+  if [ -z "$PIO_BIN_VAL" ] && [ -x "${APP_DIR}/.venv-esphome/bin/pio" ]; then
+    PIO_BIN_VAL="${APP_DIR}/.venv-esphome/bin/pio"
+  fi
+  PIO_BIN_VAL="${PIO_BIN_VAL:-pio}"
 fi
-if [ -z "$PIO_BIN_VAL" ] && [ -x "${APP_DIR}/.venv-esphome/bin/pio" ]; then
-  PIO_BIN_VAL="${APP_DIR}/.venv-esphome/bin/pio"
-fi
-PIO_BIN_VAL="${PIO_BIN_VAL:-pio}"
 
 # Расширенные переменные (.env как в production / webinstall)
 PYTHON="${PYTHON:-}"
@@ -1152,10 +1176,26 @@ ESPHOME_CLEANUP_INTERVAL_MS="${ESPHOME_CLEANUP_INTERVAL_MS:-300000}"
 FIRMWARE_BUILD_TIMEOUT_MS="${FIRMWARE_BUILD_TIMEOUT_MS:-1800000}"
 ESPHOME_PLATFORMIO_HOME="${ESPHOME_PLATFORMIO_HOME:-${APP_DIR}/.cache/platformio}"
 ESPHOME_JOBS_ROOT="${ESPHOME_JOBS_ROOT:-/tmp/esphome-jobs}"
-[ "$PLATFORM" = "termux" ] && ESPHOME_JOBS_ROOT="$HOME/esphome-jobs"
 ESPHOME_MAX_CONCURRENT_BUILDS="${ESPHOME_MAX_CONCURRENT_BUILDS:-2}"
 ESPHOME_PUBLIC_BUILD="${ESPHOME_PUBLIC_BUILD:-0}"
 JAMMER_FIRMWARE_BIN="${JAMMER_FIRMWARE_BIN:-${APP_DIR}/public/firmware/esp8266_deauther.bin}"
+FIRMWARE_ENV_BLOCK=""
+if [ "$PLATFORM" = "termux" ]; then
+  FIRMWARE_ENV_BLOCK="# ─── ESPHome / прошивки — отключено на Termux ───────────────
+DISABLE_FIRMWARE_RUNTIME=1"
+else
+  FIRMWARE_ENV_BLOCK="# ─── ESPHome / прошивки (/esphome, /api/esp/*) ───────────────
+ESPHOME_BIN=${ESPHOME_BIN_VAL}
+PIO_BIN=${PIO_BIN_VAL}
+ESPHOME_JOBS_ROOT=${ESPHOME_JOBS_ROOT}
+ESPHOME_MAX_CONCURRENT_BUILDS=${ESPHOME_MAX_CONCURRENT_BUILDS}
+FIRMWARE_DOWNLOAD_TTL_MS=${FIRMWARE_DOWNLOAD_TTL_MS}
+ESPHOME_CLEANUP_INTERVAL_MS=${ESPHOME_CLEANUP_INTERVAL_MS}
+FIRMWARE_BUILD_TIMEOUT_MS=${FIRMWARE_BUILD_TIMEOUT_MS}
+ESPHOME_PLATFORMIO_HOME=${ESPHOME_PLATFORMIO_HOME}
+ESPHOME_PUBLIC_BUILD=${ESPHOME_PUBLIC_BUILD}
+JAMMER_FIRMWARE_BIN=${JAMMER_FIRMWARE_BIN}"
+fi
 
 PYTHON_LINE="# PYTHON=/usr/bin/python3"
 [ -n "$PYTHON" ] && PYTHON_LINE="PYTHON=${PYTHON}"
@@ -1191,8 +1231,6 @@ DSL_SANDBOX_NETWORK=${DSL_SANDBOX_NETWORK_VAL}
 
 ESP_FLASH_ADMIN_TOKEN=${ESP_FLASH_ADMIN_TOKEN}
 ${FIRMWARE_WS_LINE}
-ESPHOME_BIN=${ESPHOME_BIN_VAL}
-PIO_BIN=${PIO_BIN_VAL}
 
 OLLAMA_URL=${OLLAMA_URL}
 OLLAMA_MODEL=${OLLAMA_MODEL}
@@ -1213,6 +1251,7 @@ DSL_SANDBOX_MODE=${DSL_SANDBOX_MODE_VAL}
 VITE_API_URL=${VITE_API_URL}
 VITE_API_TARGET=${VITE_API_TARGET}
 VITE_ADMIN_EMAIL=${ADMIN_EMAIL}
+VITE_ADMIN_NAME=${ADMIN_NAME}
 VITE_TG_BOT_NAME=${TG_BOT_NAME}
 
 # ─── PostgreSQL ───────────────────────────────────────────────
@@ -1243,15 +1282,7 @@ GROQ_MODEL=${GROQ_MODEL}
 AI_PROVIDER=${AI_PROVIDER}
 DEFAULT_CHAT_ID=${DEFAULT_CHAT_ID}
 
-# ─── ESPHome / прошивки (/esphome, /api/esp/*) ───────────────
-ESPHOME_JOBS_ROOT=${ESPHOME_JOBS_ROOT}
-ESPHOME_MAX_CONCURRENT_BUILDS=${ESPHOME_MAX_CONCURRENT_BUILDS}
-FIRMWARE_DOWNLOAD_TTL_MS=${FIRMWARE_DOWNLOAD_TTL_MS}
-ESPHOME_CLEANUP_INTERVAL_MS=${ESPHOME_CLEANUP_INTERVAL_MS}
-FIRMWARE_BUILD_TIMEOUT_MS=${FIRMWARE_BUILD_TIMEOUT_MS}
-ESPHOME_PLATFORMIO_HOME=${ESPHOME_PLATFORMIO_HOME}
-ESPHOME_PUBLIC_BUILD=${ESPHOME_PUBLIC_BUILD}
-JAMMER_FIRMWARE_BIN=${JAMMER_FIRMWARE_BIN}
+${FIRMWARE_ENV_BLOCK}
 ENV
 
 chmod 600 "$APP_DIR/.env"
@@ -1694,7 +1725,7 @@ if [ "$MODE" = "prod" ]; then
 elif [ "$PLATFORM" = "termux" ]; then
   summary_row "Сайт" "http://127.0.0.1:${API_PORT}" "$GREEN"
   summary_row "Админка" "/satana" "$ORANGE"
-  summary_row "ESPHome" "/esphome/" "$CYAN"
+  summary_row "ESPHome" "отключён" "$DIM"
   if [ "${AUTH_BYPASS_VAL:-0}" = "1" ]; then
     summary_row "Вход" "не требуется (AUTH_BYPASS)" "$GREEN"
   elif [ "$MODE" = "local" ] && [ -n "$ADMIN_EMAIL" ]; then
@@ -1705,6 +1736,13 @@ else
   summary_row "Сайт" "https://localhost" "$GREEN"
   summary_row "Админка" "https://localhost/satana" "$ORANGE"
   summary_row "ESPHome" "https://localhost/esphome/" "$CYAN"
+  if [ "${AUTH_BYPASS_VAL:-0}" = "1" ]; then
+    summary_row "Вход" "без пароля (AUTH_BYPASS)" "$GREEN"
+  fi
+  if [ "$MODE" = "local" ] && [ -n "$ADMIN_EMAIL" ] && [ -n "$ADMIN_PASSWORD" ]; then
+    summary_row "Админ Studio" "${ADMIN_EMAIL}" "$ORANGE"
+    dim "Пароль: ${ADMIN_PASSWORD} · роль admin · план pro"
+  fi
   dim "Предупреждение о сертификате — норма для LOCAL"
 fi
 

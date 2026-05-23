@@ -3042,17 +3042,28 @@ export default function App() {
     }
 
     if (isAuthBypassEnabled()) {
-      const bypassUser = getDevBypassUser();
-      if (bypassUser) {
-        saveSession(bypassUser);
-        setCurrentUser(bypassUser);
+      let cancelledBypass = false;
+      (async () => {
+        let user = getDevBypassUser();
+        try {
+          const data = await apiFetch('/api/me');
+          if (data?.user) user = normalizeSessionUser(data.user);
+        } catch {
+          // fallback: mock admin until DB is up
+        }
+        if (cancelledBypass || !user) return;
+        saveSession(user);
+        setCurrentUser(user);
         setShowAuthModal(false);
-        loadUserProjects(bypassUser.id);
-        checkBotStatus(bypassUser.id);
-      }
+        loadUserProjects(user.id);
+        checkBotStatus(user.id);
+      })();
       const handleExpiredBypass = () => {};
       window.addEventListener('cicada:session-expired', handleExpiredBypass);
-      return () => window.removeEventListener('cicada:session-expired', handleExpiredBypass);
+      return () => {
+        cancelledBypass = true;
+        window.removeEventListener('cicada:session-expired', handleExpiredBypass);
+      };
     }
 
     let cancelled = false;
@@ -4781,8 +4792,7 @@ export default function App() {
                   }}
                 >
                   <span>⚙</span>
-                  {!isMobileView && <span>Админ меню</span>}
-                  {isMobileView && <span>Admin</span>}
+                  <span>Admin</span>
                 </button>
                 {adminOpenSupportCount > 0 && (
                   <button

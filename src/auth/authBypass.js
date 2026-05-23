@@ -6,18 +6,22 @@ function parseAuthBypassFlag(value) {
 }
 
 /**
- * Client-side dev bypass — requires a non-production Vite build (import.meta.env.DEV).
- * VITE_AUTH_BYPASS is injected from AUTH_BYPASS in vite.config.js (development mode only).
- * Never active in production builds regardless of env vars.
+ * Client-side bypass when VITE_AUTH_BYPASS=1 (local WSL/Termux install; set at `vite build` from .env).
  */
 export function isAuthBypassEnabled() {
-  if (import.meta.env.PROD || !import.meta.env.DEV) return false;
   return parseAuthBypassFlag(import.meta.env.VITE_AUTH_BYPASS);
 }
 
 export function getDevBypassUser() {
   if (!isAuthBypassEnabled()) return null;
-  return normalizeSessionUser(createDevBypassUser());
+  const email = String(import.meta.env.VITE_ADMIN_EMAIL || '').trim().toLowerCase();
+  const name = String(import.meta.env.VITE_ADMIN_NAME || 'Admin').trim().slice(0, 64) || 'Admin';
+  return normalizeSessionUser(createDevBypassUser({
+    ...(email ? { email } : {}),
+    name,
+    role: 'admin',
+    plan: 'pro',
+  }));
 }
 
 /** Apply bypass user to module-level session when enabled. */

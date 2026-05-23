@@ -10,7 +10,9 @@ import {
   getDevBypassUser,
   isAuthBypassEnabled,
   logAuthBypassStartupWarning,
+  resolveDevBypassUser,
 } from './server/authBypass.mjs';
+import { isFirmwareRuntimeEnabled } from './core/env.mjs';
 import {
   attachAuthenticatedUser,
   DEV_BYPASS_API_DEFAULTS,
@@ -987,7 +989,8 @@ function getJwtUserId(req) {
 async function requireUserAuth(req, res, next) {
   try {
     if (isAuthBypassEnabled()) {
-      if (!applyDevAuthBypassToRequest(req)) {
+      const bypassUser = await resolveDevBypassUser(findByEmail);
+      if (!applyDevAuthBypassToRequest(req, bypassUser)) {
         return res.status(503).json({ error: 'AUTH_BYPASS включён, но mock user не настроен' });
       }
       attachAuthenticatedUser(req);
@@ -1038,9 +1041,10 @@ function studioLoginRedirectUrl(req) {
 }
 
 /** HTML pages: redirect to Cicada Studio login instead of JSON 401. */
-function requireUserAuthPage(req, res, next) {
+async function requireUserAuthPage(req, res, next) {
   if (isAuthBypassEnabled()) {
-    if (!applyDevAuthBypassToRequest(req)) {
+    const bypassUser = await resolveDevBypassUser(findByEmail);
+    if (!applyDevAuthBypassToRequest(req, bypassUser)) {
       return res.status(503).send('AUTH_BYPASS misconfigured');
     }
     attachAuthenticatedUser(req);
@@ -8824,8 +8828,14 @@ console.log('PORT =', API_PORT);
 
 initDBWithRetry()
   .then(() => migrateUsersJson())
-  .then(() => initJammerFirmwareOnBoot())
-  .then(() => initEspFirmwareOnBoot())
+  .then(async () => {
+    if (!isFirmwareRuntimeEnabled()) {
+      console.log('[firmware] runtime disabled (DISABLE_FIRMWARE_RUNTIME)');
+      return;
+    }
+    await initJammerFirmwareOnBoot();
+    await initEspFirmwareOnBoot();
+  })
   .then(() => {
     startSystemCleanupCron();
     // Bind 0.0.0.0 so Vite proxy (127.0.0.1:3001) and WSL↔Windows both reach the API.
@@ -8840,7 +8850,7 @@ initDBWithRetry()
     });
   })
   .catch((err) => {
-    console.error('❌ DB init failed:', err.message);
+    console.error('❌ Server startup failed:', err.message);
     if (err.code) console.error('   code:', err.code);
     if (err.detail) console.error('   detail:', err.detail);
     if (/could not write init file/i.test(String(err.message))) {

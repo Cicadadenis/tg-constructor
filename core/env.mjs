@@ -53,3 +53,8 @@ export function isAuthBypassEnabled() {
   if (isProduction()) return false;
   return parseTruthyFlag(process.env.AUTH_BYPASS);
 }
+
+/** ESPHome / jammer firmware runtime (off on Termux via setup.sh). */
+export function isFirmwareRuntimeEnabled() {
+  return !parseTruthyFlag(process.env.DISABLE_FIRMWARE_RUNTIME);
+}

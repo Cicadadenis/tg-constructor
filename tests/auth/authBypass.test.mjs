@@ -25,7 +25,10 @@ try {
   delete process.env.APP_ENV;
   const dev = await loadAuthBypassModule();
   assert.equal(dev.isAuthBypassEnabled(), true);
-  assert.equal(dev.getDevBypassUser()?.id, 'dev-bypass-user');
+  const bypassUser = dev.getDevBypassUser();
+  assert.equal(bypassUser?.role, 'admin');
+  assert.equal(bypassUser?.plan, 'pro');
+  assert.ok(bypassUser?.id);
 
   process.env.NODE_ENV = 'production';
   const prod = await loadAuthBypassModule();

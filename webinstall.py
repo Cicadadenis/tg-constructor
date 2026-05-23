@@ -180,11 +180,14 @@ def build_config(body: dict) -> dict[str, str]:
         preview = f"http://127.0.0.1:{api_port}"
         admin_email = admin_email or "admin@local"
         admin_password = ""
-    elif not admin_email:
-        raise ValueError("Email администратора обязателен")
     elif mode == "local":
+        admin_email = admin_email or "denisbednakov@gmail.com"
+        if not admin_password:
+            admin_password = "cicada3301"
         if len(admin_password) < 8:
             raise ValueError("Пароль входа — минимум 8 символов (LOCAL)")
+    elif not admin_email:
+        raise ValueError("Email администратора обязателен")
     else:
         admin_password = admin_password or ""
 
@@ -281,9 +284,10 @@ def build_config(body: dict) -> dict[str, str]:
         "INSTALL_ESPHOME": "1" if install_esphome and platform != "termux" else "0",
         "INSTALL_ESPHOME_ANS": "y" if install_esphome and platform != "termux" else "n",
         "ESPHOME_PIN": esphome_pin,
+        "DISABLE_FIRMWARE_RUNTIME": "1" if platform == "termux" else "0",
         "CONFIRM": "y",
         "NODE_ENV": "development" if platform == "termux" or mode == "local" else "production",
-        "AUTH_BYPASS": "1" if platform == "termux" else "0",
+        "AUTH_BYPASS": "1" if platform == "termux" or mode == "local" else "0",
     }
 
 
