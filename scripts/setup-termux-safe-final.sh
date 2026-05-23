@@ -503,11 +503,6 @@ apply_webinstall_preset() {
     ADMIN_NAME="${ADMIN_NAME:-Admin}"
     INSTALL_ESPHOME=0
     DISABLE_FIRMWARE_RUNTIME=1
-  elif [ "$MODE" = "local" ]; then
-    ADMIN_EMAIL="${ADMIN_EMAIL:-denisbednakov@gmail.com}"
-    ADMIN_PASSWORD="${ADMIN_PASSWORD:-cicada3301}"
-    ADMIN_NAME="${ADMIN_NAME:-Admin}"
-    AUTH_BYPASS_VAL="1"
   fi
   return 0
 }
@@ -640,27 +635,22 @@ if [ "$MODE" = "local" ]; then
     prompt_def ADMIN_EMAIL "admin@local" "Email для UI (VITE_ADMIN_EMAIL)"
     ADMIN_PASSWORD=""
   else
-  prompt_def ADMIN_EMAIL "denisbednakov@gmail.com" "Email администратора"
-  prompt_def ADMIN_NAME "Admin" "Имя в профиле"
-  ADMIN_PASSWORD="${ADMIN_PASSWORD:-cicada3301}"
-  hint "Пароль по умолчанию: ${ADMIN_PASSWORD} (Enter — оставить)"
   while true; do
-    prompt_secret ADMIN_PASSWORD_IN "Пароль для входа"
-    if [ -z "$ADMIN_PASSWORD_IN" ]; then
-      ADMIN_PASSWORD_IN="$ADMIN_PASSWORD"
-    fi
-    ADMIN_PASSWORD="$ADMIN_PASSWORD_IN"
+    prompt ADMIN_EMAIL "Email администратора"
+    [ -n "$ADMIN_EMAIL" ] && break
+    warn "Email обязателен для локального входа"
+  done
+  prompt_def ADMIN_NAME Admin "Имя в профиле"
+  while true; do
+    prompt_secret ADMIN_PASSWORD "Пароль для входа (мин. 8 символов)"
     [ ${#ADMIN_PASSWORD} -ge 8 ] || { warn "Минимум 8 символов"; continue; }
-    prompt_secret ADMIN_PASSWORD2 "Повторите пароль (Enter = тот же)"
-    if [ -z "$ADMIN_PASSWORD2" ]; then
-      ADMIN_PASSWORD2="$ADMIN_PASSWORD"
-    fi
+    prompt_secret ADMIN_PASSWORD2 "Повторите пароль"
     [ "$ADMIN_PASSWORD" = "$ADMIN_PASSWORD2" ] && break
     warn "Пароли не совпадают"
   done
   fi
 else
-  prompt_def ADMIN_EMAIL "denisbednakov@gmail.com" "Email администратора"
+  prompt ADMIN_EMAIL "Email администратора"
 fi
 
 section "Telegram"
@@ -814,7 +804,7 @@ ok "Базовые утилиты установлены"
 
 install_phase "Python и aiogram (bot runtime)"
 
-# Termux: нативная установка (без proot-distro / Ubuntu) — setup-termux-safe-final
+# ─── Termux: пропускаем proot-distro, работаем нативно ─────────────
 if [ "$PLATFORM" = "termux" ]; then
   warn "Termux: пропускаем Ubuntu в proot-distro — работаем нативно"
   info "Используем системный Python из Termux..."
@@ -836,8 +826,12 @@ fi
 APP_DIR="${APP_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 BOT_VENV="${APP_DIR}/.venv-bot"
 
+# ─── aiogram 3 (production bot target) ─────────────────────────────
+APP_DIR="${APP_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+BOT_VENV="${APP_DIR}/.venv-bot"
+
 install_bot_python_runtime() {
-  # Termux: venv может не создаться — не падаем, используем системный pip
+  # На Termux venv может не работать идеально — пробуем создать, но не падаем если ошибка
   if [ ! -d "$BOT_VENV" ]; then
     if python3 -m venv "$BOT_VENV" 2>/dev/null; then
       info "venv создан: $BOT_VENV"
@@ -846,37 +840,37 @@ install_bot_python_runtime() {
       BOT_VENV=""
     fi
   fi
-
+  
+  # Активируем venv если он существует
   if [ -n "$BOT_VENV" ] && [ -d "$BOT_VENV" ]; then
-    # shellcheck disable=SC1091
     . "$BOT_VENV/bin/activate" 2>/dev/null || . "$BOT_VENV/Scripts/activate" 2>/dev/null || true
   fi
 
+  # Termux: pip может отсутствовать в venv + maturin должен найти системный cargo
   if [ "$PLATFORM" = "termux" ]; then
     python3 -m ensurepip --upgrade 2>/dev/null || true
     python3 -m pip install --upgrade pip --quiet 2>/dev/null || true
+    # Добавляем $PREFIX/bin в PATH чтобы maturin нашёл cargo от pkg install rust
     export PATH="${PREFIX:-/data/data/com.termux/files/usr}/bin:${PATH}"
     export CARGO_HOME="${HOME}/.cargo"
     export RUSTUP_HOME="${HOME}/.rustup"
-    if ! command -v cargo &>/dev/null; then
-      hint "Для сборки aiogram: pkg install rust binutils"
-    fi
   fi
 
+  # Пробуем установить зависимости
   if [ -f "${APP_DIR}/requirements-bot.txt" ]; then
     if pip install -q -r "${APP_DIR}/requirements-bot.txt" 2>/dev/null; then
       ok "aiogram установлен"
     else
-      warn "Ошибка requirements-bot.txt — проверь сеть и зависимости"
-      pip install -q aiogram python-telegram-bot 2>/dev/null \
-        || warn "Не удалось установить telegram-зависимости"
+      warn "Ошибка при установке requirements-bot.txt — проверь internet и зависимости"
+      warn "Попытка установить минимальный набор..."
+      pip install -q aiogram python-telegram-bot 2>/dev/null || warn "Не удалось установить telegram-зависимости"
     fi
   else
     warn "requirements-bot.txt не найден"
   fi
-
+  
   if [ -n "$BOT_VENV" ]; then
-    ok "aiogram: ${BOT_VENV}"
+    ok "aiogram установлен в ${BOT_VENV}"
   fi
 }
 
@@ -913,13 +907,15 @@ if ! command -v psql &>/dev/null; then
   info "Устанавливаем PostgreSQL..."
   if [ "$PLATFORM" = "termux" ]; then
     pkg_install postgresql || err "Не удалось установить postgresql (pkg install postgresql)"
+    # Инициализация PostgreSQL на Termux
     if [ ! -d "$PREFIX/var/lib/postgresql" ]; then
       mkdir -p "$PREFIX/var/lib/postgresql" || warn "Не удалось создать каталог PostgreSQL"
     fi
+    # initdb может длиться или fail — не критично
     if initdb "$PREFIX/var/lib/postgresql" &>/dev/null; then
-      info "PostgreSQL: initdb выполнен"
+      info "PostgreSQL базовая конфигурация инициализирована"
     else
-      warn "initdb не завершился — кластер может быть уже инициализирован"
+      warn "initdb не завершился успешно — БД может быть уже инициализирована"
     fi
   else
     $SUDO apt-get update -qq
@@ -935,7 +931,7 @@ if [ "$PLATFORM" = "termux" ]; then
   if pg_ctl -D "$PREFIX/var/lib/postgresql" -l "$PREFIX/var/lib/postgresql/pg.log" start 2>/dev/null; then
     ok "PostgreSQL запущен"
   else
-    warn "PostgreSQL не запустился — возможно уже работает (pgrep postgres)"
+    warn "PostgreSQL не запустился — может быть уже запущен (проверь: pgrep postgres)"
   fi
 elif $HAS_SYSTEMCTL; then
   $SUDO systemctl start postgresql &>/dev/null || warn "systemctl start postgresql — сервис может быть уже запущен"
@@ -1093,9 +1089,9 @@ if [ "$PLATFORM" != "termux" ]; then
   mkdir -p "$APP_DIR/public/firmware" "$APP_DIR/public/flash/jammer" "$APP_DIR/.cache/platformio" \
     /tmp/esphome-jobs 2>/dev/null || true
 fi
-ok "Рабочие каталоги (bots/, uploads/, firmware/) созданы"
+ok "Рабочие каталоги (bots/, uploads/) созданы"
 
-# Jammer / ESPHome артефакты — только VPS/WSL (на Termux прошивки отключены)
+# Jammer / ESPHome — только VPS/WSL (на Termux отключено через DISABLE_FIRMWARE_RUNTIME)
 if [ "$PLATFORM" != "termux" ]; then
   JAMMER_FIRMWARE_BIN="${APP_DIR}/public/firmware/esp8266_deauther.bin"
   mkdir -p "$(dirname "$JAMMER_FIRMWARE_BIN")"
@@ -1180,8 +1176,6 @@ if [ "$APP_ENV_VAL" = "development" ]; then
 fi
 if [ "$PLATFORM" = "termux" ]; then
   AUTH_BYPASS_VAL="1"
-elif [ "$MODE" = "local" ]; then
-  AUTH_BYPASS_VAL="1"
 fi
 
 ESPHOME_BIN_VAL=""
@@ -1253,9 +1247,6 @@ PYTHON_LINE="# PYTHON=/usr/bin/python3"
 CICADA_TG_ROOT_LINE="# CICADA_TG_ROOT=${APP_DIR}"
 [ -n "$CICADA_TG_ROOT" ] && CICADA_TG_ROOT_LINE="CICADA_TG_ROOT=${CICADA_TG_ROOT}"
 
-ESPHOME_BIN_LINE="# ESPHOME_BIN=${APP_DIR}/.venv-esphome/bin/esphome"
-[ -n "$ESPHOME_BIN_VAL" ] && ESPHOME_BIN_LINE="ESPHOME_BIN=${ESPHOME_BIN_VAL}"
-
 FIRMWARE_WS_LINE="# FIRMWARE_WORKSPACE_ROOT=${APP_DIR}"
 [ -n "$FIRMWARE_WORKSPACE_ROOT" ] && FIRMWARE_WS_LINE="FIRMWARE_WORKSPACE_ROOT=${FIRMWARE_WORKSPACE_ROOT}"
 
@@ -1301,7 +1292,6 @@ DSL_SANDBOX_MODE=${DSL_SANDBOX_MODE_VAL}
 VITE_API_URL=${VITE_API_URL}
 VITE_API_TARGET=${VITE_API_TARGET}
 VITE_ADMIN_EMAIL=${ADMIN_EMAIL}
-VITE_ADMIN_NAME=${ADMIN_NAME}
 VITE_TG_BOT_NAME=${TG_BOT_NAME}
 
 # ─── PostgreSQL ───────────────────────────────────────────────
@@ -1338,7 +1328,7 @@ ENV
 chmod 600 "$APP_DIR/.env"
 ok ".env создан (права 600)"
 
-# Termux: очистка битых строк ESPHome/JAMMER из старых .env
+# Termux: убрать битые строки из старых .env (пустые ESPHOME_*, JAMMER без файла)
 if [ "$PLATFORM" = "termux" ] && [ -f "$APP_DIR/.env" ]; then
   _env_tmp="${APP_DIR}/.env.termux-fix.$$"
   grep -v -E '^(ESPHOME_BIN|PIO_BIN|ESPHOME_JOBS_ROOT|JAMMER_FIRMWARE_BIN|FIRMWARE_WORKSPACE_ROOT|DB_TYPE)=' \
@@ -1352,7 +1342,7 @@ if [ "$PLATFORM" = "termux" ] && [ -f "$APP_DIR/.env" ]; then
   fi
   mv -f "$_env_tmp" "$APP_DIR/.env"
   chmod 600 "$APP_DIR/.env"
-  ok "Termux: .env очищен (AUTH_BYPASS, DISABLE_FIRMWARE_RUNTIME)"
+  ok "Termux: .env очищен (DISABLE_FIRMWARE_RUNTIME=1)"
 fi
 
 # ═══════════════════════════════════════════════════════════════
@@ -1732,8 +1722,9 @@ _run_check() {
   return 1
 }
 
+# На Termux таблицы могут появиться позже — не критично
 if [ "$PLATFORM" = "termux" ]; then
-  warn "Termux: пропускаем проверку таблицы users (создаётся при старте приложения)"
+  warn "Termux: пропускаем проверку таблицы users (может быть создана позже приложением)"
 else
   _run_check "PostgreSQL: таблица users существует" 15 \
     pgsql_super -d "$DB_NAME" -c "SELECT COUNT(*) FROM users;"
@@ -1807,13 +1798,6 @@ else
   summary_row "Сайт" "https://localhost" "$GREEN"
   summary_row "Админка" "https://localhost/satana" "$ORANGE"
   summary_row "ESPHome" "https://localhost/esphome/" "$CYAN"
-  if [ "${AUTH_BYPASS_VAL:-0}" = "1" ]; then
-    summary_row "Вход" "без пароля (AUTH_BYPASS)" "$GREEN"
-  fi
-  if [ "$MODE" = "local" ] && [ -n "$ADMIN_EMAIL" ] && [ -n "$ADMIN_PASSWORD" ]; then
-    summary_row "Админ Studio" "${ADMIN_EMAIL}" "$ORANGE"
-    dim "Пароль: ${ADMIN_PASSWORD} · роль admin · план pro"
-  fi
   dim "Предупреждение о сертификате — норма для LOCAL"
 fi
 

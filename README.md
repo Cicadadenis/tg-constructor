@@ -263,7 +263,7 @@ sudo bash bootstrap.sh           # VPS: от root
 sudo CICADA_TG_PIN=0.0.1 bash bootstrap.sh
 ```
 
-**Termux (Android):** используйте `setup.sh` (тот же сценарий, что в рабочем `setup.sh` для Termux). `bootstrap.sh` на Termux автоматически перенаправляет в `setup.sh`.
+**Termux (Android):** `bash scripts/termux-setup.sh` → `setup.sh` с логикой **setup-termux-safe-final** (нативно, без proot-distro). Эталон: `scripts/setup-termux-safe-final.sh`. `bootstrap.sh` на Termux перенаправляет в `setup.sh`.
 
 ```bash
 # Скопируйте проект в ~/ (не в /root), обычная сессия Termux (без su):
