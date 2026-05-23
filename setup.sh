@@ -686,10 +686,13 @@ apply_webinstall_preset() {
   USE_ADMIN_KEY="${USE_ADMIN_KEY:-y}"
   USE_JWT_SECRET="${USE_JWT_SECRET:-y}"
   APP_DIR="${APP_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+  MODE="${MODE:-local}"
   if [ "${MODE_CHOICE:-}" = "1" ] && [ "$PLATFORM" != "termux" ]; then
     MODE="prod"
-  else
-    MODE="${MODE:-local}"
+  fi
+  # Домен из webinstall → всегда prod (иначе APP_URL=https://localhost ломает сайт)
+  if [ "$PLATFORM" != "termux" ] && [ -n "${DOMAIN:-}" ] && [ "$DOMAIN" != "localhost" ]; then
+    MODE="prod"
   fi
   if [ "$MODE" = "prod" ]; then
     PREVIEW_APP_URL="https://${DOMAIN}"
@@ -1424,12 +1427,17 @@ else
   info "JWT_SECRET задан при опросе (${#JWT_SECRET} символов)"
 fi
 
+if [ -n "${DOMAIN:-}" ] && [ "$DOMAIN" != "localhost" ] && [ "$PLATFORM" != "termux" ]; then
+  MODE="prod"
+fi
 if [ "$MODE" = "prod" ]; then
+  DOMAIN="${DOMAIN:-localhost}"
   VITE_API_URL="https://${DOMAIN}/api"
   VITE_API_TARGET="https://${DOMAIN}"
   APP_URL_VAL="https://${DOMAIN}"
   APP_ENV_VAL="production"
   GOOGLE_CALLBACK_URL="${APP_URL_VAL}/api/auth/google/callback"
+  CORS_ORIGINS="${CORS_ORIGINS:-https://${DOMAIN}}"
 elif [ "$PLATFORM" = "termux" ]; then
   VITE_API_URL="http://127.0.0.1:${API_PORT}/api"
   VITE_API_TARGET="http://127.0.0.1:${API_PORT}"
