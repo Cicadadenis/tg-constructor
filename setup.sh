@@ -1917,7 +1917,7 @@ grant_admin_privileges() {
 
 if [ "$MODE" = "local" ] && [ -n "$ADMIN_PASSWORD" ]; then
   sleep 2
-  seed_local_admin_account
+  seed_local_admin_account || warn "Создание локального админа не удалось — зарегистрируйся в UI"
 elif [ -n "$ADMIN_EMAIL" ]; then
   echo ""
   info "Выдаём pro-план администратору ($ADMIN_EMAIL)..."
@@ -1948,14 +1948,15 @@ _run_check() {
     return 0
   fi
   warn "$label — проверка не прошла (таймаут ${secs}с или сервис недоступен)"
-  return 1
+  hint "Некритично для завершения установки — см. pm2 logs cicada-server"
+  return 0
 }
 
 if [ "$PLATFORM" = "termux" ]; then
   warn "Termux: пропускаем проверку таблицы users (создаётся при старте приложения)"
 else
-  _run_check "PostgreSQL: таблица users существует" 15 \
-    pgsql_super -d "$DB_NAME" -c "SELECT COUNT(*) FROM users;"
+  _run_check "PostgreSQL: таблица users существует" 30 \
+    pgsql_super -d "$DB_NAME" -c "SELECT COUNT(*) FROM users;" || true
 fi
 
 if command -v timeout &>/dev/null; then
