@@ -310,6 +310,7 @@ def build_config(body: dict) -> dict[str, str]:
         "CONFIRM": "y",
         "NODE_ENV": "development" if platform == "termux" or mode == "local" else "production",
         "AUTH_BYPASS": "1" if platform == "termux" or mode == "local" else "0",
+        "SKIP_LE_SSL": "1" if body.get("skip_le_ssl") else "0",
     }
 
 

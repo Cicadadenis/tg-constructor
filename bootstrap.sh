@@ -1309,10 +1309,26 @@ NGINX
 fi
 
 # ═══════════════════════════════════════════════════════════════
-# 10. SSL — LET'S ENCRYPT (только PROD на VPS)
+# 10. FIREWALL (VPS) — до Let's Encrypt
+# ═══════════════════════════════════════════════════════════════
+if [ "$PLATFORM" = "vps" ]; then
+  echo ""
+  info "Настраиваем firewall (UFW)..."
+  $SUDO ufw allow OpenSSH &>/dev/null || $SUDO ufw allow ssh &>/dev/null || true
+  $SUDO ufw allow 80/tcp  &>/dev/null || true
+  $SUDO ufw allow 443/tcp &>/dev/null || true
+  $SUDO ufw --force enable &>/dev/null || warn "UFW: не удалось включить"
+  ok "Firewall: порты 22, 80, 443"
+fi
+
+# ═══════════════════════════════════════════════════════════════
+# 11. SSL — LET'S ENCRYPT (только PROD на VPS)
 # ═══════════════════════════════════════════════════════════════
 if [ "$MODE" = "prod" ] && [ "$PLATFORM" = "vps" ]; then
   echo ""
+  if [ "${SKIP_LE_SSL:-0}" = "1" ]; then
+    warn "SKIP_LE_SSL=1 — пропускаем Let's Encrypt"
+  else
   info "Получаем SSL сертификат Let's Encrypt..."
   if ! command -v certbot &>/dev/null; then
     $SUDO apt-get install -y -qq certbot python3-certbot-nginx
@@ -1440,23 +1456,10 @@ NGINX
       cat /tmp/cicada_nginx_err >&2 || true
     fi
   else
-    warn "Не удалось получить сертификат. Проверь что домен указывает на этот сервер."
+    warn "Не удалось получить сертификат. Проверь A-запись домена и порты 80/443."
+    hint "Повтор: sudo certbot --nginx -d ${DOMAIN}  |  без SSL: SKIP_LE_SSL=1"
   fi
-fi
-
-# ═══════════════════════════════════════════════════════════════
-# 11. FIREWALL (только VPS)
-# ═══════════════════════════════════════════════════════════════
-if [ "$PLATFORM" = "vps" ]; then
-  echo ""
-  info "Настраиваем firewall (UFW)..."
-  ufw --force enable &>/dev/null
-  ufw allow ssh  &>/dev/null
-  ufw allow 80   &>/dev/null
-  ufw allow 443  &>/dev/null
-  ok "Firewall: открыты порты 22, 80, 443"
-else
-  warn "Firewall (UFW) пропущен — не нужен на $PLATFORM"
+  fi
 fi
 
 # ═══════════════════════════════════════════════════════════════

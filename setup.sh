@@ -1657,37 +1657,82 @@ NGINX
 fi
 
 # ═══════════════════════════════════════════════════════════════
-# 10. SSL — LET'S ENCRYPT (только PROD на VPS)
-# ═══════════════════════════════════════════════════════════════
-if [ "$MODE" = "prod" ] && [ "$PLATFORM" = "vps" ]; then
-  echo ""
-  info "Получаем SSL сертификат Let's Encrypt..."
-  if ! command -v certbot &>/dev/null; then
-    apt-get install -y -qq certbot python3-certbot-nginx
-  fi
-  certbot --nginx \
-    -d "$DOMAIN" \
-    --email "$LE_EMAIL" \
-    --agree-tos \
-    --non-interactive \
-    --redirect \
-    && ok "SSL сертификат получен и настроен" \
-    || warn "Не удалось получить сертификат. Проверь что домен указывает на этот сервер."
-fi
-
-# ═══════════════════════════════════════════════════════════════
-# 11. FIREWALL (только VPS)
+# 10. FIREWALL (VPS) — до Let's Encrypt, иначе порт 80 закрыт
 # ═══════════════════════════════════════════════════════════════
 if [ "$PLATFORM" = "vps" ]; then
   echo ""
   info "Настраиваем firewall (UFW)..."
-  ufw --force enable &>/dev/null
-  ufw allow ssh  &>/dev/null
-  ufw allow 80   &>/dev/null
-  ufw allow 443  &>/dev/null
-  ok "Firewall: открыты порты 22, 80, 443"
+  $SUDO ufw allow OpenSSH &>/dev/null || $SUDO ufw allow ssh &>/dev/null || true
+  $SUDO ufw allow 80/tcp  &>/dev/null || true
+  $SUDO ufw allow 443/tcp &>/dev/null || true
+  $SUDO ufw --force enable &>/dev/null || warn "UFW: не удалось включить (проверь firewall хостинга)"
+  ok "Firewall: порты 22, 80, 443"
 else
   warn "Firewall (UFW) пропущен — не нужен на $PLATFORM"
+fi
+
+# ═══════════════════════════════════════════════════════════════
+# 11. SSL — LET'S ENCRYPT (только PROD на VPS)
+# ═══════════════════════════════════════════════════════════════
+_server_public_ipv4() {
+  curl -4 -s --max-time 8 https://api.ipify.org 2>/dev/null \
+    || curl -4 -s --max-time 8 https://ifconfig.me/ip 2>/dev/null \
+    || hostname -I 2>/dev/null | awk '{print $1}' \
+    || true
+}
+
+_check_domain_points_here() {
+  local domain=$1 server_ip resolved
+  domain="${domain#https://}"
+  domain="${domain#http://}"
+  domain="${domain%%/*}"
+  [ -z "$domain" ] || [ "$domain" = "localhost" ] && return 0
+  server_ip=$(_server_public_ipv4)
+  [ -z "$server_ip" ] && return 0
+  resolved=$(getent ahostsv4 "$domain" 2>/dev/null | awk '{print $1; exit}')
+  if [ -z "$resolved" ]; then
+    warn "DNS: домен ${domain} пока не резолвится"
+    hint "Добавь A-запись ${domain} → ${server_ip} и подожди 5–30 мин"
+    return 1
+  fi
+  if [ "$resolved" != "$server_ip" ]; then
+    warn "DNS: ${domain} → ${resolved}, IP сервера: ${server_ip}"
+    hint "Let's Encrypt не выдаст сертификат, пока A-запись не укажет на этот VPS"
+    return 1
+  fi
+  ok "DNS: ${domain} → ${server_ip}"
+  return 0
+}
+
+if [ "$MODE" = "prod" ] && [ "$PLATFORM" = "vps" ]; then
+  echo ""
+  if [ "${SKIP_LE_SSL:-0}" = "1" ]; then
+    warn "SKIP_LE_SSL=1 — пропускаем Let's Encrypt (сайт на http://${DOMAIN})"
+  else
+    info "Получаем SSL сертификат Let's Encrypt для ${DOMAIN}..."
+    _check_domain_points_here "$DOMAIN" || true
+    if ! command -v certbot &>/dev/null; then
+      $SUDO apt-get install -y -qq certbot python3-certbot-nginx \
+        || warn "Не удалось установить certbot"
+    fi
+    set +e
+    $SUDO certbot --nginx \
+      -d "$DOMAIN" \
+      --email "${LE_EMAIL:-admin@${DOMAIN}}" \
+      --agree-tos \
+      --non-interactive \
+      --redirect
+    _certbot_rc=$?
+    set -e
+    if [ "$_certbot_rc" -eq 0 ]; then
+      ok "SSL сертификат получен и настроен"
+    else
+      warn "Let's Encrypt не выдал сертификат (certbot exit ${_certbot_rc})"
+      hint "1) A-запись ${DOMAIN} → $(_server_public_ipv4)  2) порты 80/443 открыты у хостера"
+      hint "3) без «оранжевого облака» Cloudflare на время выпуска  4) повтор: sudo certbot --nginx -d ${DOMAIN}"
+      hint "Временно без SSL: SKIP_LE_SSL=1 в .env и переустановка — сайт на http://${DOMAIN}"
+    fi
+  fi
 fi
 
 # ═══════════════════════════════════════════════════════════════
