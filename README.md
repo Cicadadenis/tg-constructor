@@ -6,15 +6,17 @@
 
 # ✦ Cicada Studio
 
-### Конструктор Telegram-ботов на языке Cicada DSL
+### Конструктор Telegram-ботов на графе блоков и Cicada DSL
 
-**Опиши своего бота словами — получи полностью рабочий Telegram-бот за секунды.**  
-Без кода. Без программирования. Прямо из браузера.
+**Опиши бота словами или собери на холсте — получи рабочий Telegram-бот на aiogram 3.**  
+Без ручного кода. Прямо из браузера.
 
 <br/>
 
 [![Node.js](https://img.shields.io/badge/Node.js-20-339933?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/Core-TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](core/)
+[![Python](https://img.shields.io/badge/Platform-Python_3.13-3776AB?style=flat-square&logo=python&logoColor=white)](platform/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://postgresql.org)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docker.com)
 [![License](https://img.shields.io/badge/License-MIT-ffd700?style=flat-square)](LICENSE)
@@ -27,326 +29,279 @@
 
 ## ✦ Killer Feature — AI → Telegram Bot
 
-Напишите по-русски, что должен делать ваш бот:
+Напишите по-русски, что должен делать бот — Studio построит **граф блоков** и сгенерирует **Python (aiogram 3)** для запуска:
 
 ```
 "Создай бота для кофейни: приветствие, меню с 5 позициями,
  кнопка заказа, QR-код для оплаты, FAQ"
 ```
 
-↓ **Cicada Studio генерирует за 3–5 секунд** ↓
+↓ **за несколько секунд** ↓
 
-```cicada
-бот "TOKEN"
+- визуальный граф на холсте (React Flow);
+- preview-код `bot.py` через ядро **`core/codegen`**;
+- запуск в Telegram через песочницу (`services/dslRunner.mjs` + CLI `cicada` / Python venv).
 
-при старте:
-    ответ "Привет! Добро пожаловать в CoffeBot ☕"
-    кнопки "📋 Меню" "❓ FAQ" "📷 QR оплата"
-
-при нажатии "📋 Меню":
-    ответ "Наше меню:\n• Эспрессо — 120₽\n• Капучино — 180₽\n• Латте — 200₽"
-    кнопки "🛒 Заказать" "🏠 Назад"
-
-при нажатии "📷 QR оплата":
-    запустить qr_сценарий
-
-сценарий qr_сценарий:
-    шаг ввод:
-        спросить "Введите сумму для QR:" → amount
-    шаг ответ:
-        ответ "💳 QR-код: https://api.qrserver.com/v1/create-qr-code/?data={amount}"
-        завершить сценарий
-```
-
-> Никакого знания DSL не требуется. Просто опиши задачу — редактор сделает остальное.
+Текстовый **Cicada DSL** по-прежнему поддерживается в панели DSL и для AI-экспорта, но **единственный execution target превью и экспорта конструктора — aiogram 3**, не legacy `.ccd`.
 
 ---
 
 ## ⚡ Что такое Cicada Studio
 
-**Cicada Studio** — это полноценная платформа для создания, запуска и управления Telegram-ботами. В основе — собственный язык **Cicada DSL**, специально созданный для описания диалоговой логики на русском языке.
+**Cicada Studio** — платформа для создания, запуска и управления Telegram-ботами: визуальный конструктор, облачные проекты в PostgreSQL, админка и опционально ESPHome.
 
 | Компонент | Описание |
 |---|---|
-| 🤖 **AI-генерация** | Бот из текстового описания (Ollama и/или GROQ) |
-| 🎨 **Визуальный редактор** | Drag-and-drop блоки + встроенная DSL-панель |
-| ▶️ **Запуск из браузера** | Один клик — бот работает в Telegram |
-| 🔒 **Sandbox** | Изолированное выполнение с лимитами по CPU/памяти/времени |
-| ☁️ **Облачные проекты** | PostgreSQL: сохранение, загрузка, синхронизация |
-| 🔌 **ESPHome** | Визуальный конструктор `/esphome/`, сборка прошивок ESP32/ESP8266 на сервере |
-| 🧩 **Cicada Platform** | Модульный async runtime (`platform/`) — DSL→IR, transport plugins, sandbox API |
-| 👤 **Авторизация** | Email/пароль + Telegram OAuth + JWT + bcrypt |
-| 🛡️ **Admin-панель** | Деньги, пользователи, боты, безопасность, система |
+| 🧩 **Ядро `core/`** | Graph JSON → AST → **aiogram 3** (`compileGraphToPython`), IDE-парсер, AI IR (intent → graph), `core:guard` при сборке |
+| 🐍 **Cicada Platform `platform/`** | Новый модульный runtime: DSL → AST → IR → async executor, transport plugins, sandbox (миграция с legacy CLI) |
+| 🎨 **Конструктор `src/`** | React 18 + Vite, React Flow, staged validation, библиотека модулей |
+| 🤖 **AI** | GROQ / Anthropic / Ollama — генерация графа и DSL из текста |
+| ▶️ **Запуск бота** | `services/dslRunner.mjs` — изолированный процесс, лимиты CPU/RAM/времени |
+| ☁️ **Облако** | PostgreSQL: проекты, пользователи, подписки |
+| 🔌 **ESPHome** | `/esphome/`, сборка прошивок ESP32/ESP8266 на сервере |
+| 🛠️ **Webinstall** | `webinstall.py` — монитор, установка из `.env`, файловый менеджер (порт **7700**) |
+| 👤 **Auth** | Email/пароль, Google OAuth, Telegram, JWT |
+| 🛡️ **Admin** | `/satana` — пользователи, боты, безопасность, логи |
+
+> Операционный гайд (порты, swap, webinstall API): **[READMI.md](READMI.md)**
+
+---
+
+## 🏗️ Архитектура ядра
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│  Browser: src/ (React Flow, ModuleLibrary, DSLPanel, Builder)    │
+└────────────────────────────┬────────────────────────────────────┘
+                             │ Graph JSON / API
+┌────────────────────────────▼────────────────────────────────────┐
+│  server.mjs (Express 5)                                          │
+│  · auth, projects, admin, ESP build, AI routes                   │
+│  · compile preview → core/compiler/codegen.ts                    │
+│  · run bot → services/dslRunner.mjs                              │
+└────────────┬───────────────────────────────┬──────────────────────┘
+             │                               │
+┌────────────▼──────────────┐   ┌────────────▼──────────────────────┐
+│  core/ (TS/JS)            │   │  platform/ (Python, опционально)   │
+│  · codegen → bot.py       │   │  · compiler + async RuntimeEngine  │
+│  · ide/ parser, semantic  │   │  · transport.telegram, sandbox     │
+│  · ai/ IR pipeline        │   │  · цель: заменить spawn CLI       │
+│  · rules, manifests       │   │  · см. platform/docs/ARCHITECTURE  │
+└───────────────────────────┘   └────────────────────────────────────┘
+             │
+             ▼
+   .venv-bot / cicada CLI  →  Telegram API
+```
+
+### Слои `core/` (production path Studio)
+
+| Путь | Назначение |
+|------|------------|
+| `core/codegen/` | Graph → stacks → `bot.py` (aiogram 3), `npm run core:guard` |
+| `core/compiler/` | TypeScript entry `compileGraph` / sync API для server |
+| `core/ide/` | Lexer, parser, semantic, LSP-провайдеры для DSL/редактора |
+| `core/ai/` | IR: intent, repair, semantic gate, reconciler для AI-генерации |
+| `core/graph/`, `core/ir/` | Нормализация flow, project IR v2 |
+| `core/manifests/` | `api-manifest.json`, capabilities для палитры блоков |
+
+Подробнее: [`core/codegen/README.md`](core/codegen/README.md), [`core/ide/README.md`](core/ide/README.md).
+
+### `platform/` (новое ядро runtime)
+
+Модульная event-driven платформа (Python 3.13+): **DSL → AST → IR → executor**, плагины transport/storage/sandbox.
+
+```bash
+cd platform
+pip install -e ".[dev,telegram]"
+set CICADA_GRAPH_NATIVE_MODE=1
+cicada-platform serve --reload
+pytest tests/parity -q
+```
+
+Документация: [`platform/README.md`](platform/README.md), [`platform/docs/ARCHITECTURE.md`](platform/docs/ARCHITECTURE.md).
 
 ---
 
 ## 🧬 Язык Cicada DSL
 
-Cicada DSL — декларативный язык с русскоязычным синтаксисом для описания сценариев Telegram-ботов.
+Cicada DSL — декларативный русскоязычный синтаксис для сценариев ботов. Используется в DSL-панели, AI-экспорте и legacy-запуске через CLI `cicada-studio` (PyPI).
 
 ### Основные конструкции
 
 ```cicada
-# Объявление бота
 бот "TG_BOT_TOKEN"
 
-# Обработка команды /start
 при старте:
     ответ "Привет, {пользователь.имя}!"
-    кнопки "📦 Каталог" "💬 Поддержка" "👤 Профиль"
+    кнопки "📦 Каталог" "💬 Поддержка"
 
-# Обработка нажатия кнопки
-при нажатии "📦 Каталог":
-    ответ "Выберите категорию:"
-    кнопки "👟 Обувь" "👗 Одежда" "🔙 Назад"
-
-# FSM-сценарий (многошаговый диалог)
 сценарий регистрация:
     шаг имя:
         спросить "Как вас зовут?" → user_name
-
-    шаг телефон:
-        спросить "Введите номер телефона:" → user_phone
-
     шаг готово:
-        сохранить "name" = user_name
-        ответ "Готово! Вы зарегистрированы, {user_name} ✅"
+        ответ "Готово, {user_name} ✅"
         завершить сценарий
 
-# Условная логика
-при нажатии "👤 Профиль":
-    если пользователь.подписка == "pro":
-        ответ "PRO-аккаунт активен 🌟"
-    иначе:
-        ответ "Обновите подписку для доступа к PRO"
-        кнопки "💳 Купить PRO"
-
-# Сохранение данных
-при нажатии "💾 Сохранить":
-    сохранить "last_action" = "profile_view"
-    ответ "Сохранено!"
-
-# HTTP-запросы
 при нажатии "🌤 Погода":
     http_get "https://wttr.in/Moscow?format=3" json weather_data → result
     ответ "Погода: {result}"
 ```
 
-### Возможности языка
+### Возможности
 
-- **Кнопки** — инлайн и reply-клавиатуры
-- **FSM-сценарии** — пошаговые диалоги с состоянием (`сценарий` + `шаг`)
-- **Переменные** — сохранение и чтение данных пользователя (`сохранить`, `получить`)
-- **Условия** — ветвление логики (`если` / `иначе`)
-- **HTTP-запросы** — интеграция с внешними API
-- **Системные переменные** — `пользователь.имя`, `пользователь.id`, `пользователь.username`
-- **Форматирование** — шаблоны `{переменная}` в ответах
+- Кнопки (inline / reply), FSM (`сценарий` + `шаг`)
+- Переменные (`сохранить`, `получить`), `если` / `иначе`
+- HTTP, шаблоны `{переменная}`, системные поля пользователя
+
+Примеры: [`docs/examples/`](docs/examples/).
 
 ---
 
-## 🎛️ Визуальный редактор
+## 🎛️ Визуальный конструктор
 
-Редактор состоит из трёх панелей:
+Редактор на **React Flow** (`@xyflow/react`): блоки, порты, staged validation, синхронизация с DSL-панелью.
 
 ```
 ┌─────────────────┬────────────────────┬──────────────────┐
-│   Блоки (слева) │   Холст (центр)    │  Свойства (права)│
-│                 │                    │                  │
-│  🤖 Бот         │  [Бот блок]        │  token: ...      │
-│  🚀 При старте  │       ↓            │  name: ...       │
-│  👆 При нажатии │  [При старте]      │                  │
-│  💬 Ответ       │       ↓            │                  │
-│  🔘 Кнопки      │  [Ответ]          │                  │
-│  ❓ Спросить    │       ↓            │                  │
-│  💾 Сохранить   │  [Кнопки]         │                  │
-│  🔀 Сценарий    │                    │                  │
+│   Палитра       │   Граф (холст)     │  Свойства / код  │
+│   модулей       │   узлы + рёбра     │  Python preview  │
 └─────────────────┴────────────────────┴──────────────────┘
 ```
 
-**Функции редактора:**
-- Drag-and-drop блоков на холст
-- Zoom in/out, pan
-- Авто-соединение блоков при перетаскивании
-- Экспорт/импорт проекта в JSON
-- Синхронизация DSL-панели с визуальным представлением в реальном времени
-- **Проверка ошибок DSL** с подсветкой строк
-- **Автоисправление** — одной кнопкой устраняет типичные ошибки
-- **Библиотека модулей** — готовые шаблоны (QR-бот, FAQ, регистрация и др.)
+**Возможности:**
+
+- Drag-and-drop, zoom/pan, авто-связи
+- **Preview Python** — `core/codegen` → aiogram 3 (ошибки в UI)
+- Проверка графа, подсказки, библиотека builtin-модулей (`src/modules/builtin/`)
+- Экспорт проекта, облачное сохранение
+- AI: текст → IR → граф (см. `core/ai/`)
+
+Ключевые каталоги: `src/constructor/`, `src/builder/`, `src/ModuleLibrary.jsx`.
 
 ---
 
 ## 🛡️ Безопасность
 
 ### Аутентификация
-- **bcrypt** (cost factor 10) для хэширования паролей
-- **JWT** токены + cookie-session (двойной слой)
-- **Telegram OAuth** с проверкой подписи `HMAC-SHA256`
-- Rate limiting на `/login`, `/register`, `/reset-password`
 
-### DSL Sandbox
-Каждый бот запускается в изолированном процессе (`child_process.spawn`) с жёсткими ограничениями:
+- **bcrypt** для паролей, **JWT** + cookie-session
+- **Google OAuth**, Telegram OAuth (`HMAC-SHA256`)
+- Rate limiting на auth-роутах
+- **`AUTH_BYPASS=1`** только в `NODE_ENV=development` (LOCAL / Termux)
+
+### DSL / Python sandbox
+
+Запуск бота — отдельный процесс с лимитами:
 
 | Лимит | По умолчанию | Переменная |
 |---|---|---|
-| Время выполнения | 5 минут | `DSL_MAX_RUNTIME_MS` |
-| Размер кода | 100 КБ (байт UTF-8) | `DSL_MAX_CODE_BYTES` |
-| Объём логов (stdout+stderr) | 80 000 символов | `DSL_MAX_LOG_CHARS` |
+| Время | 5 мин | `DSL_MAX_RUNTIME_MS` |
+| Размер кода | 100 КБ | `DSL_MAX_CODE_BYTES` |
+| Логи | 80 000 симв. | `DSL_MAX_LOG_CHARS` |
 
-При превышении лимита — принудительная остановка (`SIGKILL`).
+На Linux — **bubblewrap** (`DSL_SANDBOX_MODE`, `bootstrap.sh` ставит пакет).
 
-### Admin Panel
-- Отдельная сессия от пользовательской
-- `timingSafeEqual` для сравнения `ADMIN_KEY`
-- Минимальная длина `ADMIN_KEY` — 16 символов
-- Аудит всех административных действий
+### Admin (`/satana`)
 
-### Ответы API и ошибки
-
-В теле ответов `/api/*` клиенту отдаются **только** заранее заданные короткие сообщения по полю `error`. Детали сбоев (цепочки вызовов, тексты ошибок сторонних API, БД) пишутся **только на сервер** (логи и раздел мониторинга в админке), чтобы не упрощать разведку и не светить внутреннюю реализацию.
+- `ADMIN_KEY` (≥16 символов), опционально **TOTP** и **WebAuthn / Passkey**
+- `timingSafeEqual`, аудит действий
+- В API клиенту — только короткие `error`; детали в серверных логах
 
 ---
 
 ## 🖥️ Admin-панель
 
-Доступ по **`/satana`** (canonical URL; есть редирект со старых имён вида `.html`). Первый вход выполняется через `ADMIN_KEY` в `.env` (и `ADMIN_TOTP_SECRET`, если он задан). После входа в разделе **🔒 Безопасность** можно зарегистрировать WebAuthn / Passkey (отпечаток, Face ID или системный PIN) и затем входить кнопкой «ВОЙТИ ПО ОТПЕЧАТКУ» без ввода ключа.
+**`/satana`** — деньги (CryptoBot), пользователи, боты, безопасность (`GROQ_TOKEN` 1–3), системные логи, WebAuthn.
 
-### Разделы
-
-**💰 Деньги** — управление планами подписок, цены, статистика платежей (CryptoBot)
-
-**👥 Пользователи** — список пользователей с фильтрацией и поиском, карточка пользователя:
-- История входов и IP-адреса
-- Действия пользователя
-- Логи бота в реальном времени
-- Подписки и статус аккаунта
-- Действия: бан/разбан, сброс пароля, назначение роли/уровня доступа, выдача подписки
-
-**🤖 Боты / Продукт** — сводная статистика: активные боты, подписки, метрики использования
-
-**🔒 Безопасность** — статус конфигурации:
-- Длина и статус `ADMIN_KEY`
-- Количество зарегистрированных отпечатков / Face ID (admin Passkeys) и WebAuthn RP ID
-- JWT настройки
-- Политика cookie
-- Активные сессии
-- Управление `GROQ_TOKEN` (1-3) через интерфейс
-
-**🖥️ Система** — мониторинг сервера:
-- Uptime, память, Node.js версия, PID
-- Активные боты
-- Лог ошибок API, Auth, системных ошибок
-- Фильтрация логов по пользователю (email/ID)
-- Журнал действий администратора
+Первый вход: `ADMIN_KEY` (+ `ADMIN_TOTP_SECRET` при необходимости). Secure context: `https://` или `http://localhost`.
 
 ---
 
 ## 🚀 Быстрый старт
 
-### Предварительные требования
+### Требования
 
-- **Node.js 20+** и **npm**
+- **Node.js 20+**, **npm**
 - **PostgreSQL 14+**
-- **Python 3 + pip** — для CLI `cicada` из пакета [cicada-studio](https://pypi.org/project/cicada-studio/) (исполнитель DSL в песочнице)
-- Токен бота ([@BotFather](https://t.me/BotFather))
-- Для AI-генерации: **Ollama** локально или **GROQ** ([console.groq.com](https://console.groq.com)); см. `env.example`
-- Для сборки прошивок из Studio: **ESPHome** (опционально; `bootstrap.sh` ставит в `.venv-esphome`, см. ниже)
+- **Python 3.10+** — venv бота (`.venv-bot`), опционально `pip install cicada-studio`
+- Токен [@BotFather](https://t.me/BotFather)
+- AI: **GROQ** / **Anthropic** / **Ollama** — см. `env.example`
 
-### Автоустановка: `bootstrap.sh` / `setup.sh`
+### Локальная разработка
 
-На **Ubuntu/Debian (VPS)** и в **WSL** — из корня проекта:
+```bash
+git clone https://github.com/Cicadadenis/tg-constructor.git
+cd tg-constructor
+
+npm install
+cp env.example .env
+# заполните JWT_SECRET, ADMIN_KEY, DB_*, TG_BOT_TOKEN
+
+npm run dev          # UI → http://localhost:5173
+npm run server:dev   # API → http://localhost:3001
+```
+
+Проверки:
+
+```bash
+npm run check:server
+npm run core:guard
+npm run build
+npm run test:compiler
+```
+
+### VPS / WSL — webinstall (рекомендуется)
+
+Веб-панель без ручного ввода в терминале:
+
+```bash
+cd /path/to/tg-constructor
+git pull
+sudo python3 webinstall.py
+```
+
+Откройте URL из консоли (порт **7700** по умолчанию, может сдвинуться на 7701…):
+
+```text
+http://IP_СЕРВЕРА:7700/
+```
+
+| Вкладка | Функция |
+|---------|---------|
+| **Монитор** | CPU, RAM, swap, процессы |
+| **Установка** | Форма или загрузка `.env` → `setup.sh --webinstall` (SSE-логи) |
+| **Файлы** | Просмотр/редактирование проекта (`.env` скрыт) |
+
+Переменные: `WEBINSTALL_PORT`, `WEBINSTALL_PUBLIC_URL`. Подробно: **[READMI.md](READMI.md)**.
+
+Установка без UI:
+
+```bash
+python3 webinstall.py --direct
+```
+
+### Автоустановка — `bootstrap.sh` / `setup.sh`
 
 ```bash
 chmod +x bootstrap.sh
-sudo bash bootstrap.sh           # VPS: от root
-
-# При необходимости зафиксировать версию рантайма DSL:
-sudo CICADA_TG_PIN=0.0.1 bash bootstrap.sh
-```
-
-**Termux (Android):** `bash scripts/termux-setup.sh` → `setup.sh` с логикой **setup-termux-safe-final** (нативно, без proot-distro). Эталон: `scripts/setup-termux-safe-final.sh`. `bootstrap.sh` на Termux перенаправляет в `setup.sh`.
-
-```bash
-# Скопируйте проект в ~/ (не в /root), обычная сессия Termux (без su):
-cd ~/tg-constructor-main
-bash setup.sh
-# или:
+sudo bash bootstrap.sh
+# Termux:
 bash scripts/termux-setup.sh
 ```
 
-На Termux скрипт выбирает режим **LOCAL**, в `.env` пишет **`AUTH_BYPASS=1`**, **`DISABLE_FIRMWARE_RUNTIME=1`** и **`NODE_ENV=development`** — вход в Studio **без пароля** (mock-пользователь). API: `http://127.0.0.1:3001` (не `https://localhost`). Nginx, ESPHome и сборка прошивок на устройстве не ставятся.
+Скрипт: Node 20, PM2, PostgreSQL, Nginx (не Termux), bubblewrap, `cicada-studio`, опционально ESPHome в `.venv-esphome`, `.env`, PROD SSL или LOCAL self-signed.
 
-**LOCAL на WSL / VPS:** по умолчанию создаётся администратор **`denisbednakov@gmail.com`** / **`cicada3301`** (bcrypt в PostgreSQL, роль `admin`, план `pro`). В `.env` включается **`AUTH_BYPASS=1`** — Studio открывается без окна входа, в шапке рядом с **Premium** появляется **Admin**. При необходимости войти вручную — те же email и пароль.
-
-Скрипт:
-
-- ставит системные зависимости (**Node.js 20**, **PM2**, **PostgreSQL**, **Nginx** — кроме Termux), **`bubblewrap`** (песочница DSL), **`python3-venv`**, **`build-essential`**;
-- ставит **`cicada-studio`** с PyPI (по умолчанию **0.0.1**); при наличии `cicada` в `PATH` пропишет актуальный **`CICADA_BIN`** в `.env`;
-- по запросу ставит **ESPHome** в **`.venv-esphome`** и прописывает **`ESPHOME_BIN`** / **`PIO_BIN`** в `.env` (сборка прошивок для `/esphome/`);
-- создаёт пользователя и БД PostgreSQL (на **Termux** используется `psql` от текущего пользователя, на Linux — `sudo -u postgres`);
-- создаёт каталоги **`bots/`**, **`uploads/media`**, **`data/firmware-cache`**, **`/tmp/esphome-jobs`**;
-- генерирует **`ADMIN_KEY`**, **`JWT_SECRET`** (≥32 символов для production), **`DSL_SANDBOX_*`** и при необходимости сам `.env`;
-- в режиме **PROD** помогает с **Let's Encrypt**; в **LOCAL** — self-signed и прокси на Node.
-
-Переменные для установки без вопросов:
+**LOCAL (WSL/VPS):** `denisbednakov@gmail.com` / `cicada3301`, `AUTH_BYPASS=1`.  
+**Termux:** LOCAL, без ESPHome/nginx, API `http://127.0.0.1:3001`.
 
 ```bash
-# Зафиксировать версии
 sudo CICADA_TG_PIN=0.0.1 ESPHOME_PIN=2024.12.0 bash bootstrap.sh
 ```
 
-После установки смотри итоговый блок в терминале (URL сайта, `/satana`, `/esphome/`, `pm2 logs server`).
-
-### Ручная установка
+### Docker
 
 ```bash
-# 1. Клонировать репозиторий
-git clone https://github.com/Cicadadenis/cicada-studio.git
-cd cicada-studio
-
-# 2. Скопировать переменные окружения
-cp env.example .env
-
-# 3. Заполнить .env (см. раздел ниже): обязательно JWT_SECRET, ADMIN_KEY, БД, при production — APP_ENV=production
-nano .env
-
-# 4. Установить CLI Cicada (рантайм для DSL)
-pip install cicada-studio
-# пропиши в .env путь: CICADA_BIN=$(command -v cicada)
-
-# 5. Установить зависимости Node и (при необходимости) OAuth-пакеты
-npm install
-npm install passport passport-google-oauth20 express-session
-
-# 6. Собрать frontend
-npm run build
-
-# 7. (Опционально) ESPHome для сборки прошивок
-python3 -m venv .venv-esphome
-.venv-esphome/bin/pip install -U pip wheel
-.venv-esphome/bin/pip install esphome
-# В .env: ESPHOME_BIN=/path/to/cicada-studio/.venv-esphome/bin/esphome
-
-# 8. Запустить сервер
-npm run server
-```
-
-По умолчанию API слушает порт из **`API_PORT`** в `.env` (часто **3001**). Фронт в dev: `npm run dev` (Vite). В production статика отдаётся из `dist/` (через Nginx или напрямую через Node — как настроишь).
-
-### ESPHome и прошивки
-
-- Конструктор: **`/esphome/`** (статика в `public/esphome/`) — YAML для Home Assistant без ручного редактирования.
-- Сборка на сервере: **`POST /api/esp/build`**, скачивание **`esp.bin`** / Web manifest (Improv Wi‑Fi).
-- Прошивки Premium-проектов: `bots/<userId>/projects/<projectId>/firmware/esphome.yaml`.
-- Первый compile может занять 5–15 минут (PlatformIO качает toolchain).
-- На VPS нужен запас RAM/диска; параллельные сборки ограничены **`ESPHOME_MAX_CONCURRENT_BUILDS`** (по умолчанию 2 в bootstrap).
-
-### Запуск через Docker
-
-```bash
-# Запустить всё (приложение + PostgreSQL)
 docker-compose up -d
-
-# Просмотр логов
 docker-compose logs -f app
 ```
 
@@ -354,134 +309,82 @@ docker-compose logs -f app
 
 ## ⚙️ Переменные окружения
 
-Ориентир — файл **`env.example`** в репозитории. Кратко:
+Шаблон: **`env.example`**. Кратко:
 
-### База данных
 ```env
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=app_db
-DB_USER=app_user
-DB_PASSWORD=strong_password_here
-```
-
-### Сервер и публичный URL
-```env
+# Сервер
+NODE_ENV=production
 API_HOST=0.0.0.0
 API_PORT=3001
 APP_URL=https://example.com
-APP_ENV=production
-CICADA_BIN=/path/to/cicada
-```
 
-`APP_URL` (без завершающего `/`) используется для CORS в production, если не задан список **`CORS_ORIGINS`**.
+# БД
+DB_HOST=localhost
+DB_NAME=cicada
+DB_USER=cicada_user
+DB_PASSWORD=...
 
-### Vite (сборка фронта)
-```env
-VITE_API_URL=http://localhost:3001
-VITE_API_TARGET=http://localhost:3001
-VITE_ADMIN_EMAIL=admin@example.com
-VITE_TG_BOT_NAME=your_bot_name
-```
+# Auth / admin
+JWT_SECRET=...          # ≥32 в production
+ADMIN_KEY=...
+LE_EMAIL=admin@example.com   # PROD + Let's Encrypt (webinstall подставит из ADMIN_EMAIL)
 
-### Telegram
-```env
+# Telegram / AI
 TG_BOT_TOKEN=...
-```
+GROQ_TOKEN=...
+ANTHROPIC_API_KEY=...
 
-### Аутентификация и админка
-```env
-JWT_SECRET=...                    # в production не короче 32 символов
-JWT_EXPIRES_SEC=604800
-ADMIN_KEY=...                   # не короче 16 символов
-# ADMIN_TOTP_SECRET=...          # опциональный TOTP-фактор для входа по ADMIN_KEY
-# ADMIN_JWT_EXPIRES_SEC=28800
-# ADMIN_WEBAUTHN_RP_ID=example.com
-# ADMIN_WEBAUTHN_ORIGIN=https://example.com
-# ADMIN_PASSKEYS_FILE=/secure/path/admin-passkeys.json
-```
+# Python бота
+PYTHON_BIN=python3
+BOT_PYTHON_VENV=.venv-bot
+CICADA_BIN=/usr/local/bin/cicada
 
-Вход по отпечатку / Face ID через Passkeys работает только в secure context: `https://` на домене или `http://localhost` для разработки. `ADMIN_WEBAUTHN_RP_ID` должен совпадать с доменом, где открыта админка (например, `example.com`), а `ADMIN_WEBAUTHN_ORIGIN` — с origin страницы (например, `https://example.com`). Если переменные не заданы, сервер вычисляет их из `APP_URL`/заголовков запроса.
-
-### Google OAuth (опционально)
-```env
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-GOOGLE_CALLBACK_URL=https://example.com/api/auth/google/callback
-```
-
-### AI: Ollama и/или GROQ
-```env
-OLLAMA_URL=http://127.0.0.1:11434
-OLLAMA_MODEL=qwen2.5:3b
-GROQ_TOKEN=gsk_...
-GROQ_TOKEN_2=gsk_...
-GROQ_TOKEN_3=gsk_...
-```
-
-### DSL Sandbox (опционально)
-```env
-DSL_SANDBOX_MODE=enforced   # auto | enforced
-DSL_SANDBOX_NETWORK=host    # host для Telegram; none — без сети в песочнице
+# Sandbox
+DSL_SANDBOX_MODE=enforced
+DSL_SANDBOX_NETWORK=host
 DSL_MAX_RUNTIME_MS=300000
-DSL_MAX_CODE_BYTES=100000
-DSL_MAX_LOG_CHARS=80000
+
+# ESPHome (опционально)
+ESPHOME_BIN=.../.venv-esphome/bin/esphome
 ```
 
-Требуется **`bwrap`** (bubblewrap) на Linux; `bootstrap.sh` ставит пакет `bubblewrap`.
-
-### ESPHome / прошивки (опционально)
-```env
-ESPHOME_BIN=/var/www/cicada-studio/.venv-esphome/bin/esphome
-PIO_BIN=/var/www/cicada-studio/.venv-esphome/bin/pio
-ESPHOME_JOBS_ROOT=/tmp/esphome-jobs
-ESPHOME_MAX_CONCURRENT_BUILDS=2
-FIRMWARE_BUILD_TIMEOUT_MS=600000
-ESPHOME_PUBLIC_BUILD=0          # 1 — сборка без входа (не рекомендуется)
-# FIRMWARE_WORKSPACE_ROOT=...   # глобальный каталог прошивки вне bots/
-# JAMMER_FIRMWARE_BIN=...       # готовый .bin для /flash/jammer/
-```
-
-### Email (Resend)
-```env
-RESEND_API_KEY=...
-EMAIL_FROM=App Name <noreply@example.com>
-```
-
-### Оплата CryptoBot (опционально)
-```env
-CRYPTOBOT_TOKEN=...
-```
+Vite: `VITE_API_URL`, `VITE_API_TARGET`, `VITE_ADMIN_EMAIL`, `VITE_TG_BOT_NAME`.
 
 ---
 
 ## 📁 Структура проекта
 
-```
-cicada-studio/
-├── src/                    # Frontend (React + Vite)
-│   ├── App.jsx             # Главный компонент, редактор, DSL
-│   ├── ModuleLibrary.jsx   # Библиотека готовых модулей
-│   ├── DSLPanel.jsx        # DSL-редактор с подсветкой
-│   ├── PropsPanel.jsx      # Панель свойств блока
-│   └── dslLint.js          # Валидация и автоисправление DSL
+```text
+tg-constructor/
+├── src/                      # Frontend (React + Vite)
+│   ├── constructor/          # Graph document, orchestrator, preview bridge
+│   ├── builder/              # Python pane, diagnostics, compile hooks
+│   ├── modules/builtin/      # Готовые блоки (FAQ, QR, DB, …)
+│   ├── App.jsx, ModuleLibrary.jsx, DSLPanel.jsx
+│   └── vite.config.js        # (корневой vite.config.js)
+├── core/                     # Ядро Studio (TS/JS)
+│   ├── codegen/              # Graph → aiogram 3 Python
+│   ├── compiler/             # compileGraph API
+│   ├── ide/                  # Parser, semantic, LSP
+│   ├── ai/                   # IR pipeline для AI
+│   ├── graph/, ir/, rules/
+│   └── manifests/
+├── platform/                 # Cicada Platform (Python runtime)
+│   └── src/cicada_platform/
 ├── services/
-│   ├── dslRunner.mjs       # Sandbox для запуска ботов
-│   ├── espFirmware.mjs     # Сессии и кэш прошивок
-│   ├── espBuildJobServer.mjs
-│   └── botMediaPaths.mjs   # Пути медиа для DSL runner
-├── public/
-│   ├── esphome/            # ESPHome-конструктор (UI)
-│   ├── flash/              # Прошивка ESP (Web Serial)
-│   └── satana.html         # Admin-панель
-├── server.mjs              # Express backend
-├── docker-compose.yml      # Docker Compose
-├── Dockerfile              # Multi-stage Docker build
-├── bootstrap.sh            # Автоустановка на VPS / WSL / Termux
-├── .github/
-│   └── workflows/
-│       └── ci.yml          # GitHub Actions CI
-└── env.example             # Шаблон переменных окружения
+│   ├── dslRunner.mjs         # Запуск бота в sandbox
+│   ├── compiler/previewCompiler.mjs
+│   └── espFirmware.mjs, espBuildJobServer.mjs
+├── server.mjs                # Express API
+├── webinstall.py             # Панель :7700
+├── webinstall/index.html
+├── public/esphome/, public/flash/
+├── bootstrap.sh, setup.sh
+├── scripts/                  # core-guard, termux-setup, file_encrypt
+├── docker-compose.yml
+├── env.example
+├── README.md                 # этот файл
+└── READMI.md                 # operational guide
 ```
 
 ---
@@ -489,48 +392,47 @@ cicada-studio/
 ## 🔧 Разработка
 
 ```bash
-# Запуск в dev-режиме (hot reload)
-npm run dev          # frontend (Vite)
-npm run server       # backend (Node.js)
-
-# Проверка синтаксиса сервера
-npm run check:server
-
-# Сборка production
-npm run build
+npm run dev              # Vite UI
+npm run server:dev       # API + hot reload env
+npm run build            # core:guard + vite build
+npm run core:guard       # запрет legacy cic-st-core / dslCodegen в prod build
+npm run test:compiler
+npm run test:runtime
+npm run lint
+npm run typecheck
+npm run ci:codegen
 ```
 
-### CI/CD
+### CI
 
-GitHub Actions автоматически при каждом `push` в `main`:
-1. `npm ci` — установка зависимостей
-2. `npm run check:server` — проверка синтаксиса backend
-3. `npm run build` — сборка frontend
+GitHub Actions (`main`): `npm ci` → `check:server` → `core:guard` → `build`.
 
 ---
 
 ## 🗺️ Roadmap
 
-### v1.1 — Архитектура
-- [ ] Разделение `server.mjs` на `controllers/`, `services/`, `repositories/`
-- [ ] Тесты (Jest) для DSL-валидатора и auth middleware
-- [ ] OpenAPI / Swagger документация
+### В работе
+
+- [x] Graph → aiogram 3 codegen (`core/codegen`, `core:guard`)
+- [x] Webinstall: монитор, `.env`, файловый менеджер
+- [ ] Полная миграция `dslRunner` → `platform/` sandbox API
+- [ ] Graph → IR → platform executor без legacy CLI
 
 ### v1.2 — Продукт
-- [ ] Платёжный webhook + автоматическое продление подписок
-- [ ] Расширенная аналитика: DAU, retention, воронки
-- [ ] Экспорт проекта в ZIP + деплой на свой сервер
-- [ ] Совместное редактирование (team workspace)
+
+- [ ] Webhook CryptoBot + автопродление подписок
+- [ ] Аналитика DAU / retention
+- [ ] Экспорт ZIP / self-hosted bundle
 
 ### v1.3 — AI
-- [ ] Улучшение промптов генерации (few-shot примеры)
-- [ ] AI-объяснение ошибок DSL ("почему сломалось?")
-- [ ] Автодополнение в DSL-редакторе
 
-### v2.0 — Платформа
-- [ ] Маркетплейс шаблонов ботов
-- [ ] Webhooks для интеграции с внешними системами
-- [ ] Мобильное приложение (React Native)
+- [ ] AI-объяснение ошибок графа и Python preview
+- [ ] Автодополнение в DSL (LSP из `core/ide`)
+
+### v2.0
+
+- [ ] Маркетплейс шаблонов
+- [ ] Webhooks для внешних систем
 
 ---
 
@@ -538,14 +440,16 @@ GitHub Actions автоматически при каждом `push` в `main`:
 
 | Слой | Технология |
 |---|---|
-| **Frontend** | React 18, Vite 5 |
-| **Backend** | Node.js 20, Express 4 |
-| **Database** | PostgreSQL 16, `pg` driver |
-| **Auth** | JWT, bcryptjs, cookie-parser |
-| **AI** | Ollama, GROQ API (Llama и др.), переменные `OLLAMA_*` / `GROQ_TOKEN*` |
-| **IoT** | ESPHome, PlatformIO, Web Serial (`/flash/`) |
-| **DevOps** | Docker, docker-compose, GitHub Actions, `bootstrap.sh` |
-| **Security** | Rate limiting, timingSafeEqual, CORS, bubblewrap sandbox |
+| **Frontend** | React 18, Vite 5, React Flow 12 |
+| **Core** | TypeScript 6, Graph codegen → **aiogram 3** |
+| **Backend** | Node.js 20, Express 5, `tsx` |
+| **Platform** | Python 3.13, FastAPI, Pydantic v2 (миграция) |
+| **Database** | PostgreSQL 16, `pg` |
+| **Auth** | JWT, bcryptjs, Passport Google |
+| **AI** | GROQ, Anthropic, Ollama |
+| **IoT** | ESPHome, PlatformIO, Web Serial |
+| **Ops** | Docker, PM2, `bootstrap.sh`, **`webinstall.py`** |
+| **Security** | helmet, rate-limit, bubblewrap, CORS |
 
 ---
 
@@ -557,8 +461,8 @@ MIT © 2026 [Cicada3301](https://github.com/Cicadadenis)
 
 <div align="center">
 
-**Cicada Studio** — Telegram-боты на языке **Cicada**, от **Cicada3301**
+**Cicada Studio** — Telegram-боты на **графе**, **Cicada DSL** и ядре **core/platform**
 
-*Сделано с ♥ для тех, кто хочет автоматизировать бизнес без программирования*
+*Сделано с ♥ для автоматизации без программирования*
 
 </div>

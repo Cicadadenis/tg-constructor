@@ -1145,7 +1145,9 @@ function switchTab(id,btn){
 let allProcs=[];
 let sortKey='cpu';
 let sortDir='desc';
-const API_MONITOR=window.location.origin;
+let monitorFailStreak=0;
+let monitorPollPaused=false;
+const MONITOR_FAIL_PAUSE=3;
 
 function formatUptime(s){
   const d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60),sec=Math.floor(s%60);
@@ -1169,10 +1171,34 @@ function podStat(label,val){
   return `<div class="pod-stat"><span>${label}</span><span>${val}</span></div>`;
 }
 
+function monitorApiBase(){
+  const el=document.getElementById('api-base');
+  if(el){
+    const v=(el.value||'').trim();
+    if(v) return v.replace(/\/$/,'');
+  }
+  const u=new URL(window.location.href);
+  if(u.protocol==='file:') return 'http://127.0.0.1:7700';
+  return u.origin;
+}
+
+function setMonitorOffline(msg){
+  monitorPollPaused=true;
+  const badge=document.getElementById('plat-badge');
+  if(badge){
+    badge.textContent='СЕРВЕР НЕДОСТУПЕН';
+    badge.classList.remove('ok');
+    badge.classList.add('err');
+    badge.title=msg||'Запустите webinstall.py на этом порту';
+  }
+}
+
 async function fetchMetrics(){
+  if(monitorPollPaused)return;
   try{
-    const r=await fetch(API_MONITOR+'/api/system/metrics');
-    if(!r.ok)return;
+    const r=await fetch(monitorApiBase()+'/api/system/metrics',{signal:AbortSignal.timeout(8000)});
+    if(!r.ok){monitorFailStreak++;if(monitorFailStreak>=MONITOR_FAIL_PAUSE)setMonitorOffline('HTTP '+r.status);return}
+    monitorFailStreak=0;
     const d=await r.json();
     document.getElementById('m-host').textContent=`${d.hostname} · ${d.platformLabel||d.platform}`;
     if(typeof d.isRoot==='boolean') serverIsRoot=d.isRoot;
@@ -1219,12 +1245,18 @@ async function fetchMetrics(){
         <p id="swap-status" style="font-size:.7rem;margin-top:8px;color:var(--tdim)"></p>${rootHint}</div>`;
     }
     document.getElementById('swap-rows').innerHTML=swapHtml;
-  }catch(e){}
+  }catch(e){
+    monitorFailStreak++;
+    if(monitorFailStreak>=MONITOR_FAIL_PAUSE){
+      setMonitorOffline('Нет связи с '+monitorApiBase()+' — запустите: python3 webinstall.py');
+    }
+  }
 }
 
 async function fetchProcs(){
+  if(monitorPollPaused)return;
   try{
-    const r=await fetch(API_MONITOR+'/api/system/processes');
+    const r=await fetch(monitorApiBase()+'/api/system/processes',{signal:AbortSignal.timeout(8000)});
     if(!r.ok)return;
     const d=await r.json();
     allProcs=d.processes||[];
@@ -1275,7 +1307,7 @@ async function setupSwap(){
   if(btn){btn.disabled=true;btn.textContent='СОЗДАНИЕ...'}
   if(status){status.textContent='Создаём файл подкачки, подождите...';status.style.color='var(--cyan)'}
   try{
-    const r=await fetch(API_MONITOR+'/api/system/swap',{
+    const r=await fetch(monitorApiBase()+'/api/system/swap',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({sizeGb:size,path:'/swapfile'}),
@@ -1312,7 +1344,7 @@ async function filesRefresh(){
   if(list) list.innerHTML='<div class="fm-empty">Загрузка...</div>';
   try{
     const q=fmPath?('?path='+encodeURIComponent(fmPath)):'';
-    const r=await fetch(API_MONITOR+'/api/files/list'+q);
+    const r=await fetch(monitorApiBase()+'/api/files/list'+q);
     const d=await r.json();
     if(!r.ok) throw new Error(d.error||'ошибка');
     fmPath=d.path||'';
@@ -1363,7 +1395,7 @@ async function filesRead(rel){
   });
   fmShowActions(false);
   try{
-    const r=await fetch(API_MONITOR+'/api/files/read?path='+encodeURIComponent(rel));
+    const r=await fetch(monitorApiBase()+'/api/files/read?path='+encodeURIComponent(rel));
     const d=await r.json();
     if(!r.ok) throw new Error(d.error||'ошибка');
     fmCurrentContent=d.content;
@@ -1387,7 +1419,7 @@ function filesCopy(){
 function filesDownload(){
   if(!fmCurrentFile){CicadaUI.toast('Выберите файл',true);return}
   const a=document.createElement('a');
-  a.href=API_MONITOR+'/api/files/download?path='+encodeURIComponent(fmCurrentFile);
+  a.href=monitorApiBase()+'/api/files/download?path='+encodeURIComponent(fmCurrentFile);
   a.download=fmCurrentFile.split('/').pop()||'file';
   a.click();
 }
@@ -1410,7 +1442,7 @@ async function filesSave(){
   if(!ta||!fmCurrentFile) return;
   const content=ta.value;
   try{
-    const r=await fetch(API_MONITOR+'/api/files/write',{
+    const r=await fetch(monitorApiBase()+'/api/files/write',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({path:fmCurrentFile,content}),
@@ -1446,7 +1478,7 @@ async function filesUploadChosen(input){
   for(let i=0;i<bytes.length;i++) binary+=String.fromCharCode(bytes[i]);
   const b64=btoa(binary);
   try{
-    const r=await fetch(API_MONITOR+'/api/files/upload',{
+    const r=await fetch(monitorApiBase()+'/api/files/upload',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({dir:fmPath,name:file.name,content:b64,encoding:'base64'}),
@@ -1503,9 +1535,12 @@ function applyLocalInstallUi(){
 }
 
 async function loadPlatform(){
+  monitorPollPaused=false;
+  monitorFailStreak=0;
   const badge=document.getElementById('plat-badge');
   badge.textContent='ОПРЕДЕЛЕНИЕ...';
   badge.className='plat-badge';
+  badge.title='';
   try{
     const r=await fetch(getBase()+'/api/info',{signal:AbortSignal.timeout(4000)});
     if(!r.ok) throw new Error();

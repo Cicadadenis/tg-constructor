@@ -850,7 +850,14 @@ def run_install_job(job_id: str, env_path: Path) -> None:
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
-            env={**os.environ, "TERM": "dumb", "COLUMNS": "120"},
+            env={
+                **os.environ,
+                "TERM": "dumb",
+                "COLUMNS": "120",
+                "DEBIAN_FRONTEND": "noninteractive",
+                "DEBCONF_NONINTERACTIVE_SEEN": "true",
+                "NEEDRESTART_MODE": "a",
+            },
         )
         job["pid"] = proc.pid
         assert proc.stdout is not None
@@ -908,7 +915,14 @@ def run_install_direct(env_path: Path) -> int:
             stdout=sys.stdout,
             stderr=sys.stderr,
             text=True,
-            env={**os.environ, "TERM": "dumb", "COLUMNS": "120"},
+            env={
+                **os.environ,
+                "TERM": "dumb",
+                "COLUMNS": "120",
+                "DEBIAN_FRONTEND": "noninteractive",
+                "DEBCONF_NONINTERACTIVE_SEEN": "true",
+                "NEEDRESTART_MODE": "a",
+            },
         )
         code = proc.wait()
         if code == 0:

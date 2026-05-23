@@ -2,6 +2,11 @@
 set -euo pipefail
 # Для отладки: DEBUG=1 bash setup.sh
 
+# apt/debconf без TTY (webinstall, SSH, CI) — иначе «debconf: unable to initialize frontend: Dialog»
+export DEBIAN_FRONTEND="${DEBIAN_FRONTEND:-noninteractive}"
+export DEBCONF_NONINTERACTIVE_SEEN=true
+export NEEDRESTART_MODE=a
+
 # ═══════════════════════════════════════════════════════════════
 #   CICADA STUDIO — ULTRA PROD BOOTSTRAP
 #   Автоустановка всего необходимого с нуля
@@ -994,6 +999,10 @@ if ! command -v psql &>/dev/null; then
       warn "initdb не завершился — кластер может быть уже инициализирован"
     fi
   else
+    if command -v debconf-set-selections &>/dev/null; then
+      echo "postgresql-common postgresql-common/default_cluster select main" \
+        | debconf-set-selections 2>/dev/null || true
+    fi
     $SUDO apt-get update -qq
     $SUDO apt-get install -y -qq postgresql postgresql-contrib
   fi
