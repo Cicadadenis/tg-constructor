@@ -64,7 +64,7 @@ nav{
 }
 .nav-tabs{display:flex;align-items:center;justify-content:center;gap:4px}
 .tab{
-  font-family:'Orbitron',sans-serif;font-size:.62rem;letter-spacing:.24em;
+  font-family:'Orbitron',sans-serif;font-size:.58rem;letter-spacing:.18em;
   text-transform:uppercase;padding:18px 26px;color:rgba(90,140,170,.85);
   cursor:pointer;border:none;background:none;position:relative;transition:color .2s,text-shadow .2s;
 }
@@ -399,7 +399,7 @@ select.inp option{background:#060b14;color:var(--text)}
 }
 
 /* WEB.INSTALL — glass panels (как SYS.MONITOR) */
-.install-wrap{max-width:760px;margin:0 auto;padding:32px 20px 56px}
+.install-wrap{margin:0 auto;padding:32px 20px 56px}
 .install-hero{text-align:center;margin-bottom:8px}
 .install-sub{
   font-family:'Orbitron',sans-serif;font-size:.62rem;letter-spacing:.42em;
@@ -501,6 +501,128 @@ select.inp option{background:#060b14;color:var(--text)}
 .fm-viewer{min-height:280px;max-height:min(58vh,520px);overflow:auto;padding:12px}
 .fm-viewer pre{font-family:'Share Tech Mono',monospace;font-size:.75rem;line-height:1.5;color:var(--text);white-space:pre-wrap;word-break:break-word}
 .fm-empty{padding:24px;text-align:center;color:var(--tdim);font-size:.85rem}
+.fm-preview-card{display:flex;flex-direction:column;min-height:360px}
+.fm-preview-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px 0}
+.fm-preview-head .ch{margin:0;flex:1;min-width:140px}
+.fm-actions{display:flex;flex-wrap:wrap;gap:6px}
+.fm-act{
+  font-family:'Orbitron',sans-serif;font-size:.5rem;letter-spacing:.14em;
+  padding:8px 12px;border:1px solid rgba(0,242,255,.35);
+  background:rgba(0,242,255,.06);color:var(--cyan);cursor:pointer;
+  clip-path:polygon(8px 0%,calc(100% - 8px) 0%,100% 50%,calc(100% - 8px) 100%,8px 100%,0% 50%);
+  transition:all .2s;
+}
+.fm-act:hover{background:rgba(0,242,255,.14);box-shadow:0 0 16px rgba(0,242,255,.2);color:#fff}
+.fm-act.ok{border-color:rgba(0,255,65,.45);color:var(--green);background:rgba(0,255,65,.08)}
+.fm-act.warn{border-color:rgba(255,190,0,.4);color:var(--yellow);background:rgba(255,190,0,.06)}
+.fm-viewer{flex:1}
+.fm-editor{
+  width:100%;min-height:260px;flex:1;margin:0;padding:12px;
+  background:rgba(0,8,18,.95);border:none;border-top:1px solid rgba(0,229,255,.12);
+  color:var(--text);font-family:'Share Tech Mono',monospace;font-size:.75rem;line-height:1.5;
+  resize:vertical;outline:none;
+}
+.fm-editor:focus{box-shadow:inset 0 0 24px rgba(0,242,255,.06)}
+
+/* Access strip */
+.access-strip{
+  display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:10px 16px;
+  padding:10px clamp(12px,3vw,28px);margin:0 auto;
+  background:linear-gradient(90deg,transparent,rgba(0,242,255,.06),transparent);
+  border-bottom:1px solid rgba(0,242,255,.12);
+  font-family:'Share Tech Mono',monospace;font-size:.72rem;
+}
+.access-label{font-family:'Orbitron',sans-serif;font-size:.52rem;letter-spacing:.28em;color:var(--tdim)}
+.access-url{
+  padding:6px 14px;border-radius:999px;
+  border:1px solid rgba(0,242,255,.35);background:rgba(0,12,24,.85);
+  color:var(--cyan);text-decoration:none;box-shadow:0 0 20px rgba(0,242,255,.08);
+  transition:box-shadow .2s,border-color .2s;
+}
+.access-url:hover{border-color:var(--cyan);box-shadow:0 0 28px rgba(0,242,255,.2)}
+.access-hint{color:var(--tdim);font-size:.68rem}
+.btn-chip{
+  font-family:'Orbitron',sans-serif;font-size:.5rem;letter-spacing:.16em;
+  padding:6px 14px;border:1px solid rgba(0,255,65,.4);background:rgba(0,255,65,.08);
+  color:var(--green);cursor:pointer;clip-path:polygon(6px 0%,calc(100% - 6px) 0%,100% 50%,calc(100% - 6px) 100%,6px 100%,0% 50%);
+}
+.btn-chip:hover{box-shadow:0 0 18px rgba(0,255,65,.25)}
+
+/* Neo install panels */
+.install-wrap{max-width:820px}
+.neo-panel{
+  position:relative;margin-bottom:26px;padding:30px 26px 22px;
+  background:linear-gradient(155deg,rgba(6,22,38,.94) 0%,rgba(2,10,20,.88) 55%,rgba(4,16,28,.92) 100%);
+  border:1px solid transparent;border-radius:22px 6px 22px 6px;
+  background-clip:padding-box;
+  box-shadow:0 12px 48px rgba(0,0,0,.45),0 0 0 1px rgba(0,242,255,.18),inset 0 1px 0 rgba(0,242,255,.08);
+  backdrop-filter:blur(14px);transition:transform .25s,box-shadow .25s;
+}
+.neo-panel::before{
+  content:'';position:absolute;inset:-1px;border-radius:23px 7px 23px 7px;padding:1px;
+  background:linear-gradient(135deg,rgba(0,242,255,.45),rgba(0,255,65,.15),rgba(0,242,255,.25));
+  -webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+  mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;opacity:.55;
+}
+.neo-panel:hover{transform:translateY(-2px);box-shadow:0 16px 56px rgba(0,0,0,.5),0 0 40px rgba(0,242,255,.08)}
+.neo-panel .panel-tag{
+  border-radius:999px;padding:4px 16px;
+  background:linear-gradient(180deg,rgba(0,40,60,.95),rgba(4,14,26,.98));
+  border:1px solid rgba(0,242,255,.4);box-shadow:0 0 20px rgba(0,242,255,.15);
+}
+.neo-env{
+  padding:24px 22px;border-radius:20px 6px 20px 6px;
+  background:linear-gradient(160deg,rgba(0,242,255,.04),rgba(0,8,18,.9));
+  border:1px dashed rgba(0,242,255,.28);margin-bottom:22px;
+  box-shadow:inset 0 0 40px rgba(0,242,255,.03);
+}
+.install-hero .access-url{display:inline-block;margin-top:12px}
+
+/* Modal */
+.modal-root{
+  position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;
+  padding:20px;opacity:0;pointer-events:none;transition:opacity .25s;
+}
+.modal-root.show{opacity:1;pointer-events:auto}
+.modal-backdrop{
+  position:absolute;inset:0;background:rgba(0,4,12,.82);
+  backdrop-filter:blur(8px);
+}
+.modal-box{
+  position:relative;width:min(440px,100%);padding:28px 26px 22px;
+  background:linear-gradient(165deg,rgba(4,18,32,.98),rgba(2,8,16,.96));
+  border-radius:24px 8px 24px 8px;
+  box-shadow:0 0 0 1px rgba(0,242,255,.35),0 24px 80px rgba(0,0,0,.6),0 0 60px rgba(0,242,255,.12);
+  transform:scale(.92) translateY(12px);transition:transform .28s ease;
+}
+.modal-root.show .modal-box{transform:scale(1) translateY(0)}
+.modal-box::before{
+  content:'';position:absolute;top:0;left:10%;right:10%;height:2px;
+  background:linear-gradient(90deg,transparent,var(--cyan),var(--green),var(--cyan),transparent);
+  box-shadow:0 0 12px var(--cyan);
+}
+.modal-tag{
+  font-family:'Orbitron',sans-serif;font-size:.5rem;letter-spacing:.35em;
+  color:var(--green);margin-bottom:10px;
+}
+.modal-title{
+  font-family:'Orbitron',sans-serif;font-size:1rem;letter-spacing:.12em;
+  color:var(--cyan);margin-bottom:12px;text-shadow:var(--glow);
+}
+.modal-body{font-size:.92rem;line-height:1.55;color:var(--text);margin-bottom:22px}
+.modal-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
+.modal-actions .btn{width:auto;min-width:120px;flex:1;max-width:200px}
+.toast-root{
+  position:fixed;bottom:24px;right:24px;z-index:210;max-width:360px;
+  padding:14px 18px;border-radius:12px 4px 12px 4px;
+  background:rgba(4,20,32,.95);border:1px solid rgba(0,255,65,.4);
+  box-shadow:0 8px 32px rgba(0,0,0,.5),0 0 24px rgba(0,255,65,.15);
+  font-family:'Share Tech Mono',monospace;font-size:.78rem;color:var(--green);
+  opacity:0;transform:translateY(12px);transition:all .3s;pointer-events:none;
+}
+.toast-root.show{opacity:1;transform:translateY(0)}
+.toast-root.err{border-color:rgba(255,34,87,.5);color:#ff8aa8}
 </style>
 </head>
 <body>
@@ -517,6 +639,13 @@ select.inp option{background:#060b14;color:var(--text)}
   </div>
   <div class="nav-live">В СЕТИ</div>
 </nav>
+
+<div class="access-strip fu" id="access-strip">
+  <span class="access-label">ПАНЕЛЬ</span>
+  <a class="access-url" id="access-url-primary" href="#" target="_blank" rel="noopener">загрузка...</a>
+  <button type="button" class="btn-chip" onclick="copyAccessUrl()">КОПИРОВАТЬ</button>
+  <span class="access-hint" id="access-url-hint">Откройте <strong>http://IP:7700</strong> (не https)</span>
+</div>
 
 <!-- ═══════════════════ MONITOR PAGE ═══════════════════ -->
 <div id="page-monitor" class="page active">
@@ -623,12 +752,13 @@ select.inp option{background:#060b14;color:var(--text)}
   <header class="install-hero fu">
     <h1 class="sysmon-title np">УСТАНОВКА CICADA</h1>
     <p class="sysmon-host" id="install-host-line">Веб-установщик Cicada Studio</p>
+    <a class="access-url" id="install-access-url" href="#" target="_blank" rel="noopener" style="display:none"></a>
     <div id="plat-badge" class="plat-badge">ОПРЕДЕЛЕНИЕ...</div>
   </header>
 
   <div class="div" style="margin-bottom:22px"><div class="dd"></div></div>
 
-  <section class="glass-panel fu">
+  <section class="neo-panel fu">
     <span class="panel-tag">СЕРВЕР.УСТАНОВКИ</span>
     <div class="f" style="margin-bottom:0">
       <label class="lbl">URL сервера webinstall.py</label>
@@ -642,8 +772,8 @@ select.inp option{background:#060b14;color:var(--text)}
   <!-- FORM -->
   <div id="inst-form">
   <!-- ENV FILE UPLOAD -->
-  <div class="card fu" style="padding:18px 16px;margin-bottom:14px;border-color:rgba(0,229,255,.22)">
-    <div class="ch">ЗАГРУЗИТЬ.ENV</div>
+  <div class="neo-env fu">
+    <div class="ch">ЗАГРУЗИТЬ .ENV</div>
     <p style="font-size:.78rem;color:var(--tdim);margin-bottom:12px">
       Выберите файл <code>.env</code> — поля заполнятся автоматически или запустится установка сразу.
     </p>
@@ -673,7 +803,7 @@ select.inp option{background:#060b14;color:var(--text)}
   <form id="install-form" onsubmit="startInstall(event)" novalidate>
 
     <!-- MODE -->
-    <section class="glass-panel fu">
+    <section class="neo-panel fu">
       <span class="panel-tag">РЕЖИМ.УСТАНОВКИ</span>
       <p class="panel-desc">PROD — сервер с доменом и SSL. LOCAL — localhost / WSL / тест.</p>
       <div class="f">
@@ -702,7 +832,7 @@ select.inp option{background:#060b14;color:var(--text)}
     </section>
 
     <!-- POSTGRESQL -->
-    <section class="glass-panel fu" style="animation-delay:.08s">
+    <section class="neo-panel fu" style="animation-delay:.08s">
       <span class="panel-tag">POSTGRESQL</span>
       <div class="r2">
         <div class="f"><label class="lbl">Имя БД</label><input name="db_name" class="inp" value="cicada"></div>
@@ -715,7 +845,7 @@ select.inp option{background:#060b14;color:var(--text)}
     </section>
 
     <!-- SECURITY -->
-    <section class="glass-panel fu" style="animation-delay:.16s">
+    <section class="neo-panel fu" style="animation-delay:.16s">
       <span class="panel-tag">БЕЗОПАСНОСТЬ</span>
       <p class="panel-desc">ADMIN_KEY — доступ к админ-API. JWT_SECRET — сессии входа.</p>
       <label class="chk"><input type="checkbox" id="auto-admin-key" checked onchange="toggleField('admin-key-field',!this.checked)">Сгенерировать ADMIN_KEY автоматически (рекомендуется)</label>
@@ -741,7 +871,7 @@ select.inp option{background:#060b14;color:var(--text)}
     </section>
 
     <!-- ACCOUNT -->
-    <section class="glass-panel fu" style="animation-delay:.24s">
+    <section class="neo-panel fu" style="animation-delay:.24s">
       <span class="panel-tag">УЧЁТНАЯ ЗАПИСЬ</span>
       <div id="local-account">
         <p class="panel-desc">LOCAL: email и пароль для входа в Studio.</p>
@@ -756,7 +886,7 @@ select.inp option{background:#060b14;color:var(--text)}
     </section>
 
     <!-- TELEGRAM -->
-    <section class="glass-panel fu" style="animation-delay:.32s">
+    <section class="neo-panel fu" style="animation-delay:.32s">
       <span class="panel-tag">TELEGRAM</span>
       <p class="hint" style="margin-bottom:12px">Бот для DSL и уведомлений. <a href="https://t.me/BotFather" target="_blank">@BotFather</a> → /newbot → скопируйте токен.</p>
       <div class="f"><label class="lbl">TG_BOT_TOKEN <span class="opt">необяз.</span></label><input name="tg_bot_token" class="inp" placeholder="123456:ABC..." autocomplete="off"></div>
@@ -765,18 +895,18 @@ select.inp option{background:#060b14;color:var(--text)}
 
     <!-- PROD-ONLY -->
     <div id="prod-only" class="hidden">
-      <section class="glass-panel fu">
+      <section class="neo-panel fu">
         <span class="panel-tag">EMAIL.RESEND</span>
         <p class="hint" style="margin-bottom:12px">Письма (верификация, сброс пароля). <a href="https://resend.com/api-keys" target="_blank">resend.com/api-keys</a></p>
         <div class="f"><label class="lbl">RESEND_API_KEY <span class="opt">необяз.</span></label><input name="resend_api_key" class="inp" placeholder="re_..." autocomplete="off"></div>
         <div class="f" style="margin-bottom:0"><label class="lbl">EMAIL_FROM</label><input name="email_from" class="inp" placeholder="noreply@yourdomain.com"><p class="hint">Домен должен быть верифицирован в Resend.</p></div>
       </section>
-      <section class="glass-panel fu">
+      <section class="neo-panel fu">
         <span class="panel-tag">CRYPTOBOT</span>
         <p class="hint" style="margin-bottom:12px">Crypto Pay API. <a href="https://t.me/CryptoBot" target="_blank">@CryptoBot</a> → Crypto Pay → Create App → API Token.</p>
         <div class="f" style="margin-bottom:0"><label class="lbl">CRYPTOBOT_TOKEN <span class="opt">необяз.</span></label><input name="cryptobot_token" class="inp" placeholder="..." autocomplete="off"></div>
       </section>
-      <section class="glass-panel fu">
+      <section class="neo-panel fu">
         <span class="panel-tag">GOOGLE.OAUTH</span>
         <p class="hint" style="margin-bottom:12px">Вход через Google. <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a> → OAuth client ID (Web).</p>
         <div class="f"><label class="lbl">GOOGLE_CLIENT_ID <span class="opt">необяз.</span></label><input name="google_client_id" class="inp" placeholder="....apps.googleusercontent.com" autocomplete="off"></div>
@@ -786,7 +916,7 @@ select.inp option{background:#060b14;color:var(--text)}
     </div>
 
     <!-- AI -->
-    <section class="glass-panel fu" style="animation-delay:.4s">
+    <section class="neo-panel fu" style="animation-delay:.4s">
       <span class="panel-tag">AI.STUDIO / DSL</span>
       <div class="f">
         <label class="lbl">AI_PROVIDER</label>
@@ -827,7 +957,7 @@ select.inp option{background:#060b14;color:var(--text)}
     </section>
 
     <!-- ESPHOME -->
-    <section id="esphome-card" class="glass-panel fu" style="animation-delay:.48s">
+    <section id="esphome-card" class="neo-panel fu" style="animation-delay:.48s">
       <span class="panel-tag">ESPHOME</span>
       <p class="panel-desc">Сборка прошивок /esphome на сервере (.venv-esphome).</p>
       <label class="chk"><input type="checkbox" id="inst-esp" checked onchange="toggleField('esp-pin-field',this.checked)">Установить ESPHome CLI в .venv-esphome</label>
@@ -879,9 +1009,18 @@ select.inp option{background:#060b14;color:var(--text)}
         <div class="ch" style="padding:12px 14px 0;margin:0">СОДЕРЖИМОЕ</div>
         <div class="fm-list" id="fm-list"><div class="fm-empty">Загрузка...</div></div>
       </div>
-      <div class="card" style="padding:0">
-        <div class="ch" style="padding:12px 14px 0;margin:0">ПРОСМОТР</div>
+      <div class="card fm-preview-card" style="padding:0">
+        <div class="fm-preview-head">
+          <div class="ch" style="margin:0">ПРОСМОТР <span id="fm-file-name" style="color:var(--tdim);font-size:.65rem"></span></div>
+          <div class="fm-actions" id="fm-actions" style="display:none">
+            <button type="button" class="fm-act" onclick="filesCopy()">КОПИРОВАТЬ</button>
+            <button type="button" class="fm-act" onclick="filesDownload()">СКАЧАТЬ</button>
+            <button type="button" class="fm-act warn" id="fm-edit-btn" onclick="filesToggleEdit()">ИЗМЕНИТЬ</button>
+            <button type="button" class="fm-act ok" onclick="filesPickUpload()">ЗАГРУЗИТЬ</button>
+          </div>
+        </div>
         <div class="fm-viewer" id="fm-viewer"><div class="fm-empty">Выберите файл</div></div>
+        <input type="file" id="fm-upload-input" hidden>
       </div>
     </div>
     <p class="hint" style="margin-top:12px">Доступ только к каталогу проекта. Скрыты <code>node_modules</code>, <code>.env</code> и служебные папки.</p>
@@ -890,6 +1029,17 @@ select.inp option{background:#060b14;color:var(--text)}
 </div><!-- /files -->
 
 </div><!-- /app -->
+
+<div id="modal-root" class="modal-root" aria-hidden="true">
+  <div class="modal-backdrop" onclick="CicadaUI.close(false)"></div>
+  <div class="modal-box" role="dialog" aria-modal="true">
+    <div class="modal-tag">CICADA // СИСТЕМА</div>
+    <h3 class="modal-title" id="modal-title"></h3>
+    <p class="modal-body" id="modal-body"></p>
+    <div class="modal-actions" id="modal-actions"></div>
+  </div>
+</div>
+<div id="toast-root" class="toast-root"></div>
 
 <script>
 // ════════════ PARTICLES ════════════
@@ -908,6 +1058,76 @@ select.inp option{background:#060b14;color:var(--text)}
     c.appendChild(p);
   }
 })();
+
+// ════════════ UI (модалки, toast) ════════════
+const CicadaUI={
+  _resolve:null,
+  _show(title,body,buttons){
+    const root=document.getElementById('modal-root');
+    document.getElementById('modal-title').textContent=title;
+    document.getElementById('modal-body').textContent=body;
+    const acts=document.getElementById('modal-actions');
+    acts.innerHTML=buttons.map(b=>`<button type="button" class="btn ${b.cls||'sec'}" data-val="${b.val===true?'1':b.val===false?'0':''}">${b.label}</button>`).join('');
+    acts.querySelectorAll('button').forEach(btn=>{
+      btn.onclick=()=>{
+        const v=btn.dataset.val;
+        this.close(v==='1'?true:v==='0'?false:true);
+      };
+    });
+    root.classList.add('show');
+    root.setAttribute('aria-hidden','false');
+  },
+  close(val){
+    document.getElementById('modal-root').classList.remove('show');
+    document.getElementById('modal-root').setAttribute('aria-hidden','true');
+    const r=this._resolve;
+    this._resolve=null;
+    if(r) r(val);
+  },
+  confirm(title,body,okLabel='ПОДТВЕРДИТЬ'){
+    return new Promise(res=>{
+      this._resolve=res;
+      this._show(title,body,[
+        {label:'Отмена',cls:'sec',val:false},
+        {label:okLabel,cls:'ok',val:true},
+      ]);
+    });
+  },
+  alert(title,body){
+    return new Promise(res=>{
+      this._resolve=res;
+      this._show(title,body,[{label:'OK',cls:'ok',val:true}]);
+    });
+  },
+  toast(msg,isErr){
+    const t=document.getElementById('toast-root');
+    t.textContent=msg;
+    t.classList.toggle('err',!!isErr);
+    t.classList.add('show');
+    clearTimeout(t._tm);
+    t._tm=setTimeout(()=>t.classList.remove('show'),2800);
+  },
+};
+
+let panelAccessUrl='';
+
+function updateAccessUrls(urls){
+  const list=urls&&urls.length?urls:[window.location.origin+'/'];
+  panelAccessUrl=list[0];
+  const a=document.getElementById('access-url-primary');
+  const hint=document.getElementById('access-url-hint');
+  const inst=document.getElementById('install-access-url');
+  if(a){a.href=panelAccessUrl;a.textContent=panelAccessUrl.replace(/^https?:\/\//,'')}
+  if(inst){inst.href=panelAccessUrl;inst.textContent=panelAccessUrl;inst.style.display='inline-block'}
+  if(hint){
+    const alt=list[1]?` · локально: ${list[1]}`:'';
+    hint.innerHTML=`Откройте в браузере <strong>http://IP:7700</strong> (не https)${alt}`;
+  }
+}
+function copyAccessUrl(){
+  const u=panelAccessUrl||window.location.origin+'/';
+  navigator.clipboard.writeText(u).then(()=>CicadaUI.toast('Адрес скопирован')).catch(()=>CicadaUI.toast('Не удалось скопировать',true));
+}
 
 // ════════════ TABS ════════════
 let serverIsRoot=false;
@@ -953,7 +1173,8 @@ async function fetchMetrics(){
     const r=await fetch(API_MONITOR+'/api/system/metrics');
     if(!r.ok)return;
     const d=await r.json();
-    document.getElementById('m-host').textContent=`${d.hostname} · ${d.platform}`;
+    document.getElementById('m-host').textContent=`${d.hostname} · ${d.platformLabel||d.platform}`;
+    if(typeof d.isRoot==='boolean') serverIsRoot=d.isRoot;
     document.getElementById('m-time').textContent=new Date(d.timestamp).toLocaleTimeString('ru-RU');
     document.getElementById('m-up').textContent='Аптайм: '+formatUptime(d.uptime);
     const cp=d.cpu.usagePercent;
@@ -985,13 +1206,14 @@ async function fetchMetrics(){
       podStat('ЗАНЯТО',formatGb(d.swap.usedMb))+
       podStat('СВОБОДНО',formatGb(d.swap.freeMb))+
       podStat('ВСЕГО',formatGb(d.swap.totalMb));
-    if(d.swap.totalMb===0){
-      const rootHint=serverIsRoot?'':'<p style="font-size:.68rem;margin-top:6px">Запустите webinstall от root: <code>sudo python3 webinstall.py</code></p>';
+    if(d.swap.totalMb===0&&d.canSetupSwap!==false){
+      const canSwap=serverIsRoot;
+      const rootHint=canSwap?'':'<p style="font-size:.68rem;margin-top:6px">Нужен root: <code>sudo python3 webinstall.py</code></p>';
       swapHtml+=`<div class="swap-setup"><p>Подкачка не настроена. Можно создать файл на диске прямо отсюда.</p>
         <div class="swap-row">
           <label class="lbl" style="margin:0">Размер (ГБ)</label>
           <input class="inp" id="swap-size" type="number" min="0.5" max="64" step="0.5" value="2">
-          <button type="button" class="btn ok" onclick="setupSwap()" ${serverIsRoot?'':'disabled'}>СОЗДАТЬ ПОДКАЧКУ</button>
+          <button type="button" class="btn ok" id="swap-create-btn" onclick="setupSwap()" ${canSwap?'':'disabled'}>СОЗДАТЬ ПОДКАЧКУ</button>
         </div>
         <p id="swap-status" style="font-size:.7rem;margin-top:8px;color:var(--tdim)"></p>${rootHint}</div>`;
     }
@@ -1041,8 +1263,13 @@ function renderProcs(){
 
 async function setupSwap(){
   const size=parseFloat(document.getElementById('swap-size')?.value||'2');
-  if(!confirm(`Создать подкачку ${size} ГБ в файле /swapfile?`)) return;
-  const btn=event?.target;
+  const ok=await CicadaUI.confirm(
+    'Создание подкачки',
+    `Создать файл подкачки ${size} ГБ по пути /swapfile?\n\nЭто займёт несколько секунд.`,
+    'СОЗДАТЬ'
+  );
+  if(!ok) return;
+  const btn=document.getElementById('swap-create-btn');
   const status=document.getElementById('swap-status');
   if(btn){btn.disabled=true;btn.textContent='СОЗДАНИЕ...'}
   if(status){status.textContent='Создаём файл подкачки, подождите...';status.style.color='var(--cyan)'}
@@ -1063,13 +1290,15 @@ async function setupSwap(){
   }
 }
 
-fetchMetrics(); fetchProcs();
 setInterval(fetchMetrics,3000);
 setInterval(fetchProcs,5000);
 
 // ════════════ FILES ════════════
 let fmPath='';
 let fmParent='';
+let fmCurrentFile='';
+let fmCurrentContent='';
+let fmEditing=false;
 
 function formatSize(n){
   if(n<1024) return n+' Б';
@@ -1095,38 +1324,148 @@ async function filesRefresh(){
     }
     list.innerHTML=d.entries.map(e=>{
       const p=fmPath?fmPath+'/'+e.name:e.name;
-      const esc=p.replace(/'/g,"\\'");
-      const click=e.dir?`filesEnter('${esc}')`:`filesRead('${esc}')`;
-      return `<div class="fm-item" onclick="${click}">
+      return `<div class="fm-item" data-path="${encodeURIComponent(p)}" data-dir="${e.dir?'1':'0'}">
         <span class="fm-icon">${e.dir?'📁':'📄'}</span>
-        <span class="fm-name" title="${p}">${e.name}</span>
+        <span class="fm-name" title="${escapeHtml(p)}">${escapeHtml(e.name)}</span>
         <span class="fm-meta">${e.dir?'папка':formatSize(e.size)}</span>
       </div>`;
     }).join('');
+    list.querySelectorAll('.fm-item').forEach(el=>{
+      el.addEventListener('click',()=>{
+        const p=decodeURIComponent(el.dataset.path||'');
+        if(el.dataset.dir==='1') filesEnter(p);
+        else filesRead(p);
+      });
+    });
   }catch(e){
     if(list) list.innerHTML=`<div class="fm-empty" style="color:var(--red)">${e.message||e}</div>`;
   }
 }
 
-function filesEnter(rel){fmPath=rel;filesRefresh()}
-function filesGoUp(){fmPath=fmParent;filesRefresh()}
+function filesEnter(rel){fmPath=rel;fmCurrentFile='';fmEditing=false;filesRefresh()}
+function filesGoUp(){fmPath=fmParent;fmCurrentFile='';fmEditing=false;filesRefresh()}
+
+function fmShowActions(show){
+  const acts=document.getElementById('fm-actions');
+  if(acts) acts.style.display=show?'flex':'none';
+}
 
 async function filesRead(rel){
+  fmCurrentFile=rel;
+  fmEditing=false;
   const viewer=document.getElementById('fm-viewer');
+  const nameEl=document.getElementById('fm-file-name');
+  if(nameEl) nameEl.textContent=rel?' · '+rel.split('/').pop():'';
   viewer.innerHTML='<div class="fm-empty">Чтение...</div>';
-  document.querySelectorAll('.fm-item').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('.fm-item').forEach(el=>{
+    el.classList.toggle('active',decodeURIComponent(el.dataset.path||'')===rel);
+  });
+  fmShowActions(false);
   try{
     const r=await fetch(API_MONITOR+'/api/files/read?path='+encodeURIComponent(rel));
     const d=await r.json();
     if(!r.ok) throw new Error(d.error||'ошибка');
+    fmCurrentContent=d.content;
     viewer.innerHTML=`<pre>${escapeHtml(d.content)}</pre>`;
+    fmShowActions(true);
+    const eb=document.getElementById('fm-edit-btn');
+    if(eb) eb.textContent='ИЗМЕНИТЬ';
   }catch(e){
-    viewer.innerHTML=`<div class="fm-empty" style="color:var(--red)">${e.message||e}</div>`;
+    fmCurrentContent='';
+    viewer.innerHTML=`<div class="fm-empty" style="color:var(--red)">${escapeHtml(e.message||String(e))}</div>`;
   }
 }
 
+function filesCopy(){
+  if(!fmCurrentContent){CicadaUI.toast('Нет текста для копирования',true);return}
+  navigator.clipboard.writeText(fmCurrentContent)
+    .then(()=>CicadaUI.toast('Скопировано в буфер'))
+    .catch(()=>CicadaUI.toast('Не удалось скопировать',true));
+}
+
+function filesDownload(){
+  if(!fmCurrentFile){CicadaUI.toast('Выберите файл',true);return}
+  const a=document.createElement('a');
+  a.href=API_MONITOR+'/api/files/download?path='+encodeURIComponent(fmCurrentFile);
+  a.download=fmCurrentFile.split('/').pop()||'file';
+  a.click();
+}
+
+function filesToggleEdit(){
+  if(!fmCurrentFile) return;
+  const viewer=document.getElementById('fm-viewer');
+  const btn=document.getElementById('fm-edit-btn');
+  if(!fmEditing){
+    fmEditing=true;
+    if(btn) btn.textContent='СОХРАНИТЬ';
+    viewer.innerHTML=`<textarea class="fm-editor" id="fm-editor">${escapeHtml(fmCurrentContent)}</textarea>`;
+    return;
+  }
+  filesSave();
+}
+
+async function filesSave(){
+  const ta=document.getElementById('fm-editor');
+  if(!ta||!fmCurrentFile) return;
+  const content=ta.value;
+  try{
+    const r=await fetch(API_MONITOR+'/api/files/write',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({path:fmCurrentFile,content}),
+    });
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'ошибка');
+    fmCurrentContent=content;
+    fmEditing=false;
+    const btn=document.getElementById('fm-edit-btn');
+    if(btn) btn.textContent='ИЗМЕНИТЬ';
+    document.getElementById('fm-viewer').innerHTML=`<pre>${escapeHtml(content)}</pre>`;
+    CicadaUI.toast('Файл сохранён');
+  }catch(e){
+    CicadaUI.toast(e.message||String(e),true);
+  }
+}
+
+function filesPickUpload(){
+  document.getElementById('fm-upload-input')?.click();
+}
+
+async function filesUploadChosen(input){
+  const file=input?.files?.[0];
+  if(!file) return;
+  if(file.size>512*1024){
+    CicadaUI.toast('Файл больше 512 КБ',true);
+    input.value='';
+    return;
+  }
+  const buf=await file.arrayBuffer();
+  const bytes=new Uint8Array(buf);
+  let binary='';
+  for(let i=0;i<bytes.length;i++) binary+=String.fromCharCode(bytes[i]);
+  const b64=btoa(binary);
+  try{
+    const r=await fetch(API_MONITOR+'/api/files/upload',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({dir:fmPath,name:file.name,content:b64,encoding:'base64'}),
+    });
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'ошибка');
+    CicadaUI.toast('Загружено: '+file.name);
+    filesRefresh();
+  }catch(e){
+    CicadaUI.toast(e.message||String(e),true);
+  }
+  input.value='';
+}
+
+document.getElementById('fm-upload-input')?.addEventListener('change',function(){
+  filesUploadChosen(this);
+});
+
 function escapeHtml(s){
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 // ════════════ INSTALL ════════════
@@ -1175,8 +1514,10 @@ async function loadPlatform(){
     const apiIn=document.getElementById('api-base');
     if(apiIn && d.api_base && !apiIn.value.trim()) apiIn.value=d.api_base;
     if(d.app_dir) document.getElementById('fm-root-hint').textContent=d.app_dir;
+    updateAccessUrls(d.panel_urls||[d.panel_url||d.url]);
     badge.textContent=(d.display_platform||d.platform||'неизвестно').toUpperCase();
     fetchMetrics();
+    fetchProcs();
     badge.classList.add('ok');
     if(d.termux||d.platform==='termux') applyTermuxInstallUi();
     else if(d.platform==='wsl'||d.platform==='vps') applyLocalInstallUi();
@@ -1185,6 +1526,7 @@ async function loadPlatform(){
     badge.classList.add('err');
   }
 }
+updateAccessUrls([window.location.origin+'/']);
 loadPlatform();
 
 function toggleField(id,show){

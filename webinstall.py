@@ -17,6 +17,7 @@ Cicada Studio — веб-установщик (один файл, без зав�
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
 import platform
@@ -1268,6 +1269,21 @@ FILES_ROOT = ROOT.resolve()
 FILES_MAX_READ = 512 * 1024
 FILES_SKIP_NAMES = frozenset({".git", "node_modules", "__pycache__", ".venv-bot", ".venv-esphome"})
 FILES_BLOCK_NAMES = frozenset({".env", ".env.local", ".env.production"})
+FILES_MAX_WRITE = 512 * 1024
+
+
+def file_write_blocked(path: Path) -> bool:
+    name = path.name
+    return name in FILES_BLOCK_NAMES or name.lower().endswith(".env")
+
+
+def panel_access_urls(port: int | None = None) -> list[str]:
+    p = PORT if port is None else port
+    host = resolve_public_host() or guess_public_ipv4() or "127.0.0.1"
+    urls = [f"http://{host}:{p}/"]
+    if host not in ("127.0.0.1", "localhost"):
+        urls.append(f"http://127.0.0.1:{p}/")
+    return urls
 
 
 def safe_files_path(rel: str) -> Path:
@@ -1335,6 +1351,36 @@ def read_text_file(rel: str) -> dict:
     except UnicodeDecodeError:
         raise ValueError("не текстовый файл (UTF-8)")
     return {"path": rel, "size": size, "content": text}
+
+
+def write_file_content(rel: str, content: str | bytes, *, create: bool = False) -> dict:
+    target = safe_files_path(rel)
+    if target.is_dir():
+        raise ValueError("это каталог")
+    if file_write_blocked(target):
+        raise ValueError("запись в этот файл запрещена")
+    raw = content.encode("utf-8") if isinstance(content, str) else content
+    if len(raw) > FILES_MAX_WRITE:
+        raise ValueError(f"файл слишком большой (>{FILES_MAX_WRITE // 1024} КБ)")
+    if not create and not target.is_file():
+        raise ValueError("файл не найден")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(raw)
+    rel_out = str(target.relative_to(FILES_ROOT)).replace("\\", "/")
+    return {"ok": True, "path": rel_out, "size": len(raw)}
+
+
+def upload_file(dir_rel: str, name: str, raw: bytes) -> dict:
+    name = (name or "").strip().replace("\\", "/").split("/")[-1]
+    if not name or name in (".", ".."):
+        raise ValueError("некорректное имя файла")
+    if file_write_blocked(Path(name)):
+        raise ValueError("загрузка этого файла запрещена")
+    if len(raw) > FILES_MAX_WRITE:
+        raise ValueError(f"файл слишком большой (>{FILES_MAX_WRITE // 1024} КБ)")
+    dir_rel = (dir_rel or "").strip().replace("\\", "/").strip("/")
+    rel = f"{dir_rel}/{name}" if dir_rel else name
+    return write_file_content(rel, raw, create=True)
 
 
 def setup_swap(size_gb: float, swap_path: str = "/swapfile") -> dict:
@@ -1541,6 +1587,8 @@ class Handler(BaseHTTPRequestHandler):
                 "url": browser_url(bound),
                 "api_base": api_base,
                 "local_url": local_browser_url(bound).rstrip("/"),
+                "panel_urls": panel_access_urls(bound),
+                "panel_url": panel_access_urls(bound)[0],
             }
             env_path = ROOT / ".env"
             if env_path.is_file():
@@ -1582,6 +1630,34 @@ class Handler(BaseHTTPRequestHandler):
                 return
             try:
                 self._json(200, read_text_file(rel))
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+            return
+
+        if path == "/api/files/download":
+            qs = parse_qs(urlparse(self.path).query)
+            rel = (qs.get("path") or [""])[0]
+            if not rel:
+                self._json(400, {"error": "path обязателен"})
+                return
+            try:
+                target = safe_files_path(rel)
+                if not target.is_file():
+                    raise ValueError("не файл")
+                data = target.read_bytes()
+                if len(data) > FILES_MAX_READ * 4:
+                    raise ValueError("файл слишком большой для скачивания")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/octet-stream")
+                self.send_header(
+                    "Content-Disposition",
+                    f'attachment; filename="{quote(target.name)}"',
+                )
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
             except ValueError as exc:
                 self._json(400, {"error": str(exc)})
             except Exception as exc:
@@ -1635,6 +1711,45 @@ class Handler(BaseHTTPRequestHandler):
             except subprocess.CalledProcessError as exc:
                 err = (exc.stderr or b"").decode("utf-8", errors="replace").strip()
                 self._json(500, {"error": err or str(exc)})
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+            return
+
+        if path == "/api/files/write":
+            try:
+                body = self._read_json()
+                rel = str(body.get("path") or "")
+                content = body.get("content")
+                if content is None:
+                    raise ValueError("content обязателен")
+                if isinstance(content, str):
+                    self._json(200, write_file_content(rel, content, create=False))
+                else:
+                    raise ValueError("content должен быть строкой")
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+            return
+
+        if path == "/api/files/upload":
+            try:
+                body = self._read_json()
+                dir_rel = str(body.get("dir") or body.get("path") or "")
+                name = str(body.get("name") or "")
+                enc = (body.get("encoding") or "").strip().lower()
+                payload = body.get("content")
+                if payload is None:
+                    raise ValueError("content обязателен")
+                if enc == "base64":
+                    raw = base64.b64decode(str(payload), validate=True)
+                elif isinstance(payload, str):
+                    raw = payload.encode("utf-8")
+                else:
+                    raise ValueError("некорректный content")
+                self._json(200, upload_file(dir_rel, name, raw))
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
             except Exception as exc:
                 self._json(500, {"error": str(exc)})
             return
