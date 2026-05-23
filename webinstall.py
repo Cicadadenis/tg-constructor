@@ -164,6 +164,8 @@ def build_config(body: dict) -> dict[str, str]:
 
     domain = (body.get("domain") or "").strip()
     le_email = (body.get("le_email") or "").strip()
+    if not le_email:
+        le_email = (body.get("admin_email") or "").strip()
     api_port = str(body.get("api_port") or "3001").strip()
     db_name = (body.get("db_name") or "cicada").strip()
     db_user = (body.get("db_user") or "cicada_user").strip()
@@ -428,7 +430,12 @@ def env_to_form_preset(env_data: dict[str, str]) -> dict:
     preset: dict = {
         "mode": mode,
         "domain": domain if mode == "prod" else "",
-        "le_email": env_data.get("LE_EMAIL", ""),
+        "le_email": (
+            env_data.get("LE_EMAIL")
+            or env_data.get("ADMIN_EMAIL")
+            or env_data.get("VITE_ADMIN_EMAIL")
+            or ""
+        ),
         "api_port": env_data.get("API_PORT", "3001"),
         "db_name": env_data.get("DB_NAME", "cicada"),
         "db_user": env_data.get("DB_USER", "cicada_user"),

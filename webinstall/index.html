@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CICADA — панель управления</title>
+<link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -778,7 +779,7 @@ select.inp option{background:#060b14;color:var(--text)}
       Выберите файл <code>.env</code> — поля заполнятся автоматически или запустится установка сразу.
     </p>
     <div class="env-drop" id="env-drop" ondragover="envDragOver(event)" ondragleave="envDragLeave(event)" ondrop="envDrop(event)">
-      <input type="file" accept=".env,text/plain" id="env-file-input" onchange="envFileChosen(this.files[0])">
+      <input type="file" accept=".env,.env.*,env,text/plain" id="env-file-input" onchange="envFileChosen(this.files[0])">
       <div style="font-family:'Share Tech Mono',monospace;font-size:.72rem;color:var(--tdim);pointer-events:none">
         <div style="font-size:1.5rem;margin-bottom:6px;color:rgba(0,229,255,.4)">⬆</div>
         Нажмите или перетащите файл <code style="color:var(--cyan)">.env</code>
@@ -1521,6 +1522,10 @@ async function loadPlatform(){
     badge.classList.add('ok');
     if(d.termux||d.platform==='termux') applyTermuxInstallUi();
     else if(d.platform==='wsl'||d.platform==='vps') applyLocalInstallUi();
+    if(d.has_env&&d.preset){
+      _serverPreset=d.preset;
+      showEnvLoaded('.env на сервере', d.preset);
+    }
   }catch(e){
     badge.textContent='НЕДОСТУПЕН';
     badge.classList.add('err');
@@ -1631,12 +1636,31 @@ function resetInstall(){
 
 // ════════ ENV FILE UPLOAD ════════
 let _envData = null;
+let _serverPreset = null;
+
+function showInstWarn(msg) {
+  const warn = document.getElementById('inst-warn');
+  if (!warn) return;
+  warn.textContent = msg;
+  warn.classList.remove('hidden');
+}
+
+function parseApiError(text) {
+  if (!text) return 'Ошибка запроса';
+  try {
+    const j = JSON.parse(text);
+    if (j && j.error) return String(j.error);
+  } catch (_) {}
+  return text;
+}
 
 function parseEnvFile(text) {
   const r = {};
-  for (const raw of text.split('\n')) {
-    const l = raw.trim();
+  const src = String(text || '').replace(/^\uFEFF/, '');
+  for (const raw of src.split(/\r?\n/)) {
+    let l = raw.trim();
     if (!l || l.startsWith('#')) continue;
+    if (l.toLowerCase().startsWith('export ')) l = l.slice(7).trim();
     const eq = l.indexOf('=');
     if (eq < 0) continue;
     const key = l.slice(0, eq).trim();
@@ -1651,15 +1675,16 @@ function parseEnvFile(text) {
 function envToBody(env) {
   const domain = (env.DOMAIN || env.API_HOST || '').trim();
   const mode = (env.MODE || (domain && domain !== 'localhost' && domain !== '127.0.0.1' ? 'prod' : 'local')).toLowerCase();
+  const adminEmail = (env.ADMIN_EMAIL || env.VITE_ADMIN_EMAIL || '').trim();
   return {
     mode,
     domain: mode === 'prod' ? domain : '',
-    le_email: env.LE_EMAIL || '',
+    le_email: (env.LE_EMAIL || adminEmail || '').trim(),
     api_port: env.API_PORT || '3001',
     db_name: env.DB_NAME || 'cicada',
     db_user: env.DB_USER || 'cicada_user',
     db_password: env.DB_PASSWORD || '',
-    admin_email: env.ADMIN_EMAIL || env.VITE_ADMIN_EMAIL || '',
+    admin_email: adminEmail,
     admin_name: env.ADMIN_NAME || 'Admin',
     admin_password: env.ADMIN_PASSWORD || '',
     tg_bot_token: env.TG_BOT_TOKEN || '',
@@ -1692,24 +1717,58 @@ function envToBody(env) {
   };
 }
 
+function showEnvLoaded(label, body) {
+  const loaded = document.getElementById('env-loaded');
+  document.getElementById('env-filename').textContent = label;
+  const parts = [];
+  if (body.mode) parts.push('MODE=' + body.mode.toUpperCase());
+  if (body.domain && body.domain !== 'localhost') parts.push('DOMAIN=' + body.domain);
+  if (body.db_name) parts.push('DB=' + body.db_name);
+  if (body.db_password) parts.push('DB_PASSWORD=' + body.db_password.length + ' симв.');
+  if (body.admin_email) parts.push('ADMIN=' + body.admin_email);
+  if (body.mode === 'prod' && body.le_email) parts.push('LE=' + body.le_email);
+  document.getElementById('env-summary').textContent = parts.join(' · ') || 'настройки загружены';
+  loaded.classList.add('show');
+  document.getElementById('env-drop').style.borderColor = 'rgba(0,255,65,.5)';
+}
+
 function envFileChosen(file) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = e => {
     _envData = parseEnvFile(e.target.result);
-    const body = envToBody(_envData);
-    const loaded = document.getElementById('env-loaded');
-    document.getElementById('env-filename').textContent = file.name;
-    const parts = [];
-    if (body.mode) parts.push('MODE=' + body.mode.toUpperCase());
-    if (body.domain && body.domain !== 'localhost') parts.push('DOMAIN=' + body.domain);
-    if (body.db_name) parts.push('DB=' + body.db_name);
-    if (body.admin_email) parts.push('ADMIN=' + body.admin_email);
-    document.getElementById('env-summary').textContent = parts.join(' · ') || 'настройки загружены';
-    loaded.classList.add('show');
-    document.getElementById('env-drop').style.borderColor = 'rgba(0,255,65,.5)';
+    _serverPreset = null;
+    showEnvLoaded(file.name, envToBody(_envData));
   };
+  reader.onerror = () => showInstWarn('Не удалось прочитать файл .env');
   reader.readAsText(file);
+}
+
+function getInstallBodyFromEnv() {
+  if (_envData) return envToBody(_envData);
+  if (_serverPreset) return Object.assign({}, _serverPreset);
+  return null;
+}
+
+function validateInstallBody(body) {
+  const isTermux = installPlatform === 'termux';
+  const dbPass = String(body.db_password || '');
+  if (dbPass.length < 8) {
+    return 'Пароль БД — минимум 8 символов. Задайте DB_PASSWORD=... в .env или введите в форме.';
+  }
+  if (body.mode === 'local' && !isTermux) {
+    const ap = String(body.admin_password || '');
+    if (ap.length < 8) {
+      return 'Пароль входа — минимум 8 символов (LOCAL).';
+    }
+  }
+  if (body.mode === 'prod') {
+    if (!String(body.domain || '').trim()) return 'Укажите домен для PROD (DOMAIN=...).';
+    if (!String(body.le_email || '').trim()) {
+      return "Укажите LE_EMAIL (или ADMIN_EMAIL) для Let's Encrypt.";
+    }
+  }
+  return '';
 }
 
 function envDragOver(e) { e.preventDefault(); document.getElementById('env-drop').classList.add('over'); }
@@ -1722,9 +1781,14 @@ function envDrop(e) {
 }
 
 async function installFromEnv() {
-  if (!_envData) return;
-  const body = envToBody(_envData);
+  const body = getInstallBodyFromEnv();
   const warn = document.getElementById('inst-warn');
+  if (!body) {
+    showInstWarn('Сначала загрузите .env в зону выше (клик или перетаскивание), либо положите .env в каталог проекта на сервере и обновите страницу.');
+    return;
+  }
+  const err = validateInstallBody(body);
+  if (err) { showInstWarn(err); return; }
   warn.classList.add('hidden');
   const domain = body.mode === 'prod' ? body.domain : 'localhost';
   openUrl = body.mode === 'prod' && domain ? 'https://' + domain : 'https://localhost';
@@ -1743,7 +1807,7 @@ async function installFromEnv() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
-    if (!r.ok) throw new Error(await r.text());
+    if (!r.ok) throw new Error(parseApiError(await r.text()));
     const { jobId } = await r.json();
     if (es) { es.close(); es = null; }
     es = new EventSource(base + '/api/install/' + jobId + '/events');
@@ -1755,21 +1819,21 @@ async function installFromEnv() {
     });
     es.onerror = () => { es.close(); es = null; finishAll(false); instStatus = 'failed'; setLogStatus('failed', 'ОШИБКА СОЕДИНЕНИЯ'); showBanner(false); };
   } catch(err) {
-    warn.textContent = err instanceof Error ? err.message : 'Ошибка запроса';
-    warn.classList.remove('hidden');
+    showInstWarn(err instanceof Error ? err.message : 'Ошибка запроса');
     document.getElementById('inst-form').classList.remove('hidden');
     logEl.classList.add('hidden');
   }
 }
 
 function setField(name, value) {
-  const el = document.querySelector('[name="' + name + '"]');
-  if (el) el.value = value;
+  const form = document.getElementById('install-form');
+  if (!form) return;
+  const el = form.querySelector('[name="' + name + '"]');
+  if (el) el.value = value == null ? '' : String(value);
 }
 
-function fillFormFromEnv() {
-  if (!_envData) return;
-  const b = envToBody(_envData);
+function applyInstallPreset(b) {
+  if (!b) return false;
   // Mode
   const modeEl = document.getElementById('mode');
   if (modeEl) { modeEl.value = b.mode; onModeChange(); }
@@ -1807,16 +1871,29 @@ function fillFormFromEnv() {
   setField('jwt_expires_sec', b.jwt_expires_sec);
   setField('admin_totp_secret', b.admin_totp_secret);
   // Checkboxes
+  const useAutoKey = b.auto_admin_key !== false && !b.admin_key;
   const autoKey = document.getElementById('auto-admin-key');
-  if (autoKey) { autoKey.checked = b.auto_admin_key; toggleField('admin-key-field', !b.auto_admin_key); }
-  if (!b.auto_admin_key) setField('admin_key', b.admin_key);
+  if (autoKey) { autoKey.checked = useAutoKey; toggleField('admin-key-field', !useAutoKey); }
+  if (!useAutoKey) setField('admin_key', b.admin_key);
+  const useAutoJwt = b.auto_jwt !== false && !b.jwt_secret;
   const autoJwt = document.getElementById('auto-jwt');
-  if (autoJwt) { autoJwt.checked = b.auto_jwt; toggleField('jwt-secret-field', !b.auto_jwt); }
-  if (!b.auto_jwt) setField('jwt_secret', b.jwt_secret);
+  if (autoJwt) { autoJwt.checked = useAutoJwt; toggleField('jwt-secret-field', !useAutoJwt); }
+  if (!useAutoJwt) setField('jwt_secret', b.jwt_secret);
   const espEl = document.getElementById('inst-esp');
-  if (espEl) { espEl.checked = b.install_esphome; toggleField('esp-pin-field', b.install_esphome); }
-  // Scroll to form
-  document.getElementById('install-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (espEl) { espEl.checked = !!b.install_esphome; toggleField('esp-pin-field', b.install_esphome); }
+  return true;
+}
+
+function fillFormFromEnv() {
+  const b = getInstallBodyFromEnv();
+  if (!b) {
+    showInstWarn('Сначала загрузите .env в зону «ЗАГРУЗИТЬ .ENV» выше. Кнопка не читает файл с диска сервера автоматически (кроме .env в корне проекта — обновите страницу).');
+    return;
+  }
+  document.getElementById('inst-warn')?.classList.add('hidden');
+  applyInstallPreset(b);
+  CicadaUI.toast('Форма заполнена');
+  document.getElementById('install-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 async function startInstall(e){
@@ -1829,17 +1906,16 @@ async function startInstall(e){
   warn.classList.add('hidden');
 
   const isTermux=installPlatform==='termux';
-  if(get('db_password').length<8){warn.textContent='Пароль БД — минимум 8 символов';warn.classList.remove('hidden');return}
-  if(mode==='local'&&!isTermux&&get('admin_password').length<8){warn.textContent='Пароль входа — минимум 8 символов (LOCAL)';warn.classList.remove('hidden');return}
-  if(mode==='prod'&&!get('domain')){warn.textContent='Укажите домен для PROD';warn.classList.remove('hidden');return}
+  let leEmail=get('le_email');
+  const localEmail=mode==='prod'?get('admin_email_prod'):get('admin_email');
+  if(mode==='prod'&&!leEmail) leEmail=localEmail;
 
   const domain=mode==='prod'?get('domain'):'localhost';
   openUrl=isTermux?`http://127.0.0.1:${get('api_port')||'3001'}`:(mode==='prod'&&domain?`https://${domain}`:'https://localhost');
 
-  const localEmail=mode==='prod'?get('admin_email_prod'):get('admin_email');
   const localPass=get('admin_password');
   const body={
-    mode,domain,le_email:get('le_email'),api_port:get('api_port'),
+    mode,domain,le_email:leEmail,api_port:get('api_port'),
     db_name:get('db_name'),db_user:get('db_user'),db_password:get('db_password'),
     admin_email:mode==='prod'?localEmail:(localEmail||'denisbednakov@gmail.com'),
     admin_name:get('admin_name')||'Admin',
@@ -1858,6 +1934,8 @@ async function startInstall(e){
     ollama_url:get('ollama_url'),ollama_model:get('ollama_model'),
     install_esphome:!isTermux&&document.getElementById('inst-esp').checked,esphome_pin:get('esphome_pin'),
   };
+  const vErr=validateInstallBody(body);
+  if(vErr){showInstWarn(vErr);return}
 
   steps=[];curStep=-1;errors=[];instStatus='running';
   document.getElementById('inst-form').classList.add('hidden');
@@ -1869,7 +1947,7 @@ async function startInstall(e){
   const base=getBase();
   try{
     const r=await fetch(base+'/api/install',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    if(!r.ok) throw new Error(await r.text());
+    if(!r.ok) throw new Error(parseApiError(await r.text()));
     const {jobId}=await r.json();
     if(es){es.close();es=null}
     es=new EventSource(base+'/api/install/'+jobId+'/events');
@@ -1878,8 +1956,7 @@ async function startInstall(e){
     es.addEventListener('error_exit',()=>{es.close();es=null;finishAll(false);instStatus='failed';setLogStatus('failed','ОШИБКА УСТАНОВКИ');showBanner(false)});
     es.onerror=()=>{es.close();es=null;finishAll(false);instStatus='failed';setLogStatus('failed','ОШИБКА СОЕДИНЕНИЯ');showBanner(false)};
   }catch(err){
-    warn.textContent=err instanceof Error?err.message:'Ошибка запроса';
-    warn.classList.remove('hidden');
+    showInstWarn(err instanceof Error?err.message:'Ошибка запроса');
     document.getElementById('inst-form').classList.remove('hidden');
     logEl.classList.add('hidden');
   }
