@@ -722,14 +722,13 @@ apply_webinstall_preset() {
     DISABLE_FIRMWARE_RUNTIME=1
   elif [ "$MODE" = "prod" ]; then
     ADMIN_EMAIL="${ADMIN_EMAIL:-denisbednakov@gmail.com}"
-    ADMIN_PASSWORD="${ADMIN_PASSWORD:-cicada3301}"
     ADMIN_NAME="${ADMIN_NAME:-Admin}"
   elif [ "$MODE" = "local" ]; then
     ADMIN_EMAIL="${ADMIN_EMAIL:-denisbednakov@gmail.com}"
-    ADMIN_PASSWORD="${ADMIN_PASSWORD:-cicada3301}"
     ADMIN_NAME="${ADMIN_NAME:-Admin}"
     AUTH_BYPASS_VAL="1"
   fi
+  normalize_admin_credentials
   return 0
 }
 
@@ -2054,6 +2053,20 @@ fi
 ok "Сервер запущен через PM2"
 
 # ─── Локальный админ: учётка + pro ─────────────────────────────
+normalize_admin_credentials() {
+  ADMIN_EMAIL=$(echo "${ADMIN_EMAIL:-}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+  if [ -z "$ADMIN_EMAIL" ]; then
+    ADMIN_PASSWORD=""
+    return 0
+  fi
+  if [ -z "${ADMIN_PASSWORD:-}" ] || [ "${#ADMIN_PASSWORD}" -lt 8 ]; then
+    if [ -n "$WEBINSTALL_ENV" ] && [ "$MODE" = "prod" ]; then
+      err "Webinstall PROD: укажите ADMIN_PASSWORD (минимум 8 символов) в форме установки"
+    fi
+    ADMIN_PASSWORD="${ADMIN_PASSWORD:-cicada3301}"
+  fi
+}
+
 wait_for_users_table() {
   local i
   for i in $(seq 1 45); do
@@ -2132,18 +2145,27 @@ SEED
 
 grant_admin_privileges() {
   [ -z "$ADMIN_EMAIL" ] && return 0
-  local email_lc
+  local email_lc email_sql
   email_lc=$(echo "$ADMIN_EMAIL" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
-  pgsql_super -d "$DB_NAME" -c \
-    "UPDATE users SET plan='pro', role='admin', subscription_exp=9999999999999 WHERE lower(trim(email))='${email_lc}';" \
-    &>/dev/null || true
+  email_sql="${email_lc//\'/\'\'}"
+  info "PostgreSQL: role=admin, plan=pro для ${email_lc}..."
+  if pgsql_super -d "$DB_NAME" -c \
+    "UPDATE users SET role='admin', plan='pro', subscription_exp=9999999999999 WHERE lower(trim(email))='${email_sql}';" \
+    2>"${CICADA_ERR_DIR}/cicada_admin_grant_err"; then
+    return 0
+  fi
+  warn "UPDATE admin не выполнен — см. ${CICADA_ERR_DIR}/cicada_admin_grant_err"
+  return 1
 }
+
+normalize_admin_credentials
 
 if [ -n "$ADMIN_EMAIL" ] && [ -n "$ADMIN_PASSWORD" ]; then
   echo ""
   info "Выдаём pro-план администратору ($ADMIN_EMAIL)..."
   sleep 2
   if seed_admin_account; then
+    grant_admin_privileges || true
     ok "Pro-план и роль admin выданы администратору"
     hint "Вход: ${ADMIN_EMAIL} / пароль задан при установке (в БД — bcrypt-хеш)"
   else

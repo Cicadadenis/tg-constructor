@@ -211,7 +211,8 @@ def build_config(body: dict) -> dict[str, str]:
     elif not admin_email:
         raise ValueError("Email администратора обязателен")
     else:
-        admin_password = admin_password or ""
+        if len(admin_password) < 8:
+            raise ValueError("Пароль входа — минимум 8 символов (PROD)")
 
     auto_admin_key = body.get("auto_admin_key") is not False
     admin_key = (body.get("admin_key") or "").strip()

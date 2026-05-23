@@ -1019,8 +1019,10 @@ select.inp option{background:#060b14;color:var(--text)}
         <div class="f" style="margin-bottom:0"><label class="lbl">Пароль для входа</label><input name="admin_password" type="password" class="inp" minlength="8" placeholder="cicada3301" autocomplete="new-password"></div>
       </div>
       <div id="prod-account" class="hidden">
-        <p class="panel-desc">PROD: email для уведомлений. Вход — через OAuth / регистрацию.</p>
-        <div class="f" style="margin-bottom:0"><label class="lbl">Email администратора</label><input name="admin_email_prod" type="email" class="inp" placeholder="admin@example.com"></div>
+        <p class="panel-desc">PROD: email и пароль для входа в Studio (роль admin, plan pro в PostgreSQL).</p>
+        <div class="f"><label class="lbl">Email администратора</label><input name="admin_email_prod" type="email" class="inp" placeholder="admin@example.com"></div>
+        <div class="f"><label class="lbl">Имя в профиле</label><input name="admin_name_prod" class="inp" value="Admin"></div>
+        <div class="f" style="margin-bottom:0"><label class="lbl">Пароль для входа</label><input name="admin_password_prod" type="password" class="inp" minlength="8" autocomplete="new-password" placeholder="мин. 8 символов"></div>
       </div>
     </section>
 
@@ -1940,6 +1942,9 @@ function validateInstallBody(body) {
     if (!String(body.le_email || '').trim()) {
       return "Укажите LE_EMAIL (или ADMIN_EMAIL) для Let's Encrypt.";
     }
+    if (!String(body.admin_email || '').trim()) return 'Укажите email администратора (PROD).';
+    const ap = String(body.admin_password || '');
+    if (ap.length < 8) return 'Пароль входа — минимум 8 символов (PROD).';
   }
   return '';
 }
@@ -2019,7 +2024,9 @@ function applyInstallPreset(b) {
   setField('admin_email', b.admin_email);
   setField('admin_email_prod', b.admin_email);
   setField('admin_name', b.admin_name);
+  setField('admin_name_prod', b.admin_name);
   setField('admin_password', b.admin_password);
+  setField('admin_password_prod', b.admin_password);
   setField('tg_bot_token', b.tg_bot_token);
   setField('tg_bot_name', b.tg_bot_name);
   setField('resend_api_key', b.resend_api_key);
@@ -2086,12 +2093,13 @@ async function startInstall(e){
   const domain=mode==='prod'?get('domain'):'localhost';
   openUrl=isTermux?`http://127.0.0.1:${get('api_port')||'3001'}`:(mode==='prod'&&domain?`https://${domain}`:'https://localhost');
 
-  const localPass=get('admin_password');
+  const localPass=mode==='prod'?get('admin_password_prod'):get('admin_password');
+  const localName=mode==='prod'?get('admin_name_prod'):get('admin_name');
   const body={
     mode,domain,le_email:leEmail,api_port:get('api_port'),
     db_name:get('db_name'),db_user:get('db_user'),db_password:get('db_password'),
     admin_email:mode==='prod'?localEmail:(localEmail||'denisbednakov@gmail.com'),
-    admin_name:get('admin_name')||'Admin',
+    admin_name:localName||'Admin',
     admin_password:mode==='local'&&!isTermux?(localPass||'cicada3301'):localPass,
     auto_admin_key:document.getElementById('auto-admin-key').checked,admin_key:get('admin_key'),
     auto_jwt:document.getElementById('auto-jwt').checked,jwt_secret:get('jwt_secret'),
