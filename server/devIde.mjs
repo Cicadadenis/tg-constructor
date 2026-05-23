@@ -1,4 +1,5 @@
 import express from 'express';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
@@ -7,6 +8,12 @@ import rateLimit from 'express-rate-limit';
 import { isDevIdeAdminGated, isDevIdeEnabled, readEnv } from '../core/env.mjs';
 import { atomicWriteFile, readFileUtf8 } from '../services/secureFs.mjs';
 import { sendHtmlWithCspNonce } from '../services/sendHtmlWithCspNonce.mjs';
+import {
+  DEV_IDE_OPS_API,
+  buildAutoOpsContext,
+  listOpsActions,
+  runOpsAction,
+} from './devIdeOps.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -99,6 +106,7 @@ export function isDevIdeApiPath(pathname) {
   const base = q >= 0 ? p.slice(0, q) : p;
   if (base === DEV_IDE_CHAT_API || base.startsWith(`${DEV_IDE_CHAT_API}/`)) return true;
   if (base === DEV_IDE_FILE_API || base.startsWith(`${DEV_IDE_FILE_API}/`)) return true;
+  if (base === DEV_IDE_OPS_API || base.startsWith(`${DEV_IDE_OPS_API}/`)) return true;
   return false;
 }
 
@@ -365,6 +373,16 @@ const devIdeAiRateLimit = rateLimit({
   },
 });
 
+const devIdeOpsRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.DEV_IDE_OPS_RATE_MAX || 60),
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    res.status(429).json({ error: 'Dev ops rate limit exceeded' });
+  },
+});
+
 const devIdeWriteRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: Number(process.env.DEV_IDE_WRITE_RATE_MAX || 120),
@@ -381,7 +399,13 @@ const DEV_IDE_SYSTEM = `Ты — ассистент Cicada AI Debug IDE (тол�
 - Отвечай по-русски, кратко и по делу.
 - В контексте ниже могут быть дерево проекта, package.json и открытый файл — используй их.
 - Не проси пользователя «прислать» или «вставить» файлы вручную, если структура уже в контексте.
-- Для детального разбора конкретного модуля попроси открыть файл в проводнике (любой путь в репозитории, кроме node_modules и .env).
+- Пути к файлам указывай в обратных кавычках (например src/foo.js) или как open:src/foo.js — IDE откроет их автоматически.
+- Для символов (функции, компоненты) пиши имя символа — IDE найдёт файл по содержимому.
+- Не проси пользователя вручную искать файл в проводнике, если можно назвать путь или символ.
+- Логи, порты, health и тесты: используй директивы ops:ACTION (IDE выполнит на сервере и покажет вывод).
+- Доступные ops: pm2-list, pm2-logs, pm2-logs-err, ports, health, nginx-error, nginx-access, test-devIde, test-env, check-server, npm-test-compiler, npm-test-runtime, disk-free.
+- Пример: ops:pm2-logs:80 или ops:ports. Для тестов: ops:test-devIde.
+- Команды терминала дублируй в блоках bash — появится кнопка «Выполнить» для безопасных команд из whitelist.
 - Если приложены скриншоты — опиши, что видишь, и предложи исправления.
 - Не утверждай, что файлы уже сохранены на диске.
 - Правки кода — только в блоках с путём, например:
@@ -446,6 +470,126 @@ async function buildProjectContextBlock({ includeProjectTree = false, includeMan
     }
   }
   return parts.length ? `\n\n---\nКонтекст проекта\n\n${parts.join('\n\n')}` : '';
+}
+
+function flattenTreeFiles(nodes, out = []) {
+  for (const node of nodes || []) {
+    if (node.type === 'file') out.push(node.path);
+    else if (node.type === 'dir') flattenTreeFiles(node.children, out);
+  }
+  return out;
+}
+
+function scorePathMatch(filePath, query) {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) return 0;
+  const p = String(filePath || '').toLowerCase();
+  const base = p.split('/').pop() || p;
+  if (p === q) return 100;
+  if (p.endsWith(`/${q}`)) return 92;
+  if (base === q) return 88;
+  if (base.includes(q)) return 72;
+  if (p.includes(q)) return 55;
+  return 0;
+}
+
+async function searchFilesByName(query, limit = 12) {
+  const tree = await buildFileTree();
+  const files = flattenTreeFiles(tree.roots);
+  return files
+    .map((filePath) => ({ path: filePath, score: scorePathMatch(filePath, query), via: 'name' }))
+    .filter((row) => row.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+}
+
+function contentSearchPathsFromStdout(stdout, limit = 12) {
+  const matches = [];
+  for (const abs of String(stdout || '').split('\n')) {
+    if (!abs.trim() || matches.length >= limit) break;
+    try {
+      const rel = path.relative(PROJECT_ROOT, abs).replace(/\\/g, '/');
+      normalizeRelPath(rel);
+      matches.push({ path: rel, score: 62, via: 'content' });
+    } catch {
+      // skip paths outside allowed roots
+    }
+  }
+  return matches;
+}
+
+function searchFilesByContent(query, limit = 12) {
+  const needle = String(query || '').trim();
+  if (needle.length < 3 || needle.length > 120) return [];
+  if (/[./\\]/.test(needle)) return [];
+
+  const rg = spawnSync(
+    'rg',
+    [
+      '-l',
+      '-i',
+      '--fixed-strings',
+      needle,
+      '--glob', '!node_modules/**',
+      '--glob', '!.git/**',
+      '--glob', '!.env*',
+      PROJECT_ROOT,
+    ],
+    { encoding: 'utf8', maxBuffer: 2 * 1024 * 1024, timeout: 12_000 },
+  );
+  if (!rg.error && (rg.status === 0 || rg.status === 1)) {
+    return contentSearchPathsFromStdout(rg.stdout, limit);
+  }
+
+  const grep = spawnSync(
+    'grep',
+    [
+      '-ril',
+      '--fixed-strings',
+      needle,
+      '--exclude-dir=node_modules',
+      '--exclude-dir=.git',
+      '--exclude-dir=.dev-backups',
+      '--exclude=*.env',
+      '--exclude=*.env.*',
+      PROJECT_ROOT,
+    ],
+    { encoding: 'utf8', maxBuffer: 2 * 1024 * 1024, timeout: 20_000 },
+  );
+  if (grep.error?.code === 'ENOENT') return [];
+  if (grep.status !== 0 && grep.status !== 1) return [];
+  return contentSearchPathsFromStdout(grep.stdout, limit);
+}
+
+async function searchHandler(req, res) {
+  try {
+    const q = String(req.query.q || '').trim();
+    if (!q || q.length < 2) {
+      res.json({ matches: [], query: q });
+      return;
+    }
+
+    const merged = new Map();
+    const add = (row) => {
+      const prev = merged.get(row.path);
+      if (!prev || row.score > prev.score) merged.set(row.path, row);
+    };
+
+    for (const row of await searchFilesByName(q, 15)) add(row);
+
+    const looksLikePath = q.includes('/') || /\.[a-z0-9]{1,8}$/i.test(q);
+    if (merged.size < 3 && !looksLikePath) {
+      for (const row of searchFilesByContent(q, 12)) add(row);
+    }
+
+    const matches = [...merged.values()]
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 15);
+
+    res.json({ matches, query: q });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'search failed' });
+  }
 }
 
 async function treeHandler(_req, res) {
@@ -536,6 +680,11 @@ async function chatHandler(req, res) {
       });
 
     const contextParts = [];
+    const lastUser = [...convo].reverse().find((m) => m.role === 'user');
+    if (lastUser?.content) {
+      const opsCtx = await buildAutoOpsContext(lastUser.content);
+      if (opsCtx) contextParts.push(opsCtx);
+    }
     if (includeProjectTree || includeManifest) {
       contextParts.push(await buildProjectContextBlock({ includeProjectTree, includeManifest }));
     }
@@ -567,8 +716,44 @@ async function chatHandler(req, res) {
   }
 }
 
+async function opsCatalogHandler(_req, res) {
+  res.json({ actions: listOpsActions() });
+}
+
+async function opsRunHandler(req, res) {
+  try {
+    const action = String(req.body?.action || '').trim();
+    const params = req.body?.params && typeof req.body.params === 'object' ? req.body.params : {};
+    const result = await runOpsAction(action, params);
+    res.json(result);
+  } catch (err) {
+    const code = err?.code === 'UNKNOWN_ACTION' ? 400 : 500;
+    res.status(code).json({ error: err instanceof Error ? err.message : 'ops failed' });
+  }
+}
+
+async function opsRunBatchHandler(req, res) {
+  try {
+    const items = Array.isArray(req.body?.actions) ? req.body.actions.slice(0, 8) : [];
+    const results = [];
+    for (const item of items) {
+      const action = String(item?.action || '').trim();
+      const params = item?.params && typeof item.params === 'object' ? item.params : {};
+      results.push(await runOpsAction(action, params));
+    }
+    res.json({ results });
+  } catch (err) {
+    const code = err?.code === 'UNKNOWN_ACTION' ? 400 : 500;
+    res.status(code).json({ error: err instanceof Error ? err.message : 'ops batch failed' });
+  }
+}
+
 export function registerDevIdeRoutes(app) {
   const guard = [devIdeMiddleware];
+  app.get(`${DEV_IDE_OPS_API}/catalog`, guard, opsCatalogHandler);
+  app.post(`${DEV_IDE_OPS_API}/run`, ideJson, guard, devIdeOpsRateLimit, opsRunHandler);
+  app.post(`${DEV_IDE_OPS_API}/run-batch`, ideJson, guard, devIdeOpsRateLimit, opsRunBatchHandler);
+  app.get(`${DEV_IDE_FILE_API}/search`, guard, searchHandler);
   app.get(`${DEV_IDE_FILE_API}/tree`, guard, treeHandler);
   app.get(`${DEV_IDE_FILE_API}/read`, guard, readHandler);
   app.post(`${DEV_IDE_FILE_API}/write`, ideJson, guard, devIdeWriteRateLimit, writeHandler);

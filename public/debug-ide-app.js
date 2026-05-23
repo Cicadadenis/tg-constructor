@@ -1,5 +1,7 @@
 const API_FILES = '/api/files';
 const API_CHAT = '/api/ai/chat';
+const API_DEV = '/api/dev';
+const AUTO_OPS_KEY = 'cicada-debug-ide-auto-ops-v1';
 const MAX_IMAGES = 4;
 const MAX_IMAGE_BYTES = 1_800_000;
 const CHATS_STORAGE_KEY = 'cicada-debug-ide-chats-v1';
@@ -63,8 +65,276 @@ async function api(path, opts = {}) {
 function defaultSystemMessage() {
   return {
     role: 'system',
-    content: 'Ассистент готов. Включите «Дерево проекта» для обзора всего кода, откройте файл слева или прикрепите скриншот (Ctrl+Enter — отправить).',
+    content:
+      'Ассистент готов. IDE открывает файлы, читает логи/порты (ops:pm2-logs, ops:ports), гоняет тесты (ops:test-devIde). Спросите «покажи логи» или «проверь порты». Ctrl+Enter — отправить.',
   };
+}
+
+function isAutoOpsEnabled() {
+  const el = $('autoOps');
+  return el ? el.checked : true;
+}
+
+async function runOpsAction(action, params = {}) {
+  return api(`${API_DEV}/run`, {
+    method: 'POST',
+    body: JSON.stringify({ action, params }),
+  });
+}
+
+function formatOpsResultMarkdown(result) {
+  const body = [result.stdout, result.stderr].filter(Boolean).join('\n--- stderr ---\n').trim() || '(пусто)';
+  return `**ops:${result.action}** — ${result.label} (exit ${result.exitCode}, ${result.durationMs}ms)\n\`\`\`\n${body}\n\`\`\``;
+}
+
+function extractOpsDirectivesFromText(text) {
+  const actions = [];
+  const seen = new Set();
+  for (const m of String(text || '').matchAll(/\bops:([a-z0-9-]+)(?::(\d+))?/gi)) {
+    const action = m[1].toLowerCase();
+    const key = `${action}:${m[2] || ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    actions.push({ action, params: m[2] ? { lines: Number(m[2]) } : {} });
+  }
+  return actions;
+}
+
+function mapBashLineToOpsAction(line) {
+  const s = String(line || '').trim().replace(/\s+/g, ' ');
+  if (!s || s.startsWith('#')) return null;
+  const rules = [
+    [/^pm2\s+jlist$/i, 'pm2-list', {}],
+    [/^pm2\s+list$/i, 'pm2-list', {}],
+    [/^pm2\s+logs(?:\s+\S+)?(?:\s+--lines\s+(\d+))?/i, 'pm2-logs', (m) => (m[1] ? { lines: Number(m[1]) } : {})],
+    [/^ss\s+-tlnp$/i, 'ports', {}],
+    [/^netstat\s+-tlnp$/i, 'ports', {}],
+    [/^node\s+--test\s+tests\/server\/devIde\.test\.mjs$/i, 'test-devIde', {}],
+    [/^node\s+--test\s+tests\/env\/env\.test\.mjs$/i, 'test-env', {}],
+    [/^node\s+--check\s+server\.mjs$/i, 'check-server', {}],
+    [/^npm\s+run\s+test:compiler$/i, 'npm-test-compiler', {}],
+    [/^npm\s+run\s+test:runtime$/i, 'npm-test-runtime', {}],
+    [/^df\s+-h$/i, 'disk-free', {}],
+  ];
+  for (const [re, action, paramsFn] of rules) {
+    const m = s.match(re);
+    if (m) return { action, params: typeof paramsFn === 'function' ? paramsFn(m) : paramsFn };
+  }
+  return null;
+}
+
+function firstOpsFromBashCode(code) {
+  for (const line of String(code || '').split('\n')) {
+    const mapped = mapBashLineToOpsAction(line);
+    if (mapped) return mapped;
+  }
+  return null;
+}
+
+async function autoRunOpsFromText(text) {
+  if (!isAutoOpsEnabled()) return;
+  const directives = extractOpsDirectivesFromText(text);
+  if (!directives.length) return;
+
+  const outputs = [];
+  for (const d of directives.slice(0, 5)) {
+    try {
+      const result = await runOpsAction(d.action, d.params);
+      outputs.push(formatOpsResultMarkdown(result));
+    } catch (err) {
+      outputs.push(`**ops:${d.action}** — ошибка: ${err.message}`);
+    }
+  }
+  if (!outputs.length) return;
+
+  chatHistory.push({
+    role: 'assistant',
+    content: `**Результат на сервере:**\n\n${outputs.join('\n\n')}`,
+    opsResult: true,
+  });
+  renderChat();
+  touchActiveSession();
+}
+
+async function executeOpsButton(btn) {
+  const action = btn.dataset.opsAction;
+  if (!action || btn.classList.contains('running')) return;
+  const params = {};
+  if (btn.dataset.opsLines) params.lines = Number(btn.dataset.opsLines);
+  btn.classList.add('running');
+  btn.textContent = '…';
+  try {
+    const result = await runOpsAction(action, params);
+    chatHistory.push({
+      role: 'assistant',
+      content: formatOpsResultMarkdown(result),
+      opsResult: true,
+    });
+    renderChat();
+    touchActiveSession();
+    btn.textContent = 'Готово';
+    btn.classList.add('done');
+  } catch (err) {
+    btn.textContent = 'Ошибка';
+    setSaveStatus(err.message, 'err');
+  } finally {
+    btn.classList.remove('running');
+    setTimeout(() => {
+      btn.textContent = 'Выполнить';
+      btn.classList.remove('done');
+    }, 2000);
+  }
+}
+
+const OPEN_INTENT_RE = /(?:открой|открыть|найди|найти|покажи|показать|где\s+файл|where\s+is|open|find|grep)\b/i;
+const SKIP_SYMBOL_RE = /^(function|const|let|var|import|export|return|async|await|undefined|null|true|false|if|else|for|while|class|interface|type|enum)$/i;
+
+function scorePathMatchClient(filePath, query) {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) return 0;
+  const p = String(filePath || '').toLowerCase();
+  const base = p.split('/').pop() || p;
+  if (p === q) return 100;
+  if (p.endsWith(`/${q}`)) return 92;
+  if (base === q) return 88;
+  if (base.includes(q)) return 72;
+  if (p.includes(q)) return 55;
+  return 0;
+}
+
+function collectAllFiles(nodes, out = []) {
+  for (const node of nodes || []) {
+    if (node.type === 'file') out.push(node.path);
+    else if (node.type === 'dir') collectAllFiles(node.children, out);
+  }
+  return out;
+}
+
+function extractPathQueriesFromText(text) {
+  const queries = [];
+  const seen = new Set();
+  const add = (raw) => {
+    let q = String(raw || '').trim().replace(/^['"`]+|['"`]+$/g, '');
+    q = q.replace(/[.,;:!?]+$/g, '').trim();
+    if (!q || q.length < 2 || seen.has(q)) return;
+    seen.add(q);
+    queries.push(q);
+  };
+
+  for (const m of String(text || '').matchAll(/```open:([^\n`]+)/gi)) add(m[1]);
+  for (const m of String(text || '').matchAll(/\bopen:([^\s`'"]+)/gi)) add(m[1]);
+  for (const m of String(text || '').matchAll(/`([^`\n]+\.[a-z0-9]{1,8})`/gi)) add(m[1]);
+  for (const m of String(text || '').matchAll(
+    /(?:^|\n)\s*[-*]\s+([^\n`]*?\.(?:jsx?|tsx?|mjs|cjs|py|json|md|html|css))\s*$/gim,
+  )) add(m[1]);
+  for (const m of String(text || '').matchAll(
+    /(?:^|\s)((?:[\w.-]+\/)+[\w.-]+\.(?:jsx?|tsx?|mjs|cjs|py|json|md|html|css))/gm,
+  )) add(m[1]);
+  return queries;
+}
+
+function extractSymbolQueriesFromText(text) {
+  const queries = [];
+  const seen = new Set();
+  const src = String(text || '');
+  const add = (raw) => {
+    const q = String(raw || '').trim();
+    if (!q || q.length < 4 || seen.has(q) || SKIP_SYMBOL_RE.test(q)) return;
+    seen.add(q);
+    queries.push(q);
+  };
+
+  for (const m of src.matchAll(/`([A-Za-z_$][\w$]{4,})`/g)) add(m[1]);
+  for (const m of src.matchAll(/\b([a-z][\w$]*[A-Z][\w$]*|[A-Z][a-z]+[A-Z][\w$]*)\b/g)) add(m[1]);
+  const intent = OPEN_INTENT_RE.test(src);
+  if (intent) {
+    for (const m of src.matchAll(/\b([A-Za-z_$][\w$]{5,})\b/g)) {
+      if (SKIP_SYMBOL_RE.test(m[1])) continue;
+      add(m[1]);
+    }
+  }
+  return queries;
+}
+
+function extractFileQueriesFromText(text, { symbols = false } = {}) {
+  const paths = extractPathQueriesFromText(text);
+  if (!symbols) return paths;
+  const merged = [...paths];
+  const seen = new Set(paths.map((q) => q.toLowerCase()));
+  for (const sym of extractSymbolQueriesFromText(text)) {
+    const key = sym.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(sym);
+  }
+  return merged;
+}
+
+function expandDirsForPath(filePath) {
+  const parts = String(filePath || '').split('/');
+  parts.pop();
+  let acc = '';
+  for (const part of parts) {
+    acc = acc ? `${acc}/${part}` : part;
+    collapsedDirs.delete(acc);
+  }
+}
+
+async function resolveBestFile(query) {
+  const q = String(query || '').trim();
+  if (!q) return null;
+
+  const local = collectAllFiles(lastTreeRoots)
+    .map((filePath) => ({ path: filePath, score: scorePathMatchClient(filePath, q) }))
+    .filter((row) => row.score > 0)
+    .sort((a, b) => b.score - a.score);
+  if (local.length && local[0].score >= 85) return local[0].path;
+
+  try {
+    const data = await api(`${API_FILES}/search?q=${encodeURIComponent(q)}`);
+    const hit = data?.matches?.[0];
+    if (hit?.path) return hit.path;
+  } catch {
+    // search optional
+  }
+
+  return local[0]?.path || null;
+}
+
+async function autoOpenFromText(text, { force = false, symbols = false } = {}) {
+  const hasIntent = OPEN_INTENT_RE.test(String(text || ''));
+  const queries = extractFileQueriesFromText(text, { symbols: symbols || hasIntent });
+  if (!queries.length) return [];
+
+  const shouldRun = force || hasIntent;
+  if (!shouldRun && queries.every((q) => !q.includes('/') && !/\.[a-z0-9]{1,8}$/i.test(q))) {
+    return [];
+  }
+
+  const opened = [];
+  const tried = new Set();
+
+  for (const query of queries) {
+    if (opened.length >= 3) break;
+    const key = query.toLowerCase();
+    if (tried.has(key)) continue;
+    tried.add(key);
+
+    const filePath = await resolveBestFile(query);
+    if (!filePath) continue;
+
+    expandDirsForPath(filePath);
+    renderExplorer();
+    await openFile(filePath, { auto: true });
+    opened.push({ query, path: filePath });
+  }
+
+  if (opened.length) {
+    const last = opened[opened.length - 1];
+    setSaveStatus(`Открыт: ${last.path}`, 'ok');
+  }
+
+  return opened;
 }
 
 function newSessionId() {
@@ -377,10 +647,10 @@ function markActiveFileInTree() {
   });
 }
 
-async function openFile(path) {
-  if (dirty && !confirm('Отменить несохранённые изменения?')) return;
+async function openFile(path, opts = {}) {
+  if (!opts.auto && dirty && !confirm('Отменить несохранённые изменения?')) return;
   try {
-    setSaveStatus('Загрузка…');
+    if (!opts.auto) setSaveStatus('Загрузка…');
     const data = await api(`${API_FILES}/read?path=${encodeURIComponent(path)}`);
     openPath = data.path;
     dirty = false;
@@ -388,9 +658,11 @@ async function openFile(path) {
     $('editor').disabled = false;
     $('saveBtn').disabled = false;
     $('currentPath').textContent = openPath;
-    setSaveStatus('');
+    if (!opts.auto) setSaveStatus('');
     markActiveFileInTree();
-    $('editor').focus();
+    if (!opts.auto) $('editor').focus();
+    const row = $('explorer').querySelector(`.tree-item.file[data-path="${CSS.escape(openPath)}"]`);
+    row?.scrollIntoView({ block: 'nearest' });
   } catch (err) {
     setSaveStatus(err.message, 'err');
   }
@@ -515,10 +787,16 @@ function parseMarkdownLite(text) {
     const label = esc(codeBlockLabel(lang, file));
     const patchPath = file || (lang === 'patch' || lang === 'diff' ? '' : '');
     const patchAttr = patchPath ? ` data-patch-path="${esc(patchPath)}"` : '';
+    const bashOps = SHELL_LANGS.has(lang) ? firstOpsFromBashCode(code) : null;
+    const runBtn = bashOps
+      ? `<button type="button" class="code-run-btn" data-ops-action="${esc(bashOps.action)}"${
+        bashOps.params?.lines ? ` data-ops-lines="${esc(String(bashOps.params.lines))}"` : ''
+      }>Выполнить</button>`
+      : '';
     return (
       `<div class="code-block"${patchAttr}>` +
       `<div class="code-block-head"><span class="code-block-label">${label}</span>` +
-      `<button type="button" class="code-copy-btn">Копировать</button></div>` +
+      `<div class="code-block-actions"><button type="button" class="code-copy-btn">Копировать</button>${runBtn}</div></div>` +
       `<pre class="code-block-body"><code>${esc(code)}</code></pre></div>`
     );
   });
@@ -578,7 +856,8 @@ function renderChat() {
         `<button type="button" data-msg-idx="${msgIdx}" data-patch-idx="${i}">Применить: ${esc(p.path)}</button>`
       ).join('') + '</div>';
     }
-    return `<div class="msg ${m.role}">${body}${patchHtml}</div>`;
+    const opsCls = m.opsResult ? ' ops-result' : '';
+    return `<div class="msg ${m.role}${opsCls}">${body}${patchHtml}</div>`;
   }).join('');
   root.scrollTop = root.scrollHeight;
 
@@ -609,6 +888,10 @@ function renderChat() {
       }
     });
   });
+
+  root.querySelectorAll('.code-run-btn').forEach((btn) => {
+    btn.addEventListener('click', () => executeOpsButton(btn));
+  });
 }
 
 function buildOutboundMessages() {
@@ -625,6 +908,7 @@ function buildOutboundMessages() {
 async function sendChat() {
   const text = $('chatInput').value.trim();
   if ((!text && !pendingImages.length) || sending) return;
+  const userText = text;
   $('chatInput').value = '';
 
   const images = pendingImages.splice(0);
@@ -632,11 +916,13 @@ async function sendChat() {
 
   const userMsg = {
     role: 'user',
-    content: text || (images.length ? '(скриншот)' : ''),
+    content: userText || (images.length ? '(скриншот)' : ''),
     ...(images.length ? { images } : {}),
   };
   chatHistory.push(userMsg);
   renderChat();
+
+  await autoOpenFromText(userText, { force: OPEN_INTENT_RE.test(userText) });
 
   const body = { messages: buildOutboundMessages() };
   if ($('includeProject')?.checked) {
@@ -659,6 +945,8 @@ async function sendChat() {
     const reply = data.reply || '';
     const patches = extractPatchesFromReply(reply);
     chatHistory.push({ role: 'assistant', content: reply, patches });
+    await autoOpenFromText(reply, { force: true, symbols: false });
+    await autoRunOpsFromText(reply);
   } catch (err) {
     chatHistory.pop();
     chatHistory.push({ role: 'assistant', content: `Ошибка: ${err.message}` });
@@ -721,6 +1009,15 @@ document.addEventListener('keydown', (e) => {
     saveFile();
   }
 });
+
+const autoOpsEl = $('autoOps');
+if (autoOpsEl) {
+  const savedAutoOps = localStorage.getItem(AUTO_OPS_KEY);
+  if (savedAutoOps === '0') autoOpsEl.checked = false;
+  autoOpsEl.addEventListener('change', () => {
+    localStorage.setItem(AUTO_OPS_KEY, autoOpsEl.checked ? '1' : '0');
+  });
+}
 
 initChats();
 loadTree();

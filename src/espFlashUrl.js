@@ -1,3 +1,5 @@
+import { rememberReturnTo } from './studioReturnTo.js';
+
 const FLASH_PATH = '/flash';
 
 async function postFirmwareJson(url, body) {
@@ -37,6 +39,9 @@ export async function buildEspFirmware({ projectId = null, projectName = null, y
 
 export async function openEspFlashPage(opts = {}) {
   const { projectId, projectName } = opts;
+  if (typeof window !== 'undefined') {
+    rememberReturnTo(`${window.location.pathname}${window.location.search}`);
+  }
   if (projectId) {
     try {
       await postFirmwareJson('/api/firmware/refresh', {

@@ -314,6 +314,9 @@ const EspFirmwareTools = (() => {
   }
 
   async function openFlash(opts = {}) {
+    try {
+      sessionStorage.setItem('cicada_return_to', window.location.pathname + window.location.search);
+    } catch { /* ignore */ }
     restoreBuildDownload();
     if (opts.buildJob) lastBuildJobId = opts.buildJob;
     else if (opts.sessionId) lastBuildJobId = opts.sessionId;

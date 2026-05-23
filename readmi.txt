@@ -53,6 +53,44 @@ sudo systemctl start postgresql
 npm install resend
 ```
 
+### ESPHome + esptool (сборка прошивок на сервере)
+
+Через `setup.sh` (рекомендуется): ответьте **да** на «Установить ESPHome в .venv-esphome».
+
+Вручную:
+
+```bash
+# ESPHome CLI (включает esptool и PlatformIO)
+python3 -m venv .venv-esphome
+.venv-esphome/bin/pip install --upgrade pip wheel setuptools
+.venv-esphome/bin/pip install esphome
+
+# Только esptool (CLI прошивки по USB на Linux, без ESPHome)
+pip install esptool
+# или в том же venv:
+.venv-esphome/bin/pip install esptool
+
+# Проверка
+.venv-esphome/bin/esphome version
+esptool.py version
+```
+
+В `.env` укажите пути (после setup.sh подставляются автоматически):
+
+```env
+ESPHOME_BIN=/path/to/tg-constructor/.venv-esphome/bin/esphome
+PIO_BIN=/path/to/tg-constructor/.venv-esphome/bin/pio
+```
+
+**Прошивка в браузере** (`/flash/`, `/flash/jammer/`) — модуль `esptool-js` (не системный esptool):
+
+```bash
+npm install
+npm run flash:vendor
+```
+
+`flash:vendor` копирует `node_modules/esptool-js/bundle.js` → `public/flash/vendor/esptool-js.bundle.js`.
+
 ---
 
 ## 3) Настройка БД PostgreSQL

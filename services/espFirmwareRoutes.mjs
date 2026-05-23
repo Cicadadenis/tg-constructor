@@ -306,6 +306,11 @@ export function registerEspFirmwareStaticRoutes(app, { requireUserAuth, requireU
     res.setHeader('Cache-Control', 'no-cache');
     return res.sendFile(path.resolve('public/flash/serial-cleanup.js'));
   });
+
+  app.get('/flash/flash-return.js', (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache');
+    return res.sendFile(path.resolve('public/flash/flash-return.js'));
+  });
 }
 
 export function registerEspFirmwareApiRoutes(app, {

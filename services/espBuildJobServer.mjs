@@ -12,15 +12,18 @@ const JOBS_ROOT = path.resolve(
 );
 const DOWNLOAD_TTL_MS = Math.max(
   60_000,
-  Number(process.env.FIRMWARE_DOWNLOAD_TTL_MS) || 60 * 60 * 1000,
+  Number(process.env.FIRMWARE_DOWNLOAD_TTL_MS) || 10 * 60 * 1000,
 );
 const CLEANUP_INTERVAL_MS = Math.max(
-  60_000,
-  Number(process.env.ESPHOME_CLEANUP_INTERVAL_MS) || 5 * 60 * 1000,
+  30_000,
+  Math.min(
+    DOWNLOAD_TTL_MS,
+    Number(process.env.ESPHOME_CLEANUP_INTERVAL_MS) || 60 * 1000,
+  ),
 );
 const JOB_META_TTL_MS = Math.max(
   DOWNLOAD_TTL_MS,
-  Number(process.env.ESPHOME_JOB_META_TTL_MS) || 30 * 60 * 1000,
+  Number(process.env.ESPHOME_JOB_META_TTL_MS) || DOWNLOAD_TTL_MS + 60_000,
 );
 const MAX_CONCURRENT_BUILDS = Math.max(
   1,
@@ -35,6 +38,12 @@ const MANIFEST_NAME = 'manifest.json';
 const META_NAME = 'build-meta.json';
 const JOB_STATE_NAME = 'job-state.json';
 const JOB_ID_RE = /^[a-f0-9]{24}$/;
+const ARTIFACT_KEEP_NAMES = new Set([
+  FIRMWARE_BIN_NAME,
+  MANIFEST_NAME,
+  META_NAME,
+  JOB_STATE_NAME,
+]);
 
 /** @type {Map<string, JobRecord>} */
 const jobs = new Map();
@@ -47,6 +56,8 @@ let cleanupTimer = null;
 let pumpScheduled = false;
 /** @type {Map<string, NodeJS.Timeout>} */
 const persistTimers = new Map();
+/** @type {Map<string, NodeJS.Timeout>} */
+const expiryTimers = new Map();
 
 /**
  * @typedef {Object} JobRecord
@@ -592,6 +603,8 @@ async function finalizeSuccessJob(job, { detected, run, toolBin, deviceName, yam
   job.requestPlatformioIni = '';
   job.updatedAt = Date.now();
   await persistJob(job);
+  await pruneJobBuildArtifacts(job);
+  scheduleJobExpiryTimer(job);
   debugLog('EXIT', `success bin=${destBin} expires=${meta.expiresAt}`, job.id);
 }
 
@@ -682,12 +695,52 @@ async function safeRm(target, jobId, reason) {
   return false;
 }
 
+function clearExpiryTimer(jobId) {
+  const id = String(jobId || '').trim();
+  const timer = expiryTimers.get(id);
+  if (!timer) return;
+  clearTimeout(timer);
+  expiryTimers.delete(id);
+}
+
+function scheduleJobExpiryTimer(job) {
+  if (!job?.id || job.status !== 'success' || !job.expiresAt) return;
+  clearExpiryTimer(job.id);
+  const delay = Math.max(0, job.expiresAt - Date.now());
+  const timer = setTimeout(() => {
+    expiryTimers.delete(job.id);
+    scheduleJobCleanup(job.id, 'ttl-timer').catch(() => {});
+  }, delay);
+  timer.unref?.();
+  expiryTimers.set(job.id, timer);
+  debugLog('CLEANUP', `ttl timer ${Math.round(delay / 1000)}s`, job.id);
+}
+
+async function pruneJobBuildArtifacts(job) {
+  const jobDir = job?.jobDir;
+  const jobId = job?.id;
+  if (!jobDir || !jobId) return;
+  let entries = [];
+  try {
+    entries = await fsp.readdir(jobDir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const ent of entries) {
+    if (ARTIFACT_KEEP_NAMES.has(ent.name)) continue;
+    await safeRm(path.join(jobDir, ent.name), jobId, 'prune-cache');
+  }
+  debugLog('CLEANUP', 'pruned build cache (kept bin + meta)', jobId);
+}
+
 async function scheduleJobCleanup(jobId, reason) {
   const id = String(jobId || '').trim();
+  clearExpiryTimer(id);
   const job = jobs.get(id);
   if (!job || job.cleanupStarted) return;
   if (getActiveDownloadCount(id) > 0) {
     debugLog('CLEANUP', `deferred (${reason}): active download`, id);
+    scheduleJobExpiryTimer(job);
     return;
   }
   job.cleanupStarted = true;
@@ -1028,6 +1081,9 @@ async function restoreJobsFromDisk() {
     }
     jobs.set(job.id, job);
     restored += 1;
+    if (job.status === 'success') {
+      scheduleJobExpiryTimer(job);
+    }
     if (job.status === 'queued' || job.status === 'compiling') {
       job.status = 'failed';
       job.stage = 'failed';
@@ -1072,6 +1128,10 @@ export function stopEspBuildJobServer() {
     clearInterval(cleanupTimer);
     cleanupTimer = null;
   }
+  for (const timer of expiryTimers.values()) {
+    clearTimeout(timer);
+  }
+  expiryTimers.clear();
 }
 
 export {

@@ -450,7 +450,9 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .msg .code-copy-btn {
+    .msg .code-block-actions { display: flex; gap: 6px; flex-shrink: 0; }
+    .msg .code-copy-btn,
+    .msg .code-run-btn {
       flex-shrink: 0;
       padding: 3px 10px;
       font-size: 11px;
@@ -460,13 +462,27 @@
       color: #c8d0ff;
       cursor: pointer;
     }
-    .msg .code-copy-btn:hover {
+    .msg .code-run-btn {
+      border-color: rgba(0, 242, 255, 0.45);
+      background: rgba(0, 242, 255, 0.12);
+    }
+    .msg .code-copy-btn:hover,
+    .msg .code-run-btn:hover {
       border-color: var(--cyan);
       color: var(--cyan);
     }
-    .msg .code-copy-btn.copied {
+    .msg .code-copy-btn.copied,
+    .msg .code-run-btn.done {
       border-color: rgba(0, 255, 136, 0.5);
       color: #7dffb8;
+    }
+    .msg .code-run-btn.running {
+      opacity: 0.65;
+      pointer-events: none;
+    }
+    .msg.ops-result {
+      border-left: 3px solid rgba(0, 242, 255, 0.55);
+      background: rgba(0, 242, 255, 0.06);
     }
     .msg .code-block-body {
       margin: 0;
@@ -500,7 +516,8 @@
       margin-bottom: 8px;
       display: flex;
       align-items: center;
-      gap: 8px;
+      flex-wrap: wrap;
+      gap: 8px 14px;
     }
     .chat-options input[type="checkbox"] {
       accent-color: var(--purple);
@@ -626,6 +643,10 @@
           <label class="chat-options">
             <input type="checkbox" id="includeFile" checked />
             Открытый файл в контексте
+          </label>
+          <label class="chat-options">
+            <input type="checkbox" id="autoOps" checked />
+            Авто ops (логи, порты, тесты по ops:…)
           </label>
           <div id="attachPreview" class="attach-preview"></div>
           <textarea id="chatInput" placeholder="Вопрос о коде, ошибке или правка… Ctrl+V — вставить скриншот"></textarea>

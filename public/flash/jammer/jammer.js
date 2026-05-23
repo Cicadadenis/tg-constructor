@@ -79,25 +79,11 @@ function premiumDeniedText(access) {
 }
 
 function handleExit() {
-  releaseSerialPorts();
-  if (window.opener) {
-    window.close();
+  if (window.CicadaFlashReturn?.handleExitClick) {
+    window.CicadaFlashReturn.handleExitClick();
     return;
   }
-  try {
-    if (document.referrer) {
-      const ref = new URL(document.referrer);
-      if (ref.origin === location.origin) {
-        location.href = document.referrer;
-        return;
-      }
-    }
-  } catch { /* ignore */ }
-  if (window.history.length > 1) {
-    window.history.back();
-    return;
-  }
-  location.href = '/esphome/';
+  releaseSerialPorts().finally(() => location.replace('/esphome/'));
 }
 
 exitBtn?.addEventListener('click', handleExit);

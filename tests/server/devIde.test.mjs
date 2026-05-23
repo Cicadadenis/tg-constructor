@@ -71,6 +71,52 @@ try {
     const blockedBackup = await fetch(`${base}/api/files/read?path=${encodeURIComponent('.dev-backups/foo')}`);
     assert.equal(blockedBackup.status, 400);
 
+    const searchShort = await fetch(`${base}/api/files/search?q=a`);
+    assert.equal(searchShort.status, 200);
+    const searchShortData = await searchShort.json();
+    assert.deepEqual(searchShortData.matches, []);
+
+    const searchName = await fetch(`${base}/api/files/search?q=dev-ide-fixture.txt`);
+    assert.equal(searchName.status, 200);
+    const searchNameData = await searchName.json();
+    assert.ok(searchNameData.matches.some((m) => m.path === rel));
+
+    const searchContent = await fetch(`${base}/api/files/search?q=hello-ide`);
+    assert.equal(searchContent.status, 200);
+    const searchContentData = await searchContent.json();
+    assert.ok(
+      searchContentData.matches.some((m) => m.path === rel),
+      'content search should find fixture file',
+    );
+
+    const catalog = await fetch(`${base}/api/dev/catalog`);
+    assert.equal(catalog.status, 200);
+    const catalogData = await catalog.json();
+    assert.ok(catalogData.actions.some((a) => a.id === 'health'));
+
+    const badOps = await fetch(`${base}/api/dev/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'rm-rf' }),
+    });
+    assert.equal(badOps.status, 400);
+
+    const healthOps = await fetch(`${base}/api/dev/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'health' }),
+    });
+    assert.equal(healthOps.status, 200);
+    const healthData = await healthOps.json();
+    assert.equal(healthData.action, 'health');
+
+    const checkOps = await fetch(`${base}/api/dev/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'check-server' }),
+    });
+    assert.equal(checkOps.status, 200);
+
     const writeBlocked = await fetch(`${base}/api/files/write`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
