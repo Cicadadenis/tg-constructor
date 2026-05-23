@@ -1723,7 +1723,7 @@ class Handler(BaseHTTPRequestHandler):
             q: queue.Queue = job["queue"]
             while True:
                 try:
-                    line = q.get(timeout=30)
+                    line = q.get(timeout=12)
                 except queue.Empty:
                     self.wfile.write(b": keepalive\n\n")
                     self.wfile.flush()

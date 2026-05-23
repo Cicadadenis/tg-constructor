@@ -1736,7 +1736,7 @@ let es=null;
 
 const PHASE_RE=/\[(\d+)\/(\d+)\]\s+(.+)/;
 const DONE_RE=/УСТАНОВКА ЗАВЕРШЕНА|Установка завершена успешно/i;
-const ERR_RE=/✖|Permission denied|ОШИБКА|ERROR:|Unable to|Необработанная|Код выхода|exit \d+|denied|failed|No such file/i;
+const ERR_RE=/✖\s|✖\s*ОШИБКА|Permission denied|ERROR:|Unable to locate|Unable to|Необработанная|Код выхода:\s*\d|exit code \d+|No such file/i;
 function stripAnsi(t){return t.replace(/\x1b\[[0-9;]*[a-zA-Z]/g,'')}
 
 function renderSteps(){

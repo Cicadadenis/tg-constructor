@@ -929,13 +929,15 @@ install_bot_python_runtime() {
 
   if [ "$PLATFORM" = "termux" ]; then
     python3 -m ensurepip --upgrade 2>/dev/null || true
-    python3 -m pip install --upgrade pip --quiet 2>/dev/null || true
+    python3 -m pip install --upgrade pip wheel setuptools 2>/dev/null || true
     export PATH="${PREFIX:-/data/data/com.termux/files/usr}/bin:${PATH}"
     export CARGO_HOME="${HOME}/.cargo"
     export RUSTUP_HOME="${HOME}/.rustup"
-    if ! command -v cargo &>/dev/null; then
-      hint "Для сборки aiogram: pkg install rust binutils"
-    fi
+    info "Termux: пакеты для сборки Python-зависимостей..."
+    pkg_install binutils libffi openssl 2>/dev/null \
+      || pkg_install binutils 2>/dev/null || true
+    command -v cargo &>/dev/null || pkg_install rust 2>/dev/null || true
+    command -v clang &>/dev/null || pkg_install clang 2>/dev/null || true
   fi
 
   _pip() {
@@ -946,26 +948,40 @@ install_bot_python_runtime() {
     fi
   }
 
+  _bot_py() {
+    if [ -n "$BOT_VENV" ] && [ -x "${BOT_VENV}/bin/python3" ]; then
+      "${BOT_VENV}/bin/python3" "$@"
+    else
+      python3 "$@"
+    fi
+  }
+
   if [ -f "${APP_DIR}/requirements-bot.txt" ]; then
-    if _pip install -q -r "${APP_DIR}/requirements-bot.txt" 2>/dev/null; then
+    _bot_pip_log=$(cicada_errlog_file)
+    if _pip install --prefer-binary -r "${APP_DIR}/requirements-bot.txt" 2>"$_bot_pip_log"; then
       ok "aiogram установлен"
     else
-      warn "Ошибка requirements-bot.txt — проверь сеть и зависимости"
-      _pip install -q aiogram python-telegram-bot 2>/dev/null \
-        || warn "Не удалось установить telegram-зависимости"
+      warn "pip: requirements-bot.txt — см. лог ниже"
+      tail -8 "$_bot_pip_log" 2>/dev/null | sed 's/^/    /' >&2 || true
+      rm -f "$_bot_pip_log"
+      if _pip install --prefer-binary aiogram 'aiohttp>=3.9,<4' 2>"$_bot_pip_log"; then
+        ok "aiogram (минимальный набор) установлен"
+      else
+        warn "Не удалось установить aiogram — проверь сеть: pkg install rust binutils clang"
+        tail -6 "$_bot_pip_log" 2>/dev/null | sed 's/^/    /' >&2 || true
+      fi
+      rm -f "$_bot_pip_log"
     fi
   else
     warn "requirements-bot.txt не найден"
   fi
 
-  if [ -n "$BOT_VENV" ] && [ -d "$BOT_VENV" ]; then
-    if [ -x "${BOT_VENV}/bin/python3" ]; then
-      "${BOT_VENV}/bin/python3" -c "import aiogram" 2>/dev/null \
-        && ok "aiogram: ${BOT_VENV}" \
-        || warn "aiogram не импортируется в ${BOT_VENV} — проверь pip install"
-    else
-      warn "Нет ${BOT_VENV}/bin/python3"
-    fi
+  if _bot_py -c "import aiogram" 2>/dev/null; then
+    ok "aiogram: проверка import OK"
+  elif [ "$PLATFORM" = "termux" ]; then
+    warn "aiogram не импортируется — Telegram-бот может не работать (остальная установка продолжится)"
+  elif [ -n "$BOT_VENV" ] && [ -d "$BOT_VENV" ]; then
+    warn "aiogram не импортируется в ${BOT_VENV}"
   fi
 }
 
@@ -979,6 +995,15 @@ else
 fi
 
 install_phase "Node.js, PM2, PostgreSQL, Nginx"
+if [ "$PLATFORM" = "termux" ]; then
+  _termux_pkgs=()
+  command -v node &>/dev/null || _termux_pkgs+=(nodejs)
+  command -v psql &>/dev/null || _termux_pkgs+=(postgresql)
+  if [ "${#_termux_pkgs[@]}" -gt 0 ]; then
+    info "Termux: pkg install ${_termux_pkgs[*]} (может занять несколько минут)..."
+    pkg_install "${_termux_pkgs[@]}" || err "Не удалось: pkg install ${_termux_pkgs[*]}"
+  fi
+fi
 if ! command -v node &>/dev/null; then
   info "Устанавливаем Node.js 20..."
   if [ "$PLATFORM" = "termux" ]; then
@@ -995,8 +1020,19 @@ fi
 # ─── PM2 ───────────────────────────────────────────────────────
 if ! command -v pm2 &>/dev/null; then
   info "Устанавливаем PM2..."
-  npm install -g pm2 &>/dev/null
-  ok "PM2 установлен"
+  _pm2_log=$(cicada_errlog_file)
+  set +e
+  npm install -g pm2 2>"$_pm2_log"
+  _pm2_rc=$?
+  set -e
+  if [ "$_pm2_rc" -eq 0 ] || command -v pm2 &>/dev/null; then
+    ok "PM2 установлен"
+  else
+    warn "PM2: npm install -g не удался"
+    tail -5 "$_pm2_log" 2>/dev/null | sed 's/^/    /' >&2 || true
+    hint "Вручную: npm install -g pm2  (или npx pm2)"
+  fi
+  rm -f "$_pm2_log"
 else
   ok "PM2 уже установлен"
 fi
@@ -1009,7 +1045,7 @@ if ! command -v psql &>/dev/null; then
     if [ ! -d "$PREFIX/var/lib/postgresql" ]; then
       mkdir -p "$PREFIX/var/lib/postgresql" || warn "Не удалось создать каталог PostgreSQL"
     fi
-    if initdb "$PREFIX/var/lib/postgresql" &>/dev/null; then
+    if initdb -D "$PREFIX/var/lib/postgresql" &>/dev/null; then
       info "PostgreSQL: initdb выполнен"
     else
       warn "initdb не завершился — кластер может быть уже инициализирован"
