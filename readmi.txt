@@ -166,3 +166,4 @@ sudo chattr -i b.ccd # Защита отк
 
 
 
+AUTH_BYPASS=1 NODE_ENV=development npm run dev
