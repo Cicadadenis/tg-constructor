@@ -40,8 +40,12 @@ async function api(path, opts = {}) {
     },
   });
   if (res.status === 404) {
-    setOffline('IDE отладки выключена. Запустите: npm run dev:full (NODE_ENV=development).');
+    setOffline('IDE отладки выключена. Локально: npm run dev:full. На сервере: DEV_IDE_ADMIN=1 в .env.');
     throw new Error('недоступно');
+  }
+  if (res.status === 403) {
+    setOffline('Нужен вход администратора. Откройте /admin, войдите, затем обновите эту страницу.');
+    throw new Error('forbidden');
   }
   setOffline('');
   const ct = res.headers.get('content-type') || '';

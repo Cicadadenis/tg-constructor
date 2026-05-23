@@ -135,6 +135,7 @@ import {
   registerDevIdeRoutes,
   registerDevIdePage,
   logDevIdeStartupBanner,
+  setDevIdeAdminAccessChecker,
 } from './server/devIde.mjs';
 
 const { Pool } = pg;
@@ -1156,6 +1157,8 @@ async function applyAdminAuth(req) {
   }
   return false;
 }
+
+setDevIdeAdminAccessChecker(applyAdminAuth);
 
 function isAdminPublicApiRoute(req) {
   const routePath = req.path || '';

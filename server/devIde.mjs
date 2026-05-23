@@ -4,7 +4,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import rateLimit from 'express-rate-limit';
-import { isDevIdeEnabled, readEnv } from '../core/env.mjs';
+import { isDevIdeAdminGated, isDevIdeEnabled, readEnv } from '../core/env.mjs';
 import { atomicWriteFile, readFileUtf8 } from '../services/secureFs.mjs';
 import { sendHtmlWithCspNonce } from '../services/sendHtmlWithCspNonce.mjs';
 
@@ -49,11 +49,47 @@ function trimEnv(value) {
   return String(value ?? '').trim();
 }
 
-function devIdeMiddleware(_req, res, next) {
+/** @type {((req: import('express').Request) => Promise<boolean>) | null} */
+let devIdeAdminAccessChecker = null;
+
+/** Wired from server.mjs after admin session helpers are defined. */
+export function setDevIdeAdminAccessChecker(fn) {
+  devIdeAdminAccessChecker = fn;
+}
+
+async function assertDevIdeAccess(req, res, { json = true } = {}) {
   if (!isDevIdeEnabled()) {
-    res.status(404).json({ error: 'Not found' });
-    return;
+    if (json) res.status(404).json({ error: 'Not found' });
+    else res.status(404).send('Not found');
+    return false;
   }
+  if (!isDevIdeAdminGated()) return true;
+  if (!devIdeAdminAccessChecker) {
+    if (json) res.status(503).json({ error: 'Debug IDE admin auth not configured' });
+    else res.status(503).send('Debug IDE admin auth not configured');
+    return false;
+  }
+  try {
+    const ok = await devIdeAdminAccessChecker(req);
+    if (ok) return true;
+    if (json) {
+      res.status(403).json({
+        error: 'Admin access required',
+        hint: 'Sign in at /admin (ADMIN_KEY or admin account), then reload this page.',
+      });
+    } else {
+      res.status(403).type('html').send(`<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>Debug IDE</title></head><body style="font-family:system-ui;background:#0d0d12;color:#e8e8f0;padding:2rem"><h1>Нужен вход администратора</h1><p>Войдите в <a href="/admin" style="color:#7eb8ff">админ-панель</a> и обновите эту страницу.</p></body></html>`);
+    }
+    return false;
+  } catch {
+    if (json) res.status(500).json({ error: 'Auth check failed' });
+    else res.status(500).send('Auth check failed');
+    return false;
+  }
+}
+
+async function devIdeMiddleware(req, res, next) {
+  if (!(await assertDevIdeAccess(req, res))) return;
   next();
 }
 
@@ -539,24 +575,18 @@ export function registerDevIdeRoutes(app) {
   app.post(DEV_IDE_CHAT_API, ideChatJson, guard, devIdeAiRateLimit, chatHandler);
 }
 
-function serveDebugIdePage(req, res) {
+async function serveDebugIdePage(req, res) {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     res.status(405).send('Method Not Allowed');
     return;
   }
-  if (!isDevIdeEnabled()) {
-    res.status(404).send('Not found');
-    return;
-  }
+  if (!(await assertDevIdeAccess(req, res, { json: false }))) return;
   sendHtmlWithCspNonce(res, DEBUG_HTML);
 }
 
 export function registerDevIdePage(app) {
-  app.get('/debug-ide-app.js', (req, res) => {
-    if (!isDevIdeEnabled()) {
-      res.status(404).end();
-      return;
-    }
+  app.get('/debug-ide-app.js', async (req, res) => {
+    if (!(await assertDevIdeAccess(req, res, { json: false }))) return;
     res.sendFile(DEBUG_JS, (err) => {
       if (err && !res.headersSent) res.status(404).end();
     });
@@ -567,5 +597,6 @@ export function registerDevIdePage(app) {
 export function logDevIdeStartupBanner() {
   if (!isDevIdeEnabled()) return;
   const port = readEnv('API_PORT') || '3001';
-  console.warn(`[dev-ide] AI Debug IDE → http://127.0.0.1:${port}/debug.html`);
+  const mode = isDevIdeAdminGated() ? 'admin-only (DEV_IDE_ADMIN=1)' : 'development';
+  console.warn(`[dev-ide] AI Debug IDE [${mode}] → http://127.0.0.1:${port}/debug.html`);
 }

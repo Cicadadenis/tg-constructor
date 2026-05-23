@@ -6,6 +6,7 @@ import path from 'node:path';
 const saved = {
   APP_ENV: process.env.APP_ENV,
   NODE_ENV: process.env.NODE_ENV,
+  DEV_IDE_ADMIN: process.env.DEV_IDE_ADMIN,
 };
 
 function restoreEnv() {
@@ -80,6 +81,7 @@ try {
 
   process.env.APP_ENV = 'production';
   process.env.NODE_ENV = 'production';
+  delete process.env.DEV_IDE_ADMIN;
   assert.equal(isDevIdeEnabled(), false);
 
   const prodApp = express();
@@ -89,6 +91,20 @@ try {
     const res = await fetch(`http://127.0.0.1:${port}/api/files/tree`);
     assert.equal(res.status, 404);
   });
+
+  process.env.DEV_IDE_ADMIN = '1';
+  const prodAdminIde = await loadDevIde();
+  const prodAdminApp = express();
+  prodAdminIde.setDevIdeAdminAccessChecker(async () => false);
+  prodAdminIde.registerDevIdeRoutes(prodAdminApp);
+  await withServer(prodAdminApp, async (port) => {
+    const denied = await fetch(`http://127.0.0.1:${port}/api/files/tree`);
+    assert.equal(denied.status, 403);
+    prodAdminIde.setDevIdeAdminAccessChecker(async () => true);
+    const ok = await fetch(`http://127.0.0.1:${port}/api/files/tree`);
+    assert.equal(ok.status, 200);
+  });
+  delete process.env.DEV_IDE_ADMIN;
 
   await fsp.rm(fixtureDir, { recursive: true, force: true });
 

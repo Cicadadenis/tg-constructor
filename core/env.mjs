@@ -42,10 +42,19 @@ export function isDevLoggingEnabled() {
   return parseTruthyFlag(process.env.AUTH_BYPASS);
 }
 
-/** Dev-only AI Debug IDE — strict NODE_ENV=development (no AUTH_BYPASS in production). */
+/**
+ * AI Debug IDE available:
+ *   development — always (local dev)
+ *   production  — only when DEV_IDE_ADMIN=1 (requires admin session; see server/devIde.mjs)
+ */
 export function isDevIdeEnabled() {
-  if (isProduction()) return false;
-  return getNodeEnv() === 'development';
+  if (!isProduction()) return getNodeEnv() === 'development';
+  return parseTruthyFlag(process.env.DEV_IDE_ADMIN);
+}
+
+/** Production Debug IDE behind admin auth (DEV_IDE_ADMIN=1). */
+export function isDevIdeAdminGated() {
+  return isProduction() && isDevIdeEnabled();
 }
 
 /** Local mock-user bypass — never honored in production. */

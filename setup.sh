@@ -2023,7 +2023,7 @@ fi
 if [ "$PM2_NODE_ENV" = "development" ]; then
   hint "AI Debug IDE: http://127.0.0.1:${API_PORT}/debug.html (только development)"
 elif [ "$MODE" = "prod" ]; then
-  dim "AI Debug IDE отключена в production (нужен NODE_ENV=development)"
+  dim "AI Debug IDE: DEV_IDE_ADMIN=1 в .env + вход через /admin → /debug.html"
 fi
 
 if $HAS_SYSTEMCTL && [ "$PLATFORM" = "vps" ]; then

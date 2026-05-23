@@ -207,6 +207,11 @@ Cicada DSL — декларативный русскоязычный синта�
 - `timingSafeEqual`, аудит действий
 - В API клиенту — только короткие `error`; детали в серверных логах
 
+### AI Debug IDE (`/debug.html`)
+
+- Локально: `npm run dev:full` (`NODE_ENV=development`)
+- На production-домене: `DEV_IDE_ADMIN=1` в `.env`, затем вход через **`/admin`** (тот же `admin_session` / JWT админа). Без сессии API отвечает **403**
+
 ---
 
 ## 🖥️ Admin-панель
