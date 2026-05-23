@@ -276,6 +276,38 @@ const LANDING_NAV_PILLS = [
 
 // ─── BLOCK DEFINITIONS ───────────────────────────────────────────────────────
 
+function TopBarAdminButton({ isMobileView, onClick, dataTour = 'top-admin' }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-tour={dataTour}
+      title="Открыть админ-панель"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        padding: isMobileView ? '7px 9px' : '7px 14px',
+        background: 'linear-gradient(135deg,rgba(251,191,36,0.16),rgba(124,58,237,0.12))',
+        border: '1px solid rgba(251,191,36,0.42)',
+        borderRadius: isMobileView ? 8 : 20,
+        color: '#fde68a',
+        fontSize: isMobileView ? 11 : 12,
+        fontWeight: 800,
+        fontFamily: 'Syne, system-ui',
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+        flexShrink: 0,
+        boxShadow: '0 0 16px rgba(251,191,36,0.14)',
+      }}
+    >
+      <span>⚙</span>
+      <span>Admin</span>
+    </button>
+  );
+}
+
 function PremiumLockedPanel({ title = 'Функция доступна в Pro', text = 'Оформи Premium, чтобы открыть этот раздел.', onUpgrade, isMobile = false }) {
   return (
     <div style={{
@@ -1220,11 +1252,17 @@ export default function App() {
           title: ui.tourMobileExamplesTitle,
           text: ui.tourMobileExamplesBody,
         },
-        {
-          selector: '[data-tour="mobile-ai"]',
-          title: ui.tourMobileAiTitle,
-          text: ui.tourMobileAiBody,
-        },
+        isAdmin
+          ? {
+            selector: '[data-tour="top-admin"]',
+            title: ui.tourAdminTitle,
+            text: ui.tourAdminBody,
+          }
+          : {
+            selector: '[data-tour="mobile-ai"]',
+            title: ui.tourMobileAiTitle,
+            text: ui.tourMobileAiBody,
+          },
         {
           selector: '[data-tour="mobile-more"]',
           title: ui.tourMobileMoreTitle,
@@ -1305,11 +1343,17 @@ export default function App() {
         title: ui.tourRunTitle,
         text: ui.tourRunBody,
       },
-      {
-        selector: '[data-tour="top-premium-desktop"]',
-        title: ui.tourPremiumTitle,
-        text: ui.tourPremiumBody,
-      },
+      isAdmin
+        ? {
+          selector: '[data-tour="top-admin"]',
+          title: ui.tourAdminTitle,
+          text: ui.tourAdminBody,
+        }
+        : {
+          selector: '[data-tour="top-premium-desktop"]',
+          title: ui.tourPremiumTitle,
+          text: ui.tourPremiumBody,
+        },
       {
         selector: '[data-tour="profile-button"]',
         title: ui.tourProfileTitle,
@@ -4719,7 +4763,12 @@ export default function App() {
         {currentUser ? (
           <>
             <div style={{ flex:1 }} />
-            {isMobileView ? (
+            {isAdmin ? (
+              <TopBarAdminButton
+                isMobileView={isMobileView}
+                onClick={() => openAdminMenu()}
+              />
+            ) : isMobileView ? (
               <button
                 type="button"
                 onClick={openAiGeneratorModal}
@@ -4771,29 +4820,6 @@ export default function App() {
             )}
             {isAdmin && (
               <>
-                <button
-                  type="button"
-                  onClick={() => openAdminMenu()}
-                  title="Открыть админ-панель"
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                    padding: isMobileView ? '7px 9px' : '7px 14px',
-                    background: 'linear-gradient(135deg,rgba(251,191,36,0.16),rgba(124,58,237,0.12))',
-                    border: '1px solid rgba(251,191,36,0.42)',
-                    borderRadius: 20,
-                    color: '#fde68a',
-                    fontSize: isMobileView ? 11 : 12,
-                    fontWeight: 800,
-                    fontFamily: 'Syne, system-ui',
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0,
-                    boxShadow: '0 0 16px rgba(251,191,36,0.14)',
-                  }}
-                >
-                  <span>⚙</span>
-                  <span>Admin</span>
-                </button>
                 {adminOpenSupportCount > 0 && (
                   <button
                     type="button"
