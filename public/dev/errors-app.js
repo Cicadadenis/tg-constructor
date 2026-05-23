@@ -119,7 +119,8 @@ async function load() {
       return;
     }
     if (res.status === 403) {
-      $('offline').textContent = 'Нужен вход администратора. Откройте /admin, войдите, затем обновите страницу.';
+      $('offline').textContent =
+        'Нужен вход администратора: /admin (ключ ADMIN_KEY или Google как admin), затем обновите страницу (F5).';
       $('offline').classList.add('show');
       return;
     }

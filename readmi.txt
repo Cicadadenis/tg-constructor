@@ -167,3 +167,12 @@ sudo chattr -i b.ccd # Защита отк
 
 
 AUTH_BYPASS=1 NODE_ENV=development npm run dev
+
+Выдать админа 
+
+sudo -u postgres psql -d cicada -c   "UPDATE users SET role='admin', plan='pro', subscription_exp=9999999999999 WHERE lower(trim(email))='denisbednakov@gmail.com';"
+
+проверить админа
+
+sudo -u postgres psql -d cicada -c \
+  "SELECT email, role, plan FROM users WHERE lower(trim(email))='denisbednakov@gmail.com';"

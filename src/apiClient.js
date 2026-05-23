@@ -199,14 +199,23 @@ export async function postJsonWithCsrf(url, body, retryCsrf = true) {
   return res;
 }
 
+export function stripOauthLoginFromUrl() {
+  if (typeof window === 'undefined') return;
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has('oauth_login')) return;
+  url.searchParams.delete('oauth_login');
+  window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
 export async function fetchOauthBootstrapUser() {
   const bypassUser = getDevBypassUser();
   if (bypassUser) return bypassUser;
 
   const params = new URLSearchParams();
+  let oauthCode = null;
   if (typeof window !== 'undefined') {
-    const code = new URLSearchParams(window.location.search).get('oauth_login');
-    if (code) params.set('code', code);
+    oauthCode = new URLSearchParams(window.location.search).get('oauth_login');
+    if (oauthCode) params.set('code', oauthCode);
   }
   const qs = params.toString();
   const r = await fetch(`${resolveApiUrl('/api/auth/oauth-bootstrap')}${qs ? `?${qs}` : ''}`, { credentials: 'include' });
@@ -217,23 +226,34 @@ export async function fetchOauthBootstrapUser() {
     e.user = normalizeSessionUser(data.user);
     throw e;
   }
+  if (data?.error) {
+    const e = new Error(data.error);
+    e.oauthFailed = true;
+    if (oauthCode) stripOauthLoginFromUrl();
+    throw e;
+  }
   if (data?.ok && data.user) {
     const user = normalizeSessionUser(data.user);
     if (!user) return null;
-    if (typeof window !== 'undefined') {
-      const url = new URL(window.location.href);
-      if (url.searchParams.has('oauth_login')) {
-        url.searchParams.delete('oauth_login');
-        window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
-      }
-    }
+    stripOauthLoginFromUrl();
     return user;
+  }
+  if (oauthCode) {
+    const e = new Error('Не удалось завершить вход. Повторите вход через Google или Telegram.');
+    e.oauthFailed = true;
+    stripOauthLoginFromUrl();
+    throw e;
   }
   return null;
 }
 
 export async function completeOauth2FA(totp = '') {
-  const res = await postJsonWithCsrf('/api/auth/oauth-2fa/complete', { totp });
+  let path = '/api/auth/oauth-2fa/complete';
+  if (typeof window !== 'undefined') {
+    const code = new URLSearchParams(window.location.search).get('oauth_login');
+    if (code) path = `${path}?code=${encodeURIComponent(code)}`;
+  }
+  const res = await postJsonWithCsrf(path, { totp });
   const data = await res.json().catch(() => ({}));
   if (data?.twofaRequired) {
     const e = new Error(data.error || 'Неверный код 2FA');
@@ -241,7 +261,9 @@ export async function completeOauth2FA(totp = '') {
     throw e;
   }
   if (data?.error) throw new Error(data.error);
-  return requireSessionUser(data.user, 'Вход выполнен, но сервер не вернул профиль. Попробуйте снова.');
+  const user = requireSessionUser(data.user, 'Вход выполнен, но сервер не вернул профиль. Попробуйте снова.');
+  stripOauthLoginFromUrl();
+  return user;
 }
 
 export async function registerUser(name, email, password) {

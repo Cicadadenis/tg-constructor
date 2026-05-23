@@ -44,7 +44,9 @@ async function api(path, opts = {}) {
     throw new Error('недоступно');
   }
   if (res.status === 403) {
-    setOffline('Нужен вход администратора. Откройте /admin, войдите, затем обновите эту страницу.');
+    setOffline(
+      'Нужен вход администратора: откройте /admin (ключ ADMIN_KEY или Google как admin), войдите, затем обновите эту страницу (F5).',
+    );
     throw new Error('forbidden');
   }
   setOffline('');

@@ -426,7 +426,7 @@ function AdminRoute({ currentUser, onLoginClick }) {
     <iframe
       title="Cicada Admin"
       srcDoc={html}
-      sandbox="allow-scripts allow-forms allow-downloads allow-modals allow-same-origin allow-top-navigation-by-user-activation"
+      sandbox="allow-scripts allow-forms allow-downloads allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-top-navigation-by-user-activation"
       style={{ position: 'fixed', inset: 0, width: '100%', height: '100%', border: 0, background: '#0e0f11' }}
     />
   );
@@ -945,9 +945,13 @@ import { isPlaceholderBotToken } from '../core/botTokenPlaceholders.mjs';
 export default function App() {
   const [currentUser, setCurrentUser] = useState(() => {
     if (typeof window === 'undefined') return null;
+    if (isAuthBypassEnabled()) {
+      return resolveInitialSessionUser(getSession);
+    }
     const params = new URLSearchParams(window.location.search);
-    if (params.get('login') === '1' && !isAuthBypassEnabled()) return null;
-    return resolveInitialSessionUser(getSession);
+    if (params.get('login') === '1' || params.get('oauth_login')) return null;
+    // Источник истины — httpOnly cookie user_session; localStorage часто устаревает после рестарта backend.
+    return null;
   });
   const uiLang = (currentUser?.uiLanguage || 'ru').toLowerCase();
   const builderBlockTypes = React.useMemo(() => buildLocalizedBlockCatalog(uiLang), [uiLang]);
@@ -1181,6 +1185,27 @@ export default function App() {
 
   const openAdminMenu = useCallback(async (section = '') => {
     const target = section ? `/admin#${section}` : '/admin';
+    if (!currentUser || currentUser.role !== 'admin') {
+      await appAlert({
+        title: 'Нет доступа',
+        message: 'Админка доступна только учётной записи с ролью admin.',
+        variant: 'warning',
+      });
+      return;
+    }
+    const serverUser = await fetchSessionUserFromServer();
+    if (!serverUser || serverUser.role !== 'admin') {
+      clearSession();
+      setCurrentUser(null);
+      setAuthTab('login');
+      setShowAuthModal(true);
+      await appAlert({
+        title: 'Нет доступа',
+        message: 'Вход не завершён на сервере. Войдите через Google или email, дождитесь исчезновения oauth_login из адреса и проверьте cookie user_session в DevTools.',
+        variant: 'warning',
+      });
+      return;
+    }
     try {
       await apiFetch('/api/admin/enter', {
         method: 'POST',
@@ -1188,9 +1213,13 @@ export default function App() {
         body: JSON.stringify({}),
       });
     } catch (e) {
+      const raw = String(e?.message || '');
+      const message = raw === 'Forbidden' || raw.includes('user_session')
+        ? 'Нет cookie user_session — завершите вход через Google или email (жёсткое обновление Ctrl+Shift+R после входа).'
+        : (raw || 'Нет доступа к админке');
       await appAlert({
         title: 'Нет доступа',
-        message: e.message || 'Нет доступа к админке',
+        message,
         variant: 'warning',
       });
       return;
@@ -1198,7 +1227,7 @@ export default function App() {
     const opened = window.open(target, '_blank');
     if (opened) opened.opener = null;
     if (!opened) window.location.href = target;
-  }, []);
+  }, [currentUser]);
 
   // Mobile state
   const [mobileTab, setMobileTab] = useState('canvas'); // 'canvas' | 'blocks' | 'props' | 'dsl'
@@ -3081,8 +3110,11 @@ export default function App() {
     if (authError) {
       showToast(decodeURIComponent(authError), 'error');
       params.delete('auth_error');
+      params.delete('oauth_login');
       const nextQuery = params.toString();
       window.history.replaceState({}, '', nextQuery ? `/?${nextQuery}` : '/');
+      clearSession();
+      setCurrentUser(null);
     }
 
     if (isAuthBypassEnabled()) {
@@ -3111,8 +3143,10 @@ export default function App() {
     }
 
     let cancelled = false;
+    const hasOauthLogin = Boolean(params.get('oauth_login'));
 
     (async () => {
+      if (hasOauthLogin) clearSession();
       let serverUser = null;
       try {
         serverUser = await fetchOauthBootstrapUser();
@@ -3120,6 +3154,15 @@ export default function App() {
         if (cancelled) return;
         if (err?.twofaRequired) {
           setOauth2faPending(true);
+          setAuthTab('login');
+          setShowAuthModal(true);
+          checkBotStatus();
+          return;
+        }
+        if (err?.oauthFailed) {
+          showToast(err.message || 'Не удалось завершить вход', 'error');
+          clearSession();
+          setCurrentUser(null);
           setAuthTab('login');
           setShowAuthModal(true);
           checkBotStatus();

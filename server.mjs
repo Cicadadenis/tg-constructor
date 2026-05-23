@@ -147,10 +147,6 @@ const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', resolveTrustProxySetting());
 
-registerDevLogRoutes(app);
-registerDevErrorsRoutes(app);
-registerDevIdeRoutes(app);
-
 function normalizeClientIp(raw) {
   if (raw == null) return null;
   let ip = String(raw).trim();
@@ -416,7 +412,6 @@ const recentUserActions = [];
 const userLoginHistory = new Map(); // userId -> [{ at, ip, method }]
 const recentSubscriptions = [];
 const googleAuthStates = new Map(); // state -> { exp }
-const oauthLoginHandoffs = new Map(); // code -> { userId, exp }
 const authFailureBuckets = new Map(); // key -> timestamps
 
 if (!fs.existsSync(BOTS_DIR)) {
@@ -911,23 +906,72 @@ function issueUserSessionCookie(req, res, userId) {
   return jwtToken;
 }
 
-function issueOauthJwtHandoffCookie(res, userId) {
+const OAUTH_HANDOFF_TTL_MS = 10 * 60 * 1000;
+
+async function ensureOauthLoginHandoffsSchema() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS oauth_login_handoffs (
+      code        TEXT PRIMARY KEY,
+      user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type        TEXT NOT NULL DEFAULT 'login',
+      expires_at  TIMESTAMPTZ NOT NULL
+    )
+  `);
+  await pool.query(
+    'CREATE INDEX IF NOT EXISTS idx_oauth_login_handoffs_expires_at ON oauth_login_handoffs(expires_at)',
+  );
+}
+
+async function saveOauthLoginHandoff(code, userId, type = 'login') {
+  await ensureOauthLoginHandoffsSchema();
+  const expiresAt = new Date(Date.now() + OAUTH_HANDOFF_TTL_MS);
+  await pool.query(
+    `INSERT INTO oauth_login_handoffs (code, user_id, type, expires_at)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (code) DO UPDATE SET
+       user_id = EXCLUDED.user_id,
+       type = EXCLUDED.type,
+       expires_at = EXCLUDED.expires_at`,
+    [code, String(userId), type, expiresAt],
+  );
+}
+
+async function getOauthLoginHandoff(code) {
+  await ensureOauthLoginHandoffsSchema();
+  const { rows } = await pool.query(
+    `SELECT user_id, type, expires_at
+     FROM oauth_login_handoffs
+     WHERE code = $1 AND expires_at > NOW()`,
+    [code],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    userId: String(row.user_id),
+    type: String(row.type || 'login'),
+    exp: new Date(row.expires_at).getTime(),
+  };
+}
+
+async function deleteOauthLoginHandoff(code) {
+  await ensureOauthLoginHandoffsSchema();
+  await pool.query('DELETE FROM oauth_login_handoffs WHERE code = $1', [code]);
+}
+
+async function purgeExpiredOauthLoginHandoffs() {
+  await ensureOauthLoginHandoffsSchema();
+  await pool.query('DELETE FROM oauth_login_handoffs WHERE expires_at <= NOW()');
+}
+
+async function issueOauthJwtHandoffCode(userId) {
   const code = crypto.randomBytes(32).toString('base64url');
-  oauthLoginHandoffs.set(code, {
-    userId: String(userId),
-    type: 'login',
-    exp: Date.now() + 3 * 60 * 1000,
-  });
+  await saveOauthLoginHandoff(code, userId, 'login');
   return code;
 }
 
-function issueOauth2faHandoffCode(userId) {
+async function issueOauth2faHandoffCode(userId) {
   const code = crypto.randomBytes(32).toString('base64url');
-  oauthLoginHandoffs.set(code, {
-    userId: String(userId),
-    type: 'oauth_2fa_pending',
-    exp: Date.now() + 3 * 60 * 1000,
-  });
+  await saveOauthLoginHandoff(code, userId, 'oauth_2fa_pending');
   return code;
 }
 
@@ -1079,8 +1123,13 @@ async function requireAppAdmin(req, res, next) {
 
 async function requireAdminApi(req, res, next) {
   const jwtUserId = getJwtUserId(req);
-  if (!jwtUserId) return res.status(403).json({ error: 'Forbidden' });
+  if (!jwtUserId) {
+    return res.status(403).json({
+      error: 'Нет сессии Studio. Войдите через Google или email (cookie user_session).',
+    });
+  }
   req.authUserId = jwtUserId;
+  req.adminAuthVia = 'user_jwt';
   return requireAppAdmin(req, res, next);
 }
 
@@ -1136,6 +1185,33 @@ function verifyAdminSessionCookie(req) {
   }
 }
 
+async function resolveAdminRouteUser(req) {
+  const token = String(req.cookies?.[ADMIN_ROUTE_COOKIE] || '').trim();
+  if (!token) return null;
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (!decoded || decoded.type !== 'admin_route' || !decoded.sub) return null;
+    const user = await findById(String(decoded.sub));
+    if (!user || user.role !== 'admin' || user.banned) return null;
+    return user;
+  } catch {
+    return null;
+  }
+}
+
+/** Admin user for ADMIN_KEY / passkey session (Debug IDE, /dev/errors) without Studio user_session. */
+async function resolveStandaloneAdminUser() {
+  const email = String(process.env.ADMIN_EMAIL || process.env.VITE_ADMIN_EMAIL || '').trim().toLowerCase();
+  if (email) {
+    const user = await findByEmail(email);
+    if (user?.role === 'admin' && !user.banned) return user;
+  }
+  const { rows } = await pool.query(
+    `SELECT * FROM users WHERE role = 'admin' AND NOT banned ORDER BY created_at ASC LIMIT 1`,
+  );
+  return rows[0] || null;
+}
+
 async function applyAdminAuth(req) {
   // Prefer app user JWT over standalone admin_session so /api/admin/enter keeps authUserId.
   const jwtUserId = getJwtUserId(req);
@@ -1153,7 +1229,20 @@ async function applyAdminAuth(req) {
       // fall through to admin_session
     }
   }
+  const routeUser = await resolveAdminRouteUser(req);
+  if (routeUser) {
+    req.authUserId = routeUser.id;
+    req.appAdminUser = routeUser;
+    req.adminAuthed = true;
+    req.adminAuthVia = 'admin_route';
+    return true;
+  }
   if (verifyAdminSessionCookie(req)) {
+    const standalone = await resolveStandaloneAdminUser();
+    if (standalone) {
+      req.authUserId = standalone.id;
+      req.appAdminUser = standalone;
+    }
     req.adminAuthed = true;
     req.adminAuthVia = 'admin_session';
     return true;
@@ -1164,6 +1253,11 @@ async function applyAdminAuth(req) {
 setDevIdeAdminAccessChecker(applyAdminAuth);
 setDevErrorsAdminAccessChecker(applyAdminAuth);
 
+// После cookieParser (см. ~строку 346): иначе req.cookies пустой и Debug IDE всегда 403.
+registerDevLogRoutes(app);
+registerDevErrorsRoutes(app);
+registerDevIdeRoutes(app);
+
 function isAdminPublicApiRoute(req) {
   const routePath = req.path || '';
   return ADMIN_PUBLIC_API_ROUTES.has(routePath);
@@ -1173,7 +1267,9 @@ async function authAdmin(req, res, next) {
   if (adminAuthV2Enabled(req)) {
     markAdminAuthV2(res);
     if (await applyAdminAuth(req)) return next();
-    return res.status(403).json({ error: 'Forbidden' });
+    return res.status(403).json({
+      error: 'Нет доступа к админке. Войдите в Studio под учётной записью администратора.',
+    });
   }
   if (await applyAdminAuth(req)) return next();
   return requireAdminApi(req, res, next);
@@ -1238,9 +1334,7 @@ setInterval(() => {
   for (const [state, meta] of googleAuthStates.entries()) {
     if (!meta || meta.exp <= now) googleAuthStates.delete(state);
   }
-  for (const [code, meta] of oauthLoginHandoffs.entries()) {
-    if (!meta || meta.exp <= now) oauthLoginHandoffs.delete(code);
-  }
+  purgeExpiredOauthLoginHandoffs().catch(() => {});
 }, 5 * 60 * 1000).unref();
 
 async function initDB() {
@@ -1372,6 +1466,7 @@ async function initDB() {
     "UPDATE projects SET graph_document = '{}'::jsonb WHERE graph_document IS NULL",
   );
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id)`);
+  await ensureOauthLoginHandoffsSchema();
   await migrateAdminPasskeysFromFileIfNeeded();
   console.log('✅ DB ready');
 }
@@ -3753,24 +3848,36 @@ app.get('/api/auth/oauth-bootstrap', async (req, res) => {
   const raw = req.cookies?.[OAUTH_JWT_HANDOFF_COOKIE];
   res.clearCookie(OAUTH_JWT_HANDOFF_COOKIE, handoffOpts);
   const handoffCode = String(req.query?.code || '').trim();
+  const hasOauthLoginIntent = Boolean(handoffCode);
   if (handoffCode) {
-    const meta = oauthLoginHandoffs.get(handoffCode);
-    oauthLoginHandoffs.delete(handoffCode);
-    if (!meta || meta.exp <= Date.now()) return res.json({ ok: false });
+    const meta = await getOauthLoginHandoff(handoffCode);
+    if (!meta) {
+      return res.json({
+        ok: false,
+        error: 'Ссылка входа истекла или уже использована. Войдите снова через Google.',
+      });
+    }
     const user = await findById(String(meta.userId));
-    if (!user || user.banned) return res.json({ ok: false });
+    if (!user || user.banned) {
+      return res.json({ ok: false, error: 'Аккаунт недоступен. Войдите снова через Google.' });
+    }
     if (meta.type === 'oauth_2fa_pending') {
       const pending = jwt.sign({ sub: String(user.id), type: 'oauth_2fa_pending' }, JWT_SECRET, { expiresIn: '10m' });
       res.cookie(OAUTH_2FA_PENDING_COOKIE, pending, strictCookieOptions(req, { httpOnly: true, maxAge: 10 * 60 * 1000 }));
       return res.json({ ok: false, twofaRequired: true, user: safeUser(user) });
     }
+    await deleteOauthLoginHandoff(handoffCode);
     issueUserSessionCookie(req, res, user.id);
+    recordUserLogin(user.id, req, 'oauth');
+    recordUserAction(user.id, 'login_success', { method: 'oauth_bootstrap' });
     return res.json({ ok: true, user: safeUser(user) });
   }
-  const cookieUserId = getJwtUserId(req);
-  if (cookieUserId) {
-    const user = await findById(cookieUserId);
-    if (user && !user.banned) return res.json({ ok: true, user: safeUser(user) });
+  if (!hasOauthLoginIntent) {
+    const cookieUserId = getJwtUserId(req);
+    if (cookieUserId) {
+      const user = await findById(cookieUserId);
+      if (user && !user.banned) return res.json({ ok: true, user: safeUser(user) });
+    }
   }
   if (raw) {
     try {
@@ -3812,6 +3919,8 @@ app.post('/api/auth/oauth-2fa/complete', async (req, res) => {
 
   res.clearCookie(OAUTH_2FA_PENDING_COOKIE, pendingOpts);
   issueUserSessionCookie(req, res, user.id);
+  const handoffFromQuery = String(req.query?.code || '').trim();
+  if (handoffFromQuery) await deleteOauthLoginHandoff(handoffFromQuery);
   recordUserLogin(user.id, req, 'oauth_2fa');
   recordUserAction(user.id, 'login_success', { method: 'oauth_2fa' });
   return res.json({ success: true, user: safeUser(user) });
@@ -4363,15 +4472,18 @@ app.post('/api/admin/logout', (req, res) => {
 app.use('/api/admin', adminApiGuard);
 
 app.post('/api/admin/enter', (req, res) => {
-  if (req.adminAuthVia !== 'user_jwt' || !req.authUserId) {
+  const userId = String(req.authUserId || req.appAdminUser?.id || '').trim();
+  const hasUserSession = Boolean(getJwtUserId(req));
+
+  if (!userId || !req.appAdminUser) {
     return res.status(403).json({
-      error: req.adminAuthVia === 'admin_session'
-        ? 'Войдите в конструктор под учётной записью администратора (email), а не только по ключу админки'
-        : 'Forbidden',
+      error: 'Нет сессии Studio. Войдите через Google или email и дождитесь cookie user_session.',
     });
   }
-  issueAdminRouteCookie(req, res, req.authUserId);
-  recordAdminAction(req, 'admin_route_enter', req.authUserId, {});
+
+  issueAdminRouteCookie(req, res, userId);
+  issueAdminSessionCookie(req, res);
+  recordAdminAction(req, 'admin_route_enter', userId, {});
   res.json({ ok: true });
 });
 
@@ -5380,14 +5492,11 @@ app.get('/api/auth/google/callback', async (req, res) => {
 
     const oauthReturnTo = stateMeta.returnTo || null;
     if (user.role === 'admin' && user.twofaEnabled) {
-      const handoffCode = issueOauth2faHandoffCode(user.id);
-      return res.redirect(buildOauthRedirectUrl(handoffCode, oauthReturnTo, req));
-    } else {
-      recordUserLogin(user.id, req, 'google');
-      recordUserAction(user.id, 'login_success', { method: 'google' });
-      const handoffCode = issueOauthJwtHandoffCookie(res, user.id);
+      const handoffCode = await issueOauth2faHandoffCode(user.id);
       return res.redirect(buildOauthRedirectUrl(handoffCode, oauthReturnTo, req));
     }
+    const handoffCode = await issueOauthJwtHandoffCode(user.id);
+    return res.redirect(buildOauthRedirectUrl(handoffCode, oauthReturnTo, req));
     return res.redirect(`${resolvePublicAppUrl(req)}/`);
   } catch (e) {
     console.error('Google auth callback error:', e);
@@ -5526,7 +5635,7 @@ app.get('/api/auth/telegram/callback', async (req, res) => {
     if (!result?.user?.id) {
       return redirectAppAuthError(res, 'Не удалось завершить вход через Telegram', req);
     }
-    const handoffCode = issueOauthJwtHandoffCookie(res, result.user.id);
+    const handoffCode = await issueOauthJwtHandoffCode(result.user.id);
     return res.redirect(buildOauthRedirectUrl(handoffCode, null, req));
   } catch (e) {
     console.error('telegram callback error:', e);
