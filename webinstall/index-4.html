@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CICADA STUDIO</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#030308;--bg2:#060b14;--panel:rgba(2,10,20,.92);
+  --pb:rgba(0,229,255,.18);--pbh:rgba(0,229,255,.5);
+  --cyan:#00e5ff;--cdim:rgba(0,229,255,.1);
+  --green:#00ff41;--gdim:rgba(0,255,65,.1);
+  --magenta:#ff006e;--yellow:#ffbe00;--ydim:rgba(255,190,0,.1);
+  --text:#b8d8e8;--tdim:#3a6070;--red:#ff2257;--rdim:rgba(255,34,87,.12);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  min-height:100vh;font-family:'Rajdhani',sans-serif;
+  background:var(--bg);color:var(--text);overflow-x:hidden;font-size:15px;
+}
+body::before{
+  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:linear-gradient(rgba(0,229,255,.025) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(0,229,255,.025) 1px,transparent 1px);
+  background-size:52px 52px;
+}
+body::after{
+  content:'';position:fixed;inset:0;z-index:1;pointer-events:none;
+  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.06) 3px,rgba(0,0,0,.06) 4px);
+}
+#app{position:relative;z-index:2}
+
+/* SWEEP */
+@keyframes sweep{0%{top:-5%}100%{top:105%}}
+.sweep{position:fixed;left:0;right:0;height:2px;z-index:60;pointer-events:none;
+  background:linear-gradient(90deg,transparent,rgba(0,229,255,.12),transparent);
+  animation:sweep 10s linear infinite}
+
+/* NAV */
+nav{
+  display:flex;align-items:center;border-bottom:1px solid rgba(0,229,255,.12);
+  background:rgba(3,3,8,.97);backdrop-filter:blur(10px);
+  position:sticky;top:0;z-index:40;padding:0 24px;
+}
+.brand{
+  font-family:'Orbitron',sans-serif;font-size:.72rem;letter-spacing:.25em;
+  color:var(--cyan);text-shadow:0 0 12px rgba(0,229,255,.5);
+  padding-right:24px;border-right:1px solid rgba(0,229,255,.12);margin-right:8px;white-space:nowrap;
+}
+.tab{
+  font-family:'Orbitron',sans-serif;font-size:.58rem;letter-spacing:.22em;
+  text-transform:uppercase;padding:16px 22px;color:var(--tdim);
+  cursor:pointer;border:none;background:none;position:relative;transition:color .2s;
+}
+.tab::after{
+  content:'';position:absolute;bottom:0;left:0;right:0;height:2px;
+  background:var(--cyan);box-shadow:0 0 10px var(--cyan);
+  transform:scaleX(0);transition:transform .2s;
+}
+.tab:hover{color:var(--cyan)}
+.tab.active{color:var(--cyan)}
+.tab.active::after{transform:scaleX(1)}
+.nav-live{
+  margin-left:auto;display:flex;align-items:center;gap:8px;
+  font-family:'Share Tech Mono',monospace;font-size:.68rem;color:var(--green);
+}
+@keyframes dp{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.6)}}
+.dp{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);animation:dp 1.4s ease-in-out infinite}
+
+/* CARDS */
+.card{
+  background:var(--panel);border:1px solid var(--pb);
+  position:relative;backdrop-filter:blur(6px);transition:border-color .3s,box-shadow .3s;
+}
+.card:hover{border-color:var(--pbh);box-shadow:0 0 28px rgba(0,229,255,.06),inset 0 0 40px rgba(0,229,255,.02)}
+.card::before,.card::after{
+  content:'';position:absolute;width:12px;height:12px;
+  border-color:var(--cyan);border-style:solid;opacity:.45;pointer-events:none;z-index:1;
+}
+.card::before{top:-1px;left:-1px;border-width:2px 0 0 2px}
+.card::after{bottom:-1px;right:-1px;border-width:0 2px 2px 0}
+.ch{
+  font-family:'Orbitron',sans-serif;font-size:.58rem;letter-spacing:.28em;
+  text-transform:uppercase;color:var(--cyan);margin-bottom:10px;
+  display:flex;align-items:center;gap:10px;
+}
+.ch::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,rgba(0,229,255,.3),transparent)}
+
+/* PROGRESS */
+.track{background:rgba(0,229,255,.05);border:1px solid rgba(0,229,255,.1);overflow:hidden;position:relative}
+.bar{height:100%;transition:width .6s ease;position:relative}
+.bar::after{content:'';position:absolute;right:0;top:0;bottom:0;width:2px;background:rgba(255,255,255,.9);box-shadow:0 0 6px rgba(255,255,255,.9)}
+.bc{background:linear-gradient(90deg,rgba(0,229,255,.3),var(--cyan));box-shadow:0 0 12px rgba(0,229,255,.6)}
+.bg{background:linear-gradient(90deg,rgba(0,255,65,.3),var(--green));box-shadow:0 0 12px rgba(0,255,65,.5)}
+.by{background:linear-gradient(90deg,rgba(255,190,0,.3),var(--yellow));box-shadow:0 0 12px rgba(255,190,0,.5)}
+.br{background:linear-gradient(90deg,rgba(255,34,87,.3),var(--red));box-shadow:0 0 12px rgba(255,34,87,.5)}
+
+/* INPUTS */
+.inp{
+  width:100%;padding:9px 12px;background:rgba(0,15,28,.9);
+  border:1px solid rgba(0,229,255,.18);color:var(--text);
+  font-family:'Rajdhani',sans-serif;font-size:.93rem;
+  border-radius:0;transition:border-color .2s,box-shadow .2s;outline:none;-webkit-appearance:none;
+}
+.inp:focus{border-color:rgba(0,229,255,.6);box-shadow:0 0 0 2px rgba(0,229,255,.07),inset 0 1px 4px rgba(0,0,0,.5)}
+.inp::placeholder{color:rgba(58,96,112,.6)}
+select.inp option{background:#060b14;color:var(--text)}
+.lbl{
+  display:block;font-family:'Share Tech Mono',monospace;font-size:.62rem;
+  letter-spacing:.12em;color:var(--tdim);margin-bottom:5px;text-transform:uppercase;
+}
+.chk{display:flex;align-items:flex-start;gap:10px;font-size:.88rem;line-height:1.4;margin:8px 0;cursor:pointer;color:var(--text)}
+.chk input[type=checkbox]{
+  width:15px;height:15px;min-width:15px;margin-top:2px;
+  border:1px solid rgba(0,229,255,.3);background:rgba(0,15,28,.9);
+  border-radius:0;appearance:none;-webkit-appearance:none;cursor:pointer;position:relative;transition:all .2s;
+}
+.chk input[type=checkbox]:checked{background:rgba(0,229,255,.12);border-color:var(--cyan);box-shadow:0 0 8px rgba(0,229,255,.3)}
+.chk input[type=checkbox]:checked::after{content:'✓';position:absolute;top:-1px;left:1px;font-size:11px;color:var(--cyan);font-weight:700}
+
+/* BUTTONS */
+.btn{
+  width:100%;padding:12px 20px;border:1px solid var(--cyan);
+  background:linear-gradient(135deg,rgba(0,229,255,.1),rgba(0,229,255,.03));
+  color:var(--cyan);font-family:'Orbitron',sans-serif;font-size:.65rem;font-weight:700;
+  letter-spacing:.22em;cursor:pointer;text-transform:uppercase;position:relative;overflow:hidden;
+  transition:all .3s;clip-path:polygon(12px 0%,calc(100% - 12px) 0%,100% 50%,calc(100% - 12px) 100%,12px 100%,0% 50%);
+}
+.btn::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(0,229,255,.18),transparent);opacity:0;transition:opacity .3s}
+.btn:hover::before{opacity:1}
+.btn:hover{box-shadow:0 0 30px rgba(0,229,255,.22),inset 0 0 20px rgba(0,229,255,.05);color:#fff}
+.btn:disabled{opacity:.28;cursor:not-allowed}
+.btn.sec{clip-path:none;background:rgba(3,3,8,.8);color:var(--tdim);border-color:rgba(0,229,255,.15);font-size:.58rem;padding:9px 16px}
+.btn.sec:hover{color:var(--cyan);border-color:rgba(0,229,255,.4);box-shadow:none}
+.btn.ok{border-color:var(--green);background:linear-gradient(135deg,rgba(0,255,65,.12),rgba(0,255,65,.03));color:var(--green)}
+.btn.ok:hover{box-shadow:0 0 30px rgba(0,255,65,.25);color:#fff}
+
+/* DIVIDER */
+.div{display:flex;align-items:center;gap:12px;margin:8px 0}
+.div::before,.div::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(0,229,255,.3),transparent)}
+.dd{width:6px;height:6px;background:var(--cyan);transform:rotate(45deg);box-shadow:0 0 6px var(--cyan)}
+
+/* SKELETON */
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+.skel{background:linear-gradient(90deg,rgba(0,229,255,.03) 0%,rgba(0,229,255,.1) 50%,rgba(0,229,255,.03) 100%);background-size:200% 100%;animation:shimmer 1.8s ease-in-out infinite}
+
+/* TABLE */
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{padding:10px 14px;font-family:'Orbitron',sans-serif;font-size:.55rem;letter-spacing:.18em;color:var(--cyan);font-weight:400;border-bottom:1px solid rgba(0,229,255,.2);cursor:pointer;white-space:nowrap;text-align:left}
+.tbl th:hover{color:#fff}
+.tbl td{padding:9px 14px;font-family:'Share Tech Mono',monospace;font-size:.82rem;border-bottom:1px solid rgba(0,229,255,.05);color:var(--text)}
+.tbl tr:hover td{background:rgba(0,229,255,.03)}
+.badge{display:inline-block;padding:2px 8px;font-family:'Share Tech Mono',monospace;font-size:.62rem;letter-spacing:.06em;border:1px solid}
+.br-run{color:var(--cyan);border-color:rgba(0,229,255,.4);background:rgba(0,229,255,.07)}
+.br-sl{color:var(--green);border-color:rgba(0,255,65,.3);background:rgba(0,255,65,.07)}
+.br-zb{color:var(--red);border-color:rgba(255,34,87,.4);background:rgba(255,34,87,.07)}
+.br-ot{color:var(--tdim);border-color:rgba(58,96,112,.3)}
+
+/* INSTALL */
+.steps{list-style:none;background:rgba(0,4,10,.98);border:1px solid rgba(0,229,255,.1);max-height:min(52vh,380px);overflow:auto}
+.steps::-webkit-scrollbar{width:3px}.steps::-webkit-scrollbar-thumb{background:rgba(0,229,255,.25)}
+.step{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:11px 16px;border-bottom:1px solid rgba(0,229,255,.05);transition:background .25s}
+.step:last-child{border-bottom:none}
+.step.running{background:rgba(0,229,255,.03)}
+.step-l{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
+.step-n{font-family:'Share Tech Mono',monospace;font-size:.58rem;color:var(--tdim);flex-shrink:0}
+.step-t{font-size:.87rem;color:var(--text);line-height:1.35}
+.step.done .step-t{color:rgba(184,216,232,.55)}
+.step-s{flex-shrink:0;font-family:'Share Tech Mono',monospace;font-size:.72rem;min-width:5.5rem;text-align:right}
+.step-s.pending{color:rgba(58,96,112,.5)}.step-s.running{color:var(--cyan)}.step-s.done{color:var(--green);font-size:1rem}.step-s.failed{color:var(--red)}
+.logp{height:2px;background:rgba(0,229,255,.07);overflow:hidden}
+.logb{height:100%;width:0%;background:linear-gradient(90deg,rgba(0,229,255,.3),var(--cyan));transition:width .4s ease;box-shadow:0 0 8px var(--cyan)}
+.sbn{display:none;padding:16px 20px;margin-top:14px;text-align:center;position:relative}
+.sbn::before,.sbn::after{content:'';position:absolute;width:8px;height:8px;border-color:var(--green);border-style:solid;opacity:.5}
+.sbn::before{top:-1px;left:-1px;border-width:2px 0 0 2px}.sbn::after{bottom:-1px;right:-1px;border-width:0 2px 2px 0}
+.sbn.ok{display:block;background:rgba(0,20,10,.5);border:1px solid rgba(0,255,65,.25)}
+.sbn.err{display:block;background:rgba(30,3,10,.5);border:1px solid rgba(255,34,87,.3)}
+.sbn.err::before,.sbn.err::after{border-color:var(--red)}
+.errsum{display:none;margin:0 0 14px;padding:12px 14px;background:rgba(30,3,10,.6);border:1px solid rgba(255,34,87,.25);font-family:'Share Tech Mono',monospace;font-size:12px;line-height:1.55;color:#ff8099;white-space:pre-wrap;word-break:break-word;max-height:min(28vh,220px);overflow:auto}
+.errsum.show{display:block}
+.ist{font-family:'Share Tech Mono',monospace;font-size:.63rem;letter-spacing:.18em;text-transform:uppercase;margin-bottom:10px;color:var(--tdim);display:flex;align-items:center;gap:8px}
+.ist.running{color:var(--cyan)}.ist.done{color:var(--green)}.ist.failed{color:var(--red)}
+.ist .sd{width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0}
+.ist.running .sd{animation:dp 1.4s ease-in-out infinite}
+
+/* ENV UPLOAD */
+.env-drop{
+  border:1px dashed rgba(0,229,255,.3);background:rgba(0,229,255,.03);
+  padding:20px 16px;text-align:center;cursor:pointer;transition:all .25s;position:relative;
+}
+.env-drop:hover,.env-drop.over{border-color:rgba(0,229,255,.7);background:rgba(0,229,255,.07);box-shadow:0 0 18px rgba(0,229,255,.08)}
+.env-drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.env-loaded{background:rgba(0,255,65,.05);border:1px solid rgba(0,255,65,.25);padding:12px 16px;margin-top:10px;display:none}
+.env-loaded.show{display:block}
+.env-btn-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+@media(max-width:480px){.env-btn-row{grid-template-columns:1fr}}
+
+/* MISC */
+.opt{font-family:'Orbitron',sans-serif;font-size:.56rem;color:var(--yellow);font-weight:600;letter-spacing:.05em;margin-left:6px;opacity:.8}
+.hint{font-size:.75rem;color:var(--tdim);margin-top:4px;line-height:1.5}
+.hint a{color:var(--cyan);text-decoration:none;border-bottom:1px solid rgba(0,229,255,.2)}
+.hint a:hover{color:#fff}
+.warn{background:rgba(255,34,87,.08);border:1px solid rgba(255,34,87,.3);color:#ff6080;padding:12px 16px;font-size:.82rem;margin-bottom:16px;line-height:1.5}
+.r2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.f{margin-bottom:14px}.f:last-child{margin-bottom:0}
+.hidden{display:none!important}
+::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:rgba(0,0,0,.3)}::-webkit-scrollbar-thumb{background:rgba(0,229,255,.2)}::-webkit-scrollbar-thumb:hover{background:rgba(0,229,255,.45)}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+.fu{animation:fadeUp .45s ease both}
+
+@keyframes glitch{0%,88%,100%{clip-path:none;transform:none;filter:none}89%{clip-path:polygon(0 10%,100% 10%,100% 28%,0 28%);transform:translateX(-4px);filter:hue-rotate(90deg)}91%{clip-path:polygon(0 58%,100% 58%,100% 78%,0 78%);transform:translateX(4px)}93%{clip-path:polygon(0 38%,100% 38%,100% 52%,0 52%);transform:translateX(-2px);filter:hue-rotate(-60deg)}95%{clip-path:none;transform:none;filter:none}}
+.glitch{animation:glitch 7s steps(1) infinite}
+
+@keyframes np{0%,100%{text-shadow:0 0 8px var(--cyan),0 0 20px rgba(0,229,255,.4)}50%{text-shadow:0 0 20px var(--cyan),0 0 50px rgba(0,229,255,.5),0 0 80px rgba(0,229,255,.2)}}
+.np{animation:np 2.8s ease-in-out infinite}
+
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.blink{animation:blink 1s step-end infinite}
+
+/* PARTICLES */
+#particles{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}
+.pt{position:absolute;border-radius:50%}
+@keyframes pr{0%{opacity:0;transform:translateY(0) scale(.5)}15%{opacity:var(--op,.35)}85%{opacity:var(--op,.35)}100%{opacity:0;transform:translateY(var(--ty,-60px)) scale(.8)}}
+
+/* PAGES */
+.page{display:none}.page.active{display:block}
+
+@media(max-width:520px){.r2{grid-template-columns:1fr}.btn{clip-path:none}.btn.ok{clip-path:none}}
+</style>
+</head>
+<body>
+<div id="particles"></div>
+<div class="sweep"></div>
+
+<div id="app">
+<nav>
+  <div class="brand">CICADA<span class="blink">_</span></div>
+  <button class="tab active" onclick="switchTab('monitor',this)">SYS.MONITOR</button>
+  <button class="tab" onclick="switchTab('install',this)">WEB.INSTALL</button>
+  <div class="nav-live"><span class="dp"></span>ONLINE</div>
+</nav>
+
+<!-- ═══════════════════ MONITOR PAGE ═══════════════════ -->
+<div id="page-monitor" class="page active">
+<div style="max-width:1400px;margin:0 auto;padding:24px 20px 60px">
+
+  <header style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:28px">
+    <div>
+      <h1 class="glitch np" style="font-family:'Orbitron',sans-serif;font-weight:900;font-size:clamp(1.4rem,3vw,2.2rem);color:var(--cyan);letter-spacing:.18em;text-transform:uppercase">
+        CICADA<span style="color:var(--green)">_</span>SYSMON
+      </h1>
+      <p id="m-host" style="font-family:'Share Tech Mono',monospace;font-size:.72rem;color:var(--tdim);margin-top:6px;letter-spacing:.12em">
+        ESTABLISHING UPLINK...
+      </p>
+    </div>
+    <div style="text-align:right;font-family:'Share Tech Mono',monospace">
+      <div style="font-size:.68rem;color:var(--green);display:flex;align-items:center;gap:8px;justify-content:flex-end">
+        <span class="dp"></span>LIVE TELEMETRY
+      </div>
+      <div id="m-time" style="font-size:.72rem;color:var(--cyan);margin-top:4px">--:--:--</div>
+      <div id="m-up" style="font-size:.65rem;color:var(--tdim);margin-top:2px;letter-spacing:.1em">UP: -- -- -- --</div>
+    </div>
+  </header>
+
+  <div class="div" style="margin-bottom:24px"><div class="dd"></div></div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:20px">
+
+    <div class="card fu" style="padding:18px 20px">
+      <div class="ch"><span>CPU.COMPUTE</span><span id="cpu-pct" style="margin-left:auto;font-family:'Orbitron',sans-serif;color:var(--cyan)">--</span></div>
+      <div id="cpu-model" style="font-size:.72rem;color:var(--tdim);margin-bottom:10px;font-family:'Share Tech Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">loading...</div>
+      <div class="track" style="height:8px;margin-bottom:14px"><div id="cpu-bar" class="bar bc" style="width:0%"></div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px">
+        <div style="background:rgba(0,229,255,.04);border:1px solid rgba(0,229,255,.1);padding:8px 6px;text-align:center">
+          <div style="font-family:'Share Tech Mono',monospace;font-size:.58rem;color:var(--tdim);margin-bottom:4px">1M</div>
+          <div id="la1" style="font-family:'Orbitron',sans-serif;font-size:.8rem;color:var(--cyan)">--</div>
+        </div>
+        <div style="background:rgba(0,229,255,.04);border:1px solid rgba(0,229,255,.1);padding:8px 6px;text-align:center">
+          <div style="font-family:'Share Tech Mono',monospace;font-size:.58rem;color:var(--tdim);margin-bottom:4px">5M</div>
+          <div id="la5" style="font-family:'Orbitron',sans-serif;font-size:.8rem;color:var(--cyan)">--</div>
+        </div>
+        <div style="background:rgba(0,229,255,.04);border:1px solid rgba(0,229,255,.1);padding:8px 6px;text-align:center">
+          <div style="font-family:'Share Tech Mono',monospace;font-size:.58rem;color:var(--tdim);margin-bottom:4px">15M</div>
+          <div id="la15" style="font-family:'Orbitron',sans-serif;font-size:.8rem;color:var(--cyan)">--</div>
+        </div>
+      </div>
+      <div style="font-size:.6rem;font-family:'Share Tech Mono',monospace;color:var(--tdim);letter-spacing:.1em;margin-bottom:8px">CORE.LOAD</div>
+      <div id="cores" style="max-height:100px;overflow-y:auto;display:flex;flex-direction:column;gap:5px"></div>
+    </div>
+
+    <div class="card fu" style="padding:18px 20px;animation-delay:.1s">
+      <div class="ch"><span>MEM.ARRAY</span><span id="mem-pct" style="margin-left:auto;font-family:'Orbitron',sans-serif;color:var(--cyan)">--</span></div>
+      <div id="mem-total" style="font-size:.72rem;color:var(--tdim);margin-bottom:10px;font-family:'Share Tech Mono',monospace">loading...</div>
+      <div class="track" style="height:14px;margin-bottom:16px"><div id="mem-bar" class="bar bc" style="width:0%"></div></div>
+      <div id="mem-rows"></div>
+    </div>
+
+    <div class="card fu" style="padding:18px 20px;animation-delay:.2s">
+      <div class="ch"><span>SWAP.SPACE</span><span id="swap-pct" style="margin-left:auto;font-family:'Orbitron',sans-serif;color:var(--cyan)">--</span></div>
+      <div id="swap-total" style="font-size:.72rem;color:var(--tdim);margin-bottom:10px;font-family:'Share Tech Mono',monospace">loading...</div>
+      <div class="track" style="height:14px;margin-bottom:16px"><div id="swap-bar" class="bar bg" style="width:0%"></div></div>
+      <div id="swap-rows"></div>
+    </div>
+  </div>
+
+  <div class="div" style="margin-bottom:20px"><div class="dd"></div></div>
+
+  <div class="card fu" style="padding:18px 20px;animation-delay:.3s">
+    <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px">
+      <div class="ch" style="margin-bottom:0"><span>ACTIVE.SUBROUTINES</span><span id="proc-count" style="font-family:'Share Tech Mono',monospace;font-size:.7rem;color:var(--tdim)">[-- PROC]</span></div>
+      <input class="inp" id="proc-filter" style="max-width:220px;padding:6px 10px;font-size:.8rem" placeholder="// FILTER BY NAME OR USER" oninput="filterProcs()">
+    </div>
+    <div style="overflow-x:auto">
+      <table class="tbl">
+        <thead><tr>
+          <th onclick="sortProcs('pid')">PID <span id="s-pid"></span></th>
+          <th onclick="sortProcs('name')">IDENTIFIER <span id="s-name"></span></th>
+          <th onclick="sortProcs('user')">USER <span id="s-user"></span></th>
+          <th onclick="sortProcs('status')">STATE <span id="s-status"></span></th>
+          <th onclick="sortProcs('cpu')" style="text-align:right">CPU% <span id="s-cpu">▼</span></th>
+          <th onclick="sortProcs('memMb')" style="text-align:right">MEM.MB <span id="s-memMb"></span></th>
+        </tr></thead>
+        <tbody id="proc-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+</div><!-- /monitor -->
+
+<!-- ═══════════════════ INSTALL PAGE ═══════════════════ -->
+<div id="page-install" class="page">
+<div style="max-width:640px;margin:0 auto;padding:24px 16px 60px">
+
+  <header style="text-align:center;padding-bottom:24px">
+    <h1 class="glitch" style="font-family:'Orbitron',sans-serif;font-weight:900;font-size:clamp(1.6rem,4vw,2.4rem);color:var(--cyan);letter-spacing:.18em;text-transform:uppercase;text-shadow:0 0 20px rgba(0,229,255,.5),0 0 40px rgba(0,229,255,.2)">CICADA</h1>
+    <div style="font-family:'Orbitron',sans-serif;font-size:.6rem;letter-spacing:.4em;color:var(--tdim);margin-top:4px"><span style="opacity:.5">//</span> STUDIO <span style="opacity:.5">//</span></div>
+    <p style="font-family:'Share Tech Mono',monospace;font-size:.75rem;color:var(--tdim);margin-top:8px;letter-spacing:.06em">WEB-INSTALLER · CICADA STUDIO</p>
+    <div id="plat-badge" style="display:inline-block;margin-top:10px;padding:4px 18px;border:1px solid var(--cyan);font-family:'Orbitron',sans-serif;font-size:.58rem;letter-spacing:.28em;color:var(--cyan);background:var(--cdim);clip-path:polygon(10px 0%,calc(100% - 10px) 0%,100% 50%,calc(100% - 10px) 100%,10px 100%,0% 50%)">
+      ОПРЕДЕЛЕНИЕ...
+    </div>
+  </header>
+
+  <div class="div" style="margin-bottom:20px"><div class="dd"></div></div>
+
+  <!-- API base config -->
+  <div class="card" style="padding:14px 16px;margin-bottom:14px">
+    <div class="ch">WEBINSTALL.SERVER</div>
+    <div class="f" style="margin-bottom:0">
+      <label class="lbl">URL сервера webinstall.py</label>
+      <input class="inp" id="api-base" value="" placeholder="оставьте пустым = этот сервер" oninput="loadPlatform()">
+      <p class="hint">Адрес запущенного <code>python3 webinstall.py</code>. Пусто = тот же хост (порт 7700 по умолчанию).</p>
+    </div>
+  </div>
+
+  <div id="inst-warn" class="warn hidden"></div>
+
+  <!-- FORM -->
+  <div id="inst-form">
+  <!-- ENV FILE UPLOAD -->
+  <div class="card fu" style="padding:18px 16px;margin-bottom:14px;border-color:rgba(0,229,255,.22)">
+    <div class="ch">ЗАГРУЗИТЬ.ENV</div>
+    <p style="font-size:.78rem;color:var(--tdim);margin-bottom:12px">
+      Выберите файл <code>.env</code> — поля заполнятся автоматически или запустится установка сразу.
+    </p>
+    <div class="env-drop" id="env-drop" ondragover="envDragOver(event)" ondragleave="envDragLeave(event)" ondrop="envDrop(event)">
+      <input type="file" accept=".env,text/plain" id="env-file-input" onchange="envFileChosen(this.files[0])">
+      <div style="font-family:'Share Tech Mono',monospace;font-size:.72rem;color:var(--tdim);pointer-events:none">
+        <div style="font-size:1.5rem;margin-bottom:6px;color:rgba(0,229,255,.4)">⬆</div>
+        Нажмите или перетащите файл <code style="color:var(--cyan)">.env</code>
+      </div>
+    </div>
+    <div class="env-loaded" id="env-loaded">
+      <div style="font-family:'Share Tech Mono',monospace;font-size:.72rem;color:var(--green);margin-bottom:8px">
+        ✔ <span id="env-filename">файл загружен</span>
+      </div>
+      <div style="font-size:.8rem;color:var(--tdim);margin-bottom:2px" id="env-summary"></div>
+      <div class="env-btn-row">
+        <button type="button" class="btn ok" onclick="installFromEnv()" id="env-install-btn">
+          // УСТАНОВИТЬ СРАЗУ //
+        </button>
+        <button type="button" class="btn sec" onclick="fillFormFromEnv()" style="clip-path:none;padding:12px 16px;font-size:.6rem">
+          // ЗАПОЛНИТЬ ФОРМУ //
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <form id="install-form" onsubmit="startInstall(event)" novalidate>
+
+    <!-- MODE -->
+    <div class="card fu" style="padding:18px 16px;margin-bottom:12px">
+      <div class="ch">РЕЖИМ.УСТАНОВКИ</div>
+      <p style="font-size:.78rem;color:var(--tdim);margin-bottom:12px">PROD — сервер с доменом и SSL. LOCAL — localhost / WSL / тест.</p>
+      <div class="f">
+        <label class="lbl">Режим</label>
+        <select id="mode" name="mode" class="inp" onchange="onModeChange()">
+          <option value="local">LOCAL — localhost, self-signed SSL</option>
+          <option value="prod">PROD — домен + Let's Encrypt</option>
+        </select>
+      </div>
+      <div id="prod-fields" class="hidden">
+        <div class="f">
+          <label class="lbl">Домен</label>
+          <input name="domain" class="inp" placeholder="example.com" autocomplete="off">
+          <p class="hint">A-запись DNS должна указывать на IP сервера до запуска SSL.</p>
+        </div>
+        <div class="f">
+          <label class="lbl">Email (Let's Encrypt)</label>
+          <input name="le_email" type="email" class="inp" placeholder="admin@example.com">
+          <p class="hint">Для уведомлений Let's Encrypt о сроке сертификата.</p>
+        </div>
+      </div>
+      <div class="f" style="margin-bottom:0">
+        <label class="lbl">Порт Node.js (API)</label>
+        <input name="api_port" type="number" class="inp" value="3001" min="1024" max="65535">
+      </div>
+    </div>
+
+    <!-- POSTGRESQL -->
+    <div class="card fu" style="padding:18px 16px;margin-bottom:12px;animation-delay:.08s">
+      <div class="ch">POSTGRESQL</div>
+      <div class="r2">
+        <div class="f"><label class="lbl">Имя БД</label><input name="db_name" class="inp" value="cicada"></div>
+        <div class="f"><label class="lbl">Пользователь БД</label><input name="db_user" class="inp" value="cicada_user"></div>
+      </div>
+      <div class="f" style="margin-bottom:0">
+        <label class="lbl">Пароль БД</label>
+        <input name="db_password" type="password" class="inp" required minlength="8" autocomplete="new-password">
+      </div>
+    </div>
+
+    <!-- SECURITY -->
+    <div class="card fu" style="padding:18px 16px;margin-bottom:12px;animation-delay:.16s">
+      <div class="ch">БЕЗОПАСНОСТЬ</div>
+      <p style="font-size:.78rem;color:var(--tdim);margin-bottom:10px">ADMIN_KEY — доступ к админ-API. JWT_SECRET — сессии входа.</p>
+      <label class="chk"><input type="checkbox" id="auto-admin-key" checked onchange="toggleField('admin-key-field',!this.checked)">Сгенерировать ADMIN_KEY автоматически (рекомендуется)</label>
+      <div id="admin-key-field" class="f hidden">
+        <label class="lbl">ADMIN_KEY <span class="opt">свой</span></label>
+        <input name="admin_key" type="password" class="inp" minlength="12" placeholder="мин. 12 символов" autocomplete="off">
+      </div>
+      <label class="chk"><input type="checkbox" id="auto-jwt" checked onchange="toggleField('jwt-secret-field',!this.checked)">Сгенерировать JWT_SECRET при установке</label>
+      <div id="jwt-secret-field" class="f hidden">
+        <label class="lbl">JWT_SECRET <span class="opt">свой</span></label>
+        <input name="jwt_secret" type="password" class="inp" placeholder="PROD: мин. 32 символа" autocomplete="off">
+      </div>
+      <div class="f">
+        <label class="lbl">JWT_EXPIRES_SEC</label>
+        <input name="jwt_expires_sec" type="number" class="inp" value="604800" min="3600">
+        <p class="hint">Срок жизни JWT-сессии в секундах (604800 = 7 дней).</p>
+      </div>
+      <div class="f" style="margin-bottom:0">
+        <label class="lbl">ADMIN_TOTP_SECRET <span class="opt">необяз.</span></label>
+        <input name="admin_totp_secret" class="inp" placeholder="Base32 секрет для Google Authenticator" autocomplete="off">
+        <p class="hint">Доп. защита /satana. Секрет из приложения-аутентификатора.</p>
+      </div>
+    </div>
+
+    <!-- ACCOUNT -->
+    <div class="card fu" style="padding:18px 16px;margin-bottom:12px;animation-delay:.24s">
+      <div class="ch">УЧЁТНАЯ ЗАПИСЬ.STUDIO</div>
+      <div id="local-account">
+        <p style="font-size:.78rem;color:var(--tdim);margin-bottom:10px">LOCAL: email и пароль для входа в Studio.</p>
+        <div class="f"><label class="lbl">Email администратора</label><input name="admin_email" type="email" class="inp" placeholder="admin@localhost"></div>
+        <div class="f"><label class="lbl">Имя в профиле</label><input name="admin_name" class="inp" value="Admin"></div>
+        <div class="f" style="margin-bottom:0"><label class="lbl">Пароль для входа</label><input name="admin_password" type="password" class="inp" minlength="8" autocomplete="new-password"></div>
+      </div>
+      <div id="prod-account" class="hidden">
+        <p style="font-size:.78rem;color:var(--tdim);margin-bottom:10px">PROD: email для уведомлений. Вход — через OAuth / регистрацию.</p>
+        <div class="f" style="margin-bottom:0"><label class="lbl">Email администратора</label><input name="admin_email_prod" type="email" class="inp" placeholder="admin@example.com"></div>
+      </div>
+    </div>
+
+    <!-- TELEGRAM -->
+    <div class="card fu" style="padding:18px 16px;margin-bottom:12px;animation-delay:.32s">
+      <div class="ch">TELEGRAM</div>
+      <p class="hint" style="margin-bottom:12px">Бот для DSL и уведомлений. <a href="https://t.me/BotFather" target="_blank">@BotFather</a> → /newbot → скопируйте токен.</p>
+      <div class="f"><label class="lbl">TG_BOT_TOKEN <span class="opt">необяз.</span></label><input name="tg_bot_token" class="inp" placeholder="123456:ABC..." autocomplete="off"></div>
+      <div class="f" style="margin-bottom:0"><label class="lbl">Имя бота (без @) <span class="opt">необяз.</span></label><input name="tg_bot_name" class="inp" placeholder="MyCicadaBot" autocomplete="off"></div>
+    </div>
+
+    <!-- PROD-ONLY -->
+    <div id="prod-only" class="hidden">
+      <div class="card fu" style="padding:18px 16px;margin-bottom:12px">
+        <div class="ch">EMAIL.RESEND</div>
+        <p class="hint" style="margin-bottom:12px">Письма (верификация, сброс пароля). <a href="https://resend.com/api-keys" target="_blank">resend.com/api-keys</a></p>
+        <div class="f"><label class="lbl">RESEND_API_KEY <span class="opt">необяз.</span></label><input name="resend_api_key" class="inp" placeholder="re_..." autocomplete="off"></div>
+        <div class="f" style="margin-bottom:0"><label class="lbl">EMAIL_FROM</label><input name="email_from" class="inp" placeholder="noreply@yourdomain.com"><p class="hint">Домен должен быть верифицирован в Resend.</p></div>
+      </div>
+      <div class="card fu" style="padding:18px 16px;margin-bottom:12px">
+        <div class="ch">CRYPTOBOT.ОПЛАТА</div>
+        <p class="hint" style="margin-bottom:12px">Crypto Pay API. <a href="https://t.me/CryptoBot" target="_blank">@CryptoBot</a> → Crypto Pay → Create App → API Token.</p>
+        <div class="f" style="margin-bottom:0"><label class="lbl">CRYPTOBOT_TOKEN <span class="opt">необяз.</span></label><input name="cryptobot_token" class="inp" placeholder="..." autocomplete="off"></div>
+      </div>
+      <div class="card fu" style="padding:18px 16px;margin-bottom:12px">
+        <div class="ch">GOOGLE.OAUTH</div>
+        <p class="hint" style="margin-bottom:12px">Вход через Google. <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a> → OAuth client ID (Web).</p>
+        <div class="f"><label class="lbl">GOOGLE_CLIENT_ID <span class="opt">необяз.</span></label><input name="google_client_id" class="inp" placeholder="....apps.googleusercontent.com" autocomplete="off"></div>
+        <div class="f"><label class="lbl">GOOGLE_CLIENT_SECRET <span class="opt">необяз.</span></label><input name="google_client_secret" type="password" class="inp" autocomplete="off"></div>
+        <div class="f" style="margin-bottom:0"><label class="lbl">GOOGLE_CALLBACK_URL</label><input name="google_callback_url" class="inp" placeholder="авто из домена"></div>
+      </div>
+    </div>
+
+    <!-- AI -->
+    <div class="card fu" style="padding:18px 16px;margin-bottom:12px;animation-delay:.4s">
+      <div class="ch">AI.STUDIO / DSL</div>
+      <div class="f">
+        <label class="lbl">AI_PROVIDER</label>
+        <select name="ai_provider" class="inp" id="ai-provider" onchange="onAiChange()">
+          <option value="">auto — все блоки</option>
+          <option value="anthropic">anthropic — Claude</option>
+          <option value="groq">groq</option>
+          <option value="ollama">ollama — локальный</option>
+        </select>
+      </div>
+      <div id="ai-anthropic">
+        <p class="hint" style="margin:0 0 10px">Anthropic: <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a></p>
+        <div class="f"><label class="lbl">ANTHROPIC_API_KEY</label><input name="anthropic_api_key" type="password" class="inp" autocomplete="off"></div>
+        <div class="r2">
+          <div class="f"><label class="lbl">ANTHROPIC_MODEL</label><input name="anthropic_model" class="inp" value="claude-sonnet-4-6"></div>
+          <div class="f"><label class="lbl">ANTHROPIC_BASE_URL</label><input name="anthropic_base_url" class="inp" value="https://api.anthropic.com/v1"></div>
+        </div>
+      </div>
+      <div id="ai-groq">
+        <p class="hint" style="margin:0 0 10px">Groq: <a href="https://console.groq.com/keys" target="_blank">console.groq.com/keys</a></p>
+        <div class="f"><label class="lbl">GROQ_TOKEN</label><input name="groq_token" type="password" class="inp" autocomplete="off"></div>
+        <div class="r2">
+          <div class="f"><label class="lbl">GROQ_TOKEN_2</label><input name="groq_token_2" type="password" class="inp" autocomplete="off"></div>
+          <div class="f"><label class="lbl">GROQ_TOKEN_3</label><input name="groq_token_3" type="password" class="inp" autocomplete="off"></div>
+        </div>
+        <div class="r2">
+          <div class="f"><label class="lbl">GROQ_MODEL</label><input name="groq_model" class="inp" value="llama-3.3-70b-versatile"></div>
+          <div class="f"><label class="lbl">DEFAULT_CHAT_ID</label><input name="default_chat_id" class="inp" placeholder="1144785510"></div>
+        </div>
+      </div>
+      <div id="ai-ollama">
+        <p class="hint" style="margin:0 0 10px">OLLAMA_URL / OLLAMA_MODEL:</p>
+        <div class="r2" style="margin-bottom:0">
+          <div class="f"><label class="lbl">OLLAMA_URL</label><input name="ollama_url" class="inp" value="https://api.groq.com/openai"></div>
+          <div class="f"><label class="lbl">OLLAMA_MODEL</label><input name="ollama_model" class="inp" value="llama-3.3-70b-versatile"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ESPHOME -->
+    <div class="card fu" style="padding:18px 16px;margin-bottom:20px;animation-delay:.48s">
+      <div class="ch">ESPHOME</div>
+      <p style="font-size:.78rem;color:var(--tdim);margin-bottom:10px">Сборка прошивок /esphome на сервере (.venv-esphome).</p>
+      <label class="chk"><input type="checkbox" id="inst-esp" checked onchange="toggleField('esp-pin-field',this.checked)">Установить ESPHome CLI в .venv-esphome</label>
+      <div id="esp-pin-field" class="f" style="margin-top:8px;margin-bottom:0">
+        <label class="lbl">Версия esphome на PyPI <span class="opt">пусто = последняя</span></label>
+        <input name="esphome_pin" class="inp" placeholder="например 2024.4.5">
+      </div>
+    </div>
+
+    <button type="submit" class="btn" id="install-btn">// ЗАПУСТИТЬ УСТАНОВКУ //</button>
+  </form>
+  </div><!-- /inst-form -->
+
+  <!-- LOG VIEW -->
+  <div id="inst-log" class="hidden card fu" style="padding:18px 16px">
+    <div class="ch">ХОД.УСТАНОВКИ</div>
+    <div id="log-status" class="ist"><span class="sd"></span><span id="log-status-text">ЗАПУСК...</span></div>
+    <div class="logp" style="margin-bottom:0"><div class="logb" id="log-bar"></div></div>
+    <ul class="steps" id="inst-steps" style="margin-bottom:14px"></ul>
+    <div id="inst-banner"></div>
+    <pre id="inst-errors" class="errsum"></pre>
+    <div style="display:flex;gap:10px;margin-top:12px">
+      <button type="button" class="btn sec" onclick="resetInstall()">← НОВАЯ УСТАНОВКА</button>
+    </div>
+  </div>
+
+  <footer style="text-align:center;margin-top:32px;font-family:'Share Tech Mono',monospace;font-size:.6rem;color:rgba(58,96,112,.4);letter-spacing:.15em">
+    // CICADA STUDIO // WEB INSTALLER //
+  </footer>
+</div>
+</div><!-- /install -->
+
+</div><!-- /app -->
+
+<script>
+// ════════════ PARTICLES ════════════
+(function(){
+  const c=document.getElementById('particles');
+  for(let i=0;i<35;i++){
+    const p=document.createElement('div');
+    p.className='pt';
+    const sz=(Math.random()*2.5+0.8).toFixed(1);
+    const dur=(Math.random()*5+4).toFixed(1);
+    const op=(Math.random()*.35+.1).toFixed(2);
+    const ty=-(Math.random()*80+30);
+    const delay=(Math.random()*8).toFixed(1);
+    const g=Math.random()>.75;
+    p.style.cssText=`width:${sz}px;height:${sz}px;left:${(Math.random()*100).toFixed(1)}%;top:${(Math.random()*100).toFixed(1)}%;background:${g?'var(--green)':'var(--cyan)'};box-shadow:0 0 4px ${g?'var(--green)':'var(--cyan)'};--op:${op};--ty:${ty}px;animation:pr ${dur}s ease-in-out ${delay}s infinite;opacity:0`;
+    c.appendChild(p);
+  }
+})();
+
+// ════════════ TABS ════════════
+function switchTab(id,btn){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('page-'+id).classList.add('active');
+}
+
+// ════════════ MONITOR ════════════
+let allProcs=[];
+let sortKey='cpu';
+let sortDir='desc';
+const API_MONITOR=window.location.origin;
+
+function formatUptime(s){
+  const d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60),sec=Math.floor(s%60);
+  return `${d}D ${String(h).padStart(2,'0')}H ${String(m).padStart(2,'0')}M ${String(sec).padStart(2,'0')}S`;
+}
+function barCls(p){return p>85?'br':p>65?'by':'bc'}
+function applyBarCls(el,p){el.className='bar '+barCls(p)}
+function metricRow(label,val,color){
+  return `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(0,229,255,.07);font-family:'Share Tech Mono',monospace;font-size:.82rem"><span style="color:var(--tdim)">${label}</span><span style="color:${color}">${val}</span></div>`;
+}
+
+async function fetchMetrics(){
+  try{
+    const r=await fetch(API_MONITOR+'/api/system/metrics');
+    if(!r.ok)return;
+    const d=await r.json();
+    document.getElementById('m-host').textContent=`${d.hostname} // ${d.platform}`;
+    document.getElementById('m-time').textContent=new Date(d.timestamp).toLocaleTimeString();
+    document.getElementById('m-up').textContent='UP: '+formatUptime(d.uptime);
+    const cp=d.cpu.usagePercent;
+    document.getElementById('cpu-pct').textContent=cp.toFixed(1)+'%';
+    document.getElementById('cpu-pct').style.color=cp>85?'var(--red)':cp>65?'var(--yellow)':'var(--cyan)';
+    document.getElementById('cpu-model').textContent=d.cpu.model;
+    const cb=document.getElementById('cpu-bar');
+    applyBarCls(cb,cp); cb.style.width=cp+'%';
+    document.getElementById('la1').textContent=d.cpu.loadAvg1.toFixed(2);
+    document.getElementById('la5').textContent=d.cpu.loadAvg5.toFixed(2);
+    document.getElementById('la15').textContent=d.cpu.loadAvg15.toFixed(2);
+    const cores=document.getElementById('cores');
+    cores.innerHTML=d.cpu.perCore.map(c=>`
+      <div style="display:flex;align-items:center;gap:8px;font-family:'Share Tech Mono',monospace;font-size:.65rem">
+        <span style="width:28px;color:var(--tdim);flex-shrink:0">C${String(c.core).padStart(2,'0')}</span>
+        <div class="track" style="flex:1;height:5px"><div class="bar ${barCls(c.load)}" style="width:${c.load}%"></div></div>
+        <span style="width:32px;text-align:right;color:var(--cyan);flex-shrink:0">${Math.round(c.load)}%</span>
+      </div>`).join('');
+    const mp=d.memory.usedPercent;
+    document.getElementById('mem-pct').textContent=mp.toFixed(1)+'%';
+    document.getElementById('mem-total').textContent=(d.memory.totalMb/1024).toFixed(1)+' GB TOTAL';
+    const mb=document.getElementById('mem-bar'); applyBarCls(mb,mp); mb.style.width=mp+'%';
+    document.getElementById('mem-rows').innerHTML=
+      metricRow('ALLOCATED',(d.memory.usedMb/1024).toFixed(2)+' GB','var(--cyan)')+
+      metricRow('AVAILABLE',(d.memory.freeMb/1024).toFixed(2)+' GB','var(--green)')+
+      metricRow('TOTAL',(d.memory.totalMb/1024).toFixed(2)+' GB','var(--tdim)');
+    const sp=d.swap.usedPercent;
+    document.getElementById('swap-pct').textContent=sp.toFixed(1)+'%';
+    document.getElementById('swap-total').textContent=(d.swap.totalMb/1024).toFixed(1)+' GB TOTAL';
+    const sb=document.getElementById('swap-bar');
+    sb.className='bar '+(sp>50?'by':'bg'); sb.style.width=sp+'%';
+    let swapHtml=metricRow('ALLOCATED',(d.swap.usedMb/1024).toFixed(2)+' GB','var(--cyan)')+
+                 metricRow('AVAILABLE',(d.swap.freeMb/1024).toFixed(2)+' GB','var(--green)')+
+                 metricRow('TOTAL',(d.swap.totalMb/1024).toFixed(2)+' GB','var(--tdim)');
+    if(d.swap.totalMb===0) swapHtml+=`<div style="margin-top:14px;padding:8px 12px;background:rgba(255,190,0,.07);border:1px solid rgba(255,190,0,.2);font-size:.75rem;color:var(--yellow);font-family:'Share Tech Mono',monospace">// SWAP NOT CONFIGURED</div>`;
+    document.getElementById('swap-rows').innerHTML=swapHtml;
+  }catch(e){}
+}
+
+async function fetchProcs(){
+  try{
+    const r=await fetch(API_MONITOR+'/api/system/processes');
+    if(!r.ok)return;
+    const d=await r.json();
+    allProcs=d.processes||[];
+    document.getElementById('proc-count').textContent=`[${d.total} PROC]`;
+    renderProcs();
+  }catch(e){}
+}
+
+function filterProcs(){renderProcs()}
+function sortProcs(k){
+  if(sortKey===k) sortDir=sortDir==='asc'?'desc':'asc';
+  else{sortKey=k;sortDir=k==='cpu'||k==='memMb'?'desc':'asc'}
+  document.querySelectorAll('[id^="s-"]').forEach(el=>el.textContent='');
+  const si=document.getElementById('s-'+k);
+  if(si) si.textContent=sortDir==='asc'?'▲':'▼';
+  renderProcs();
+}
+function renderProcs(){
+  const q=(document.getElementById('proc-filter').value||'').toLowerCase();
+  const rows=allProcs
+    .filter(p=>!q||p.name.toLowerCase().includes(q)||p.user.toLowerCase().includes(q))
+    .slice().sort((a,b)=>{
+      const av=a[sortKey],bv=b[sortKey];
+      if(av<bv)return sortDir==='asc'?-1:1;
+      if(av>bv)return sortDir==='asc'?1:-1;
+      return 0;
+    }).slice(0,50);
+  const sc=s=>s.includes('run')?'br-run':s.includes('zombie')?'br-zb':s.includes('sleep')?'br-sl':'br-ot';
+  document.getElementById('proc-body').innerHTML=rows.map(p=>`
+    <tr>
+      <td style="color:var(--tdim)">${p.pid}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.command}">${p.name}</td>
+      <td style="color:var(--tdim)">${p.user}</td>
+      <td><span class="badge ${sc(p.status)}">${p.status}</span></td>
+      <td style="text-align:right;color:${p.cpu>50?'var(--red)':p.cpu>20?'var(--yellow)':'var(--cyan)'}">${p.cpu.toFixed(1)}</td>
+      <td style="text-align:right">${p.memMb.toFixed(0)}</td>
+    </tr>`).join('');
+}
+
+fetchMetrics(); fetchProcs();
+setInterval(fetchMetrics,3000);
+setInterval(fetchProcs,5000);
+
+// ════════════ INSTALL ════════════
+function getBase(){
+  const v=(document.getElementById('api-base').value||'').trim();
+  if(v) return v.replace(/\/$/,'');
+  // auto-detect: try same host with port 7700
+  const u=new URL(window.location.href);
+  if(u.protocol==='file:') return 'http://127.0.0.1:7700';
+  return u.origin;
+}
+
+async function loadPlatform(){
+  const badge=document.getElementById('plat-badge');
+  badge.textContent='ОПРЕДЕЛЕНИЕ...';
+  try{
+    const r=await fetch(getBase()+'/api/info',{signal:AbortSignal.timeout(4000)});
+    if(!r.ok) throw new Error();
+    const d=await r.json();
+    badge.textContent=(d.display_platform||d.platform||'unknown').toUpperCase();
+    badge.style.borderColor='var(--green)';badge.style.color='var(--green)';badge.style.background='var(--gdim)';
+  }catch(e){
+    badge.textContent='НЕДОСТУПЕН';
+    badge.style.borderColor='var(--tdim)';badge.style.color='var(--tdim)';badge.style.background='transparent';
+  }
+}
+loadPlatform();
+
+function toggleField(id,show){
+  document.getElementById(id).classList.toggle('hidden',!show);
+}
+function onModeChange(){
+  const prod=document.getElementById('mode').value==='prod';
+  document.getElementById('prod-fields').classList.toggle('hidden',!prod);
+  document.getElementById('prod-only').classList.toggle('hidden',!prod);
+  document.getElementById('local-account').classList.toggle('hidden',prod);
+  document.getElementById('prod-account').classList.toggle('hidden',!prod);
+}
+function onAiChange(){
+  const v=document.getElementById('ai-provider').value;
+  ['anthropic','groq','ollama'].forEach(k=>{
+    document.getElementById('ai-'+k).classList.toggle('hidden',v&&v!==k);
+  });
+}
+
+// INSTALL STEPS
+let steps=[];
+let curStep=-1;
+let instStatus='idle';
+let errors=[];
+let progress=0;
+let openUrl='https://localhost';
+let es=null;
+
+const PHASE_RE=/\[(\d+)\/(\d+)\]\s+(.+)/;
+const DONE_RE=/УСТАНОВКА ЗАВЕРШЕНА|Установка завершена успешно/i;
+const ERR_RE=/✖|Permission denied|ОШИБКА|ERROR:|Unable to|Необработанная|Код выхода|exit \d+|denied|failed|No such file/i;
+function stripAnsi(t){return t.replace(/\x1b\[[0-9;]*[a-zA-Z]/g,'')}
+
+function renderSteps(){
+  document.getElementById('inst-steps').innerHTML=steps.map(s=>`
+    <li class="step ${s.status}">
+      <div class="step-l">
+        <span class="step-n">[${s.num}/${s.total}]</span>
+        <span class="step-t">${s.title}</span>
+      </div>
+      <span class="step-s ${s.status}">${s.status==='running'?'установка':s.status==='done'?'✓':s.status==='failed'?'ошибка':'…'}</span>
+    </li>`).join('')||`<li class="step"><div class="step-l"><span class="step-t" style="color:var(--tdim);font-family:'Share Tech Mono',monospace;font-size:.8rem">// Ожидание данных от сервера...</span></div></li>`;
+}
+function setLogStatus(cls,text){
+  const el=document.getElementById('log-status');
+  el.className='ist '+cls; document.getElementById('log-status-text').textContent=text;
+}
+function setProgress(p){
+  document.getElementById('log-bar').style.width=p+'%';
+}
+function beginPhase(num,total,title){
+  if(curStep>=0&&steps[curStep]?.status==='running') steps[curStep].status='done';
+  const idx=steps.findIndex(s=>s.num===num);
+  if(idx>=0){steps[idx]={...steps[idx],title,status:'running'};curStep=idx}
+  else{steps.push({num,total,title,status:'running'});steps.sort((a,b)=>a.num-b.num);curStep=steps.length-1}
+  setProgress(Math.min(95,Math.round((num/total)*100)));
+  renderSteps();
+}
+function finishAll(ok){
+  steps=steps.map(s=>s.status==='running'||s.status==='pending'?{...s,status:ok?'done':'failed'}:s);
+  curStep=-1; renderSteps();
+  if(ok) setProgress(100);
+}
+function processLine(line){
+  if(!line.trim()) return;
+  if(DONE_RE.test(line)){finishAll(true);instStatus='done';setLogStatus('done','УСТАНОВКА ЗАВЕРШЕНА');showBanner(true);return}
+  const m=line.match(PHASE_RE);
+  if(m){beginPhase(parseInt(m[1]),parseInt(m[2]),m[3].trim());return}
+  if(ERR_RE.test(line)&&line.trim().length>2){
+    if(!errors.includes(line.trim())) errors.push(line.trim());
+    const ee=document.getElementById('inst-errors');
+    ee.textContent=errors.slice(-12).join('\n'); ee.classList.add('show');
+  }
+}
+function showBanner(ok){
+  const b=document.getElementById('inst-banner');
+  if(ok){
+    b.className='sbn ok';
+    b.innerHTML=`<p style="font-family:'Orbitron',sans-serif;font-size:.68rem;letter-spacing:.15em;color:var(--green);margin-bottom:14px;text-transform:uppercase">// УСТАНОВКА УСПЕШНО ЗАВЕРШЕНА //</p>
+    <button class="btn ok" onclick="window.open('${openUrl}','_blank')" style="margin-bottom:12px">// ОТКРЫТЬ САЙТ //</button>`;
+  } else {
+    b.className='sbn err';
+    b.innerHTML=`<p style="font-family:'Orbitron',sans-serif;font-size:.68rem;letter-spacing:.15em;color:var(--red);text-transform:uppercase">// УСТАНОВКА ЗАВЕРШИЛАСЬ С ОШИБКОЙ //</p>`;
+  }
+}
+function resetInstall(){
+  if(es){es.close();es=null}
+  steps=[];curStep=-1;errors=[];progress=0;instStatus='idle';
+  document.getElementById('inst-form').classList.remove('hidden');
+  document.getElementById('inst-log').classList.add('hidden');
+  document.getElementById('install-btn').disabled=false;
+  document.getElementById('install-btn').textContent='// ЗАПУСТИТЬ УСТАНОВКУ //';
+  document.getElementById('inst-steps').innerHTML='';
+  document.getElementById('inst-errors').textContent='';
+  document.getElementById('inst-errors').classList.remove('show');
+  document.getElementById('inst-banner').className='';
+  document.getElementById('inst-banner').innerHTML='';
+  setProgress(0);
+}
+
+
+// ════════ ENV FILE UPLOAD ════════
+let _envData = null;
+
+function parseEnvFile(text) {
+  const r = {};
+  for (const raw of text.split('\n')) {
+    const l = raw.trim();
+    if (!l || l.startsWith('#')) continue;
+    const eq = l.indexOf('=');
+    if (eq < 0) continue;
+    const key = l.slice(0, eq).trim();
+    let val = l.slice(eq + 1).trim();
+    if ((val.startsWith("'") && val.endsWith("'")) || (val.startsWith('"') && val.endsWith('"')))
+      val = val.slice(1, -1);
+    r[key] = val;
+  }
+  return r;
+}
+
+function envToBody(env) {
+  const domain = (env.DOMAIN || env.API_HOST || '').trim();
+  const mode = (env.MODE || (domain && domain !== 'localhost' && domain !== '127.0.0.1' ? 'prod' : 'local')).toLowerCase();
+  return {
+    mode,
+    domain: mode === 'prod' ? domain : '',
+    le_email: env.LE_EMAIL || '',
+    api_port: env.API_PORT || '3001',
+    db_name: env.DB_NAME || 'cicada',
+    db_user: env.DB_USER || 'cicada_user',
+    db_password: env.DB_PASSWORD || '',
+    admin_email: env.ADMIN_EMAIL || env.VITE_ADMIN_EMAIL || '',
+    admin_name: env.ADMIN_NAME || 'Admin',
+    admin_password: env.ADMIN_PASSWORD || '',
+    tg_bot_token: env.TG_BOT_TOKEN || '',
+    tg_bot_name: env.TG_BOT_NAME || env.VITE_TG_BOT_NAME || '',
+    resend_api_key: env.RESEND_API_KEY || '',
+    email_from: env.EMAIL_FROM || '',
+    cryptobot_token: env.CRYPTOBOT_TOKEN || '',
+    google_client_id: env.GOOGLE_CLIENT_ID || '',
+    google_client_secret: env.GOOGLE_CLIENT_SECRET || '',
+    google_callback_url: env.GOOGLE_CALLBACK_URL || '',
+    ai_provider: env.AI_PROVIDER || '',
+    anthropic_api_key: env.ANTHROPIC_API_KEY || '',
+    anthropic_model: env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
+    anthropic_base_url: env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com/v1',
+    groq_token: env.GROQ_TOKEN || '',
+    groq_token_2: env.GROQ_TOKEN_2 || '',
+    groq_token_3: env.GROQ_TOKEN_3 || '',
+    groq_model: env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+    ollama_url: env.OLLAMA_URL || 'https://api.groq.com/openai',
+    ollama_model: env.OLLAMA_MODEL || 'llama-3.3-70b-versatile',
+    default_chat_id: (env.DEFAULT_CHAT_ID || '').replace(/^#/, ''),
+    admin_key: env.ADMIN_KEY || '',
+    auto_admin_key: !env.ADMIN_KEY,
+    jwt_secret: env.JWT_SECRET || '',
+    auto_jwt: !env.JWT_SECRET,
+    jwt_expires_sec: env.JWT_EXPIRES_SEC || '604800',
+    admin_totp_secret: env.ADMIN_TOTP_SECRET || '',
+    install_esphome: ['1','y','yes','true'].includes((env.INSTALL_ESPHOME||'').toLowerCase()),
+    esphome_pin: env.ESPHOME_PIN || '',
+  };
+}
+
+function envFileChosen(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    _envData = parseEnvFile(e.target.result);
+    const body = envToBody(_envData);
+    const loaded = document.getElementById('env-loaded');
+    document.getElementById('env-filename').textContent = file.name;
+    const parts = [];
+    if (body.mode) parts.push('MODE=' + body.mode.toUpperCase());
+    if (body.domain && body.domain !== 'localhost') parts.push('DOMAIN=' + body.domain);
+    if (body.db_name) parts.push('DB=' + body.db_name);
+    if (body.admin_email) parts.push('ADMIN=' + body.admin_email);
+    document.getElementById('env-summary').textContent = parts.join(' · ') || 'настройки загружены';
+    loaded.classList.add('show');
+    document.getElementById('env-drop').style.borderColor = 'rgba(0,255,65,.5)';
+  };
+  reader.readAsText(file);
+}
+
+function envDragOver(e) { e.preventDefault(); document.getElementById('env-drop').classList.add('over'); }
+function envDragLeave(e) { document.getElementById('env-drop').classList.remove('over'); }
+function envDrop(e) {
+  e.preventDefault();
+  document.getElementById('env-drop').classList.remove('over');
+  const f = e.dataTransfer?.files?.[0];
+  if (f) envFileChosen(f);
+}
+
+async function installFromEnv() {
+  if (!_envData) return;
+  const body = envToBody(_envData);
+  const warn = document.getElementById('inst-warn');
+  warn.classList.add('hidden');
+  const domain = body.mode === 'prod' ? body.domain : 'localhost';
+  openUrl = body.mode === 'prod' && domain ? 'https://' + domain : 'https://localhost';
+  steps = []; curStep = -1; errors = []; instStatus = 'running';
+  document.getElementById('inst-form').classList.add('hidden');
+  const logEl = document.getElementById('inst-log'); logEl.classList.remove('hidden');
+  document.getElementById('inst-errors').textContent = '';
+  document.getElementById('inst-errors').classList.remove('show');
+  document.getElementById('inst-banner').className = '';
+  document.getElementById('inst-banner').innerHTML = '';
+  renderSteps(); setProgress(0); setLogStatus('running', 'ЗАПУСК...');
+  const base = getBase();
+  try {
+    const r = await fetch(base + '/api/install', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) throw new Error(await r.text());
+    const { jobId } = await r.json();
+    if (es) { es.close(); es = null; }
+    es = new EventSource(base + '/api/install/' + jobId + '/events');
+    es.onmessage = ev => { stripAnsi(ev.data).split('\n').forEach(processLine); };
+    es.addEventListener('status', ev => {
+      const st = ev.data;
+      if (st === 'done') { es.close(); es = null; finishAll(true); instStatus = 'done'; setLogStatus('done', 'УСТАНОВКА ЗАВЕРШЕНА'); showBanner(true); }
+      else if (st === 'failed') { es.close(); es = null; finishAll(false); instStatus = 'failed'; setLogStatus('failed', 'ОШИБКА УСТАНОВКИ'); showBanner(false); }
+    });
+    es.onerror = () => { es.close(); es = null; finishAll(false); instStatus = 'failed'; setLogStatus('failed', 'ОШИБКА СОЕДИНЕНИЯ'); showBanner(false); };
+  } catch(err) {
+    warn.textContent = err instanceof Error ? err.message : 'Ошибка запроса';
+    warn.classList.remove('hidden');
+    document.getElementById('inst-form').classList.remove('hidden');
+    logEl.classList.add('hidden');
+  }
+}
+
+function setField(name, value) {
+  const el = document.querySelector('[name="' + name + '"]');
+  if (el) el.value = value;
+}
+
+function fillFormFromEnv() {
+  if (!_envData) return;
+  const b = envToBody(_envData);
+  // Mode
+  const modeEl = document.getElementById('mode');
+  if (modeEl) { modeEl.value = b.mode; onModeChange(); }
+  setField('domain', b.domain);
+  setField('le_email', b.le_email);
+  setField('api_port', b.api_port);
+  setField('db_name', b.db_name);
+  setField('db_user', b.db_user);
+  setField('db_password', b.db_password);
+  setField('admin_email', b.admin_email);
+  setField('admin_email_prod', b.admin_email);
+  setField('admin_name', b.admin_name);
+  setField('admin_password', b.admin_password);
+  setField('tg_bot_token', b.tg_bot_token);
+  setField('tg_bot_name', b.tg_bot_name);
+  setField('resend_api_key', b.resend_api_key);
+  setField('email_from', b.email_from);
+  setField('cryptobot_token', b.cryptobot_token);
+  setField('google_client_id', b.google_client_id);
+  setField('google_client_secret', b.google_client_secret);
+  setField('google_callback_url', b.google_callback_url);
+  const aiEl = document.getElementById('ai-provider');
+  if (aiEl) { aiEl.value = b.ai_provider; onAiChange(); }
+  setField('anthropic_api_key', b.anthropic_api_key);
+  setField('anthropic_model', b.anthropic_model);
+  setField('anthropic_base_url', b.anthropic_base_url);
+  setField('groq_token', b.groq_token);
+  setField('groq_token_2', b.groq_token_2);
+  setField('groq_token_3', b.groq_token_3);
+  setField('groq_model', b.groq_model);
+  setField('default_chat_id', b.default_chat_id);
+  setField('ollama_url', b.ollama_url);
+  setField('ollama_model', b.ollama_model);
+  setField('esphome_pin', b.esphome_pin);
+  setField('jwt_expires_sec', b.jwt_expires_sec);
+  setField('admin_totp_secret', b.admin_totp_secret);
+  // Checkboxes
+  const autoKey = document.getElementById('auto-admin-key');
+  if (autoKey) { autoKey.checked = b.auto_admin_key; toggleField('admin-key-field', !b.auto_admin_key); }
+  if (!b.auto_admin_key) setField('admin_key', b.admin_key);
+  const autoJwt = document.getElementById('auto-jwt');
+  if (autoJwt) { autoJwt.checked = b.auto_jwt; toggleField('jwt-secret-field', !b.auto_jwt); }
+  if (!b.auto_jwt) setField('jwt_secret', b.jwt_secret);
+  const espEl = document.getElementById('inst-esp');
+  if (espEl) { espEl.checked = b.install_esphome; toggleField('esp-pin-field', b.install_esphome); }
+  // Scroll to form
+  document.getElementById('install-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function startInstall(e){
+  e.preventDefault();
+  const form=document.getElementById('install-form');
+  const fd=new FormData(form);
+  const get=k=>(fd.get(k)||'').trim();
+  const mode=get('mode');
+  const warn=document.getElementById('inst-warn');
+  warn.classList.add('hidden');
+
+  if(get('db_password').length<8){warn.textContent='Пароль БД — минимум 8 символов';warn.classList.remove('hidden');return}
+  if(mode==='local'&&get('admin_password').length<8){warn.textContent='Пароль входа — минимум 8 символов (LOCAL)';warn.classList.remove('hidden');return}
+  if(mode==='prod'&&!get('domain')){warn.textContent='Укажите домен для PROD';warn.classList.remove('hidden');return}
+
+  const domain=mode==='prod'?get('domain'):'localhost';
+  openUrl=mode==='prod'&&domain?`https://${domain}`:'https://localhost';
+
+  const body={
+    mode,domain,le_email:get('le_email'),api_port:get('api_port'),
+    db_name:get('db_name'),db_user:get('db_user'),db_password:get('db_password'),
+    admin_email:mode==='prod'?get('admin_email_prod'):get('admin_email'),
+    admin_name:get('admin_name'),admin_password:get('admin_password'),
+    auto_admin_key:document.getElementById('auto-admin-key').checked,admin_key:get('admin_key'),
+    auto_jwt:document.getElementById('auto-jwt').checked,jwt_secret:get('jwt_secret'),
+    jwt_expires_sec:get('jwt_expires_sec'),admin_totp_secret:get('admin_totp_secret'),
+    tg_bot_token:get('tg_bot_token'),tg_bot_name:get('tg_bot_name'),
+    resend_api_key:get('resend_api_key'),email_from:get('email_from'),
+    cryptobot_token:get('cryptobot_token'),
+    google_client_id:get('google_client_id'),google_client_secret:get('google_client_secret'),google_callback_url:get('google_callback_url'),
+    ai_provider:document.getElementById('ai-provider').value,
+    anthropic_api_key:get('anthropic_api_key'),anthropic_model:get('anthropic_model'),anthropic_base_url:get('anthropic_base_url'),
+    groq_token:get('groq_token'),groq_token_2:get('groq_token_2'),groq_token_3:get('groq_token_3'),
+    groq_model:get('groq_model'),default_chat_id:get('default_chat_id'),
+    ollama_url:get('ollama_url'),ollama_model:get('ollama_model'),
+    install_esphome:document.getElementById('inst-esp').checked,esphome_pin:get('esphome_pin'),
+  };
+
+  steps=[];curStep=-1;errors=[];instStatus='running';
+  document.getElementById('inst-form').classList.add('hidden');
+  const logEl=document.getElementById('inst-log'); logEl.classList.remove('hidden');
+  document.getElementById('inst-errors').textContent=''; document.getElementById('inst-errors').classList.remove('show');
+  document.getElementById('inst-banner').className=''; document.getElementById('inst-banner').innerHTML='';
+  renderSteps(); setProgress(0); setLogStatus('running','ЗАПУСК...');
+
+  const base=getBase();
+  try{
+    const r=await fetch(base+'/api/install',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r.ok) throw new Error(await r.text());
+    const {jobId}=await r.json();
+    if(es){es.close();es=null}
+    es=new EventSource(base+'/api/install/'+jobId+'/events');
+    es.onmessage=ev=>{stripAnsi(ev.data).split('\n').forEach(processLine)};
+    es.addEventListener('done',()=>{es.close();es=null;finishAll(true);instStatus='done';setLogStatus('done','УСТАНОВКА ЗАВЕРШЕНА');showBanner(true)});
+    es.addEventListener('error_exit',()=>{es.close();es=null;finishAll(false);instStatus='failed';setLogStatus('failed','ОШИБКА УСТАНОВКИ');showBanner(false)});
+    es.onerror=()=>{es.close();es=null;finishAll(false);instStatus='failed';setLogStatus('failed','ОШИБКА СОЕДИНЕНИЯ');showBanner(false)};
+  }catch(err){
+    warn.textContent=err instanceof Error?err.message:'Ошибка запроса';
+    warn.classList.remove('hidden');
+    document.getElementById('inst-form').classList.remove('hidden');
+    logEl.classList.add('hidden');
+  }
+}
+</script>
+</body>
+</html>
