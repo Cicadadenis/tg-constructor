@@ -1391,6 +1391,10 @@ class Handler(BaseHTTPRequestHandler):
         return len(data) >= 3 and data[0] == 0x16 and data[1] == 0x03
 
     def _send_tls_on_http_hint(self) -> None:
+        # parse_request() не вызывался — log_request() требует requestline (Python 3.14+)
+        self.requestline = "- HTTPS/TLS on HTTP port -"
+        self.command = "-"
+        self.request_version = "HTTP/1.0"
         host = resolve_public_host() or "127.0.0.1"
         body = (
             f"Webinstall на этом порту — только HTTP (без SSL).\r\n\r\n"
