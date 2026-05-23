@@ -63,7 +63,7 @@
 | 👤 **Auth** | Email/пароль, Google OAuth, Telegram, JWT |
 | 🛡️ **Admin** | `/satana` — пользователи, боты, безопасность, логи |
 
-> Операционный гайд (порты, swap, webinstall API): **[READMI.md](READMI.md)**
+> Операционный гайд (порты, swap, webinstall API): **[READMI.md](READMI.md)** · **[readmi.txt](readmi.txt)**
 
 ---
 
@@ -272,7 +272,7 @@ http://IP_СЕРВЕРА:7700/
 | **Установка** | Форма или загрузка `.env` → `setup.sh --webinstall` (SSE-логи) |
 | **Файлы** | Просмотр/редактирование проекта (`.env` скрыт) |
 
-Переменные: `WEBINSTALL_PORT`, `WEBINSTALL_PUBLIC_URL`. Подробно: **[READMI.md](READMI.md)**.
+Переменные: `WEBINSTALL_PORT`, `WEBINSTALL_PUBLIC_URL`. Подробно: **[READMI.md](READMI.md)** / **[readmi.txt](readmi.txt)**.
 
 Установка без UI:
 
@@ -384,7 +384,8 @@ tg-constructor/
 ├── docker-compose.yml
 ├── env.example
 ├── README.md                 # этот файл
-└── READMI.md                 # operational guide
+├── READMI.md                 # operational guide (полный)
+└── readmi.txt                # operational guide (краткий .txt)
 ```
 
 ---
