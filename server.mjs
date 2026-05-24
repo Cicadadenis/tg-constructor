@@ -81,7 +81,6 @@ import { stripThinkingFromAiRaw } from './core/ai/llmOutput.js';
 import {
   AI_TARGET_CORE_EXACT,
   canonicalIrToEditorStacks,
-  extractAiCanonicalIrFromRaw,
   normalizeAiCanonicalIr,
   validateAiCanonicalIr,
 } from './core/ai/aiCanonicalIr.mjs';
@@ -98,9 +97,16 @@ import {
   applyIntentBudgetToIr,
   SEMANTIC_TEMPLATE_IDS,
   buildSemanticTemplateIr,
-  buildIntentPlanPromptContext,
   intentPlanner,
 } from './core/ai/intentPlanner.mjs';
+import {
+  BOT_INTENT_PLAN_VERSION,
+  buildBotIntentPlanPromptContext,
+  buildBotIntentPlanUserPrompt,
+  extractBotIntentPlanFromRaw,
+} from './core/ai/botIntentPlan.mjs';
+import { extractPartialBotIrFromLlmStream, buildIntentPlanLlmMessages } from './core/ai/intentPlanLlm.mjs';
+import { runSemanticAiPipeline, runTemplateGraphPipeline } from './core/ai/semanticAiPipeline.mjs';
 import {
   SEMANTIC_TEMPLATE_APPLIED_REASON,
   canRecoverWithSemanticTemplate,
@@ -6416,154 +6422,88 @@ async function callGroq(messages, options = {}) {
 
 // Статический разбор AI IR: structural validator + strict semantic gate + deterministic repair.
 
-const AI_SYSTEM_PROMPT = `Ты — проектировщик runtime-graph для Telegram-ботов Cicada Studio.
-Целевое ядро: cicada-studio ${AI_TARGET_CORE_EXACT} (runtime aiogram 3). Верни ТОЛЬКО валидный JSON Canonical AI IR: первый символ {, последний }. Без markdown и без текста до/после.
+const AI_INTENT_PLAN_SYSTEM_PROMPT = `Ты — семантический планировщик Telegram-ботов Cicada Studio.
+Целевое ядро: cicada-studio ${AI_TARGET_CORE_EXACT} (runtime aiogram 3).
+Верни ТОЛЬКО валидный JSON Bot Intent Plan: первый символ {, последний }. Без markdown и без текста до/после.
 
-═══ ЦЕПОЧКА КОМПИЛЯЦИИ (ты отвечаешь только за IR) ═══
-Твой JSON → сервер (normalize → semantic gate → repair) → граф блоков в редакторе → Python bot.py.
-Ты НЕ пишешь: DSL/.ccd, Python, массив editor stacks, координаты x/y, блок bot/token.
+═══ ЦЕПОЧКА КОМПИЛЯЦИИ (ты отвечаешь только за семантический план) ═══
+Твой Bot Intent Plan → Planner (сервер) → Bot IR → Compiler → executable graph → Python bot.py.
+Ты НЕ пишешь: Canonical AI IR, handlers/scenarios/actions, editor stacks, React Flow nodes/edges, координаты x/y, DSL, Python.
 
-═══ ЗАПРЕЩЁННЫЙ УСТАРЕВШИЙ ФОРМАТ ═══
-Никогда не возвращай массив stacks вида [{"id":"s0","x":40,"blocks":[{"type":"bot","props":{...}}]}].
-Это legacy-формат редактора; сервер ожидает один объект Canonical AI IR.
+═══ ЗАПРЕЩЁННЫЕ ФОРМАТЫ ═══
+Никогда не возвращай:
+- массив stacks [{"id":"s0","x":40,"blocks":[...]}]
+- Canonical AI IR с handlers/scenarios/uiStates/transitions
+- React Flow nodes или edges
+Это legacy; сервер ожидает только Bot Intent Plan.
 
 ═══ БРЕНДИНГ ИИ ═══
 Если в тексте сообщений бота нужно назвать ИИ, используй только название "Cicada 3301".
 Никогда не используй названия моделей/вендоров вроде "Meta Llama 3", "Llama", "Qwen", "OpenAI", "Groq".
 
-═══ CANONICAL AI IR (единственный выходной контракт) ═══
-ИИ строит runtime graph (handlers, scenarios, uiStates), а не визуальные stacks:
+═══ SEMANTIC BOT INTENT v${BOT_INTENT_PLAN_VERSION} (единственный выходной контракт) ═══
+Модель: entities + tasks + interactions. НЕ используй screens[], flows[], handlers, uiStates.
 {
-  "irVersion": 1,
-  "targetCore": "0.0.1",
-  "compatibilityMode": "0.0.1 exact",
-  "intent": {"primary": "..."},
-  "state": {"globals": []},
-  "handlers": [],
-  "blocks": [],
-  "scenarios": [],
-  "transitions": [],
-  "uiStates": []
+  "intentPlanVersion": ${BOT_INTENT_PLAN_VERSION},
+  "summary": "краткое описание бота",
+  "primaryGoal": "order_form | calculator | catalog | age_gate | ...",
+  "botType": "informational | calculator | commerce | support | ...",
+  "templateHint": "calculator | catalog | subscription | form_collection | menu_bot",
+  "capabilities": ["input_collection"],
+  "entities": [
+    {"id":"entity_menu","kind":"presentation","label":"Главное меню","attributes":["Оформить заказ"]},
+    {"id":"entity_user","kind":"person","label":"Пользователь","attributes":["имя","телефон"]}
+  ],
+  "tasks": [
+    {
+      "id":"task_order",
+      "goal":"оформление заказа",
+      "entityId":"entity_user",
+      "operations":[
+        {"kind":"present","entityId":"entity_menu"},
+        {"kind":"collect","field":"имя","prompt":"Введите имя:"},
+        {"kind":"collect","field":"телефон","prompt":"Введите телефон:"},
+        {"kind":"notify","text":"✅ Заказ принят: {имя}, {телефон}"},
+        {"kind":"end"}
+      ]
+    }
+  ],
+  "interactions": [
+    {"id":"ix_start","kind":"entry","trigger":{"type":"start"},"taskId":"task_order"},
+    {"id":"ix_order_btn","kind":"engage","trigger":{"type":"button","value":"Оформить заказ"},"taskId":"task_order"}
+  ],
+  "globals":[],
+  "constraints":{}
 }
 
-Поля action — на верхнем уровне объекта (text, rows, key, varname, file, target), без обёртки props.
-Сервер сам выполнит: Canonical IR → normalize → semantic gate → repair → граф блоков → Python (aiogram 3).
+Разрешённые operation.kind в tasks[]:
+  present, collect, notify, remember, persist, load, branch, send_file, delegate, end
 
-Разрешены ТОЛЬКО следующие handler.type:
-  start, command, callback, text
+Разрешённые interaction.trigger.type:
+  start, button, command, text
 
-Разрешены ТОЛЬКО следующие action.type:
-  message, buttons, inline_db, ask, remember, get, save, save_global, condition,
-  run_scenario, goto_command, goto_block, goto_scenario, goto, use_block, stop, send_file, ui_state
+branch в tasks: {"kind":"branch","expression":"возраст >= 18","ifTrue":[{"kind":"notify","text":"OK"},{"kind":"end"}],"ifFalse":[...]}
 
-Запрещено придумывать type вне списка (legacy callbacks, inline, http, pause, document, photo, media_received, append, insert, bot, start/message как отдельные блоки stacks и т.д.).
-Если нужна другая возможность — только эквивалент из whitelist ядра 0.0.1.
+Сервер: Semantic Intent → Capability Planner → Flow Graph → Bot IR → Compiler.
+Не описывай screens, flows, handlers, stacks, nodes — только семантику.
 
-Для записи в KV используй только save/save_global. Не придумывай append/insert/update_many: если нужно изменить список, сначала собери новое значение в remember, затем save/save_global.
-
-═══ АЛГОРИТМ ПОСТРОЕНИЯ ГРАФА (выполни мысленно, затем выведи только JSON) ═══
-
-Даже если пользователь написал коротко или расплывчато, НЕ расширяй граф сверх IntentPlan и complexity budget.
-Строй минимальный viable flow из IntentPlan: меньше handlers/scenarios лучше, чем сырой сложный IR.
-
-1) ИНТЕНТ — что делает бот, цель и точка входа: /start или первая reply-кнопка.
-2) СОСТОЯНИЯ — uiStates для экранов: text/message, buttons или inlineDb.
-3) HANDLERS — start, command, callback, text; callback.trigger может быть "" для общего inline-router «при нажатии:».
-4) ПЕРЕХОДЫ — через actions run_scenario/goto_command/goto_block/goto_scenario/use_block и дублируй важные связи в transitions.
-5) УСЛОВИЯ — action condition с then/else.
-6) ДАННЫЕ — любая {переменная} в message/condition объявлена выше ask/get/remember или это системная переменная из registry. get допустим только если сервер в режиме advanced и ключ get.key входит в разрешённый список. В safe-режиме get не используй — только remember/ask/save известных значений.
-
-Промежуточный план уже будет передан сервером. Не печатай его — только JSON Canonical IR.
-
-═══ IR SHAPES ═══
-
-handler:
-  {"id":"h_catalog","type":"callback","trigger":"📦 Каталог","actions":[...]}
-  {"id":"h_inline_router","type":"callback","trigger":"","actions":[...]}  // общий handler для inline callback
-  {"id":"h_catalog_cmd","type":"command","trigger":"/catalog","actions":[...]}
-
-block:
-  {"id":"b_menu","name":"главное_меню","actions":[...]}
-
-scenario:
-  {"id":"s_checkout","name":"оформление","steps":[{"id":"step_name","name":"имя","actions":[...]}]}
-
-uiState:
-  {"id":"ui_catalog","message":"📦 Категории:","buttons":"📦 Каталог, 🛒 Корзина"}
-  {"id":"ui_categories","message":"Выберите категорию","inlineDb":{"key":"категории","callbackPrefix":"cat:","backText":"⬅️ Назад","backCallback":"back","columns":"2"}}
-
-action examples:
-  {"type":"message","text":"..."}
-  {"type":"buttons","rows":"A, B\\nC"}
-  {"type":"inline_db","key":"категории","callbackPrefix":"cat:","backText":"⬅️ Назад","backCallback":"back","columns":"2"}
-  {"type":"condition","cond":"начинается_с(callback_data, \"cat:\")","then":[...],"else":[...]}
-  {"type":"run_scenario","target":"оформление"}
-  {"type":"goto_command","target":"/catalog"}
-  {"type":"goto_block","target":"главное_меню"}
-  {"type":"use_block","target":"главное_меню"}
-
-═══ АРХИТЕКТУРА ═══
-
-КНОПКИ + ОБРАБОТЧИКИ:
-  start handler показывает uiState/menu.
-  Reply buttons требуют отдельный callback handler с trigger == тексту кнопки.
-  Inline из БД требует общий callback handler trigger == "" и conditions по переменной callback_data.
-
-СЦЕНАРИЙ, НЕСКОЛЬКО ВОПРОСОВ:
-  start/callback → run(имя) БЕЗ stop | scenario(имя) → step → ask → step → ask → … → message/condition → stop
-  После ask всегда дай пользователю следующее message или кнопки.
-
-УСЛОВИЕ:
-  … → condition(cond) → message → else → message → stop
-
-═══ СТРОГИЕ ПРАВИЛА ═══
-
-1. Не указывай bot/token/editor coordinates — это сделает серверный generator.
-2. Не ставь stop сразу после run_scenario в том же handler.
-3. Для 2+ вопросов используй scenarios.steps, а handler только запускает scenario.
-4. Reply callback trigger совпадает с текстом в buttons.rows.
-5. Inline callback router: handler.type callback, trigger "".
-6. Используй только объявленные переменные и canonical system variables; не придумывай бд/callback/data/state.
-7. В ключе get.key при подстановке chat_id используй только корректные скобки: "поле_{chat_id}", не опечатывай }.
-
-═══ ПЕРЕМЕННЫЕ ═══
-
-Объявление: ask (varname), get (varname), remember (varname).
-Системные без объявления: пользователь, текст, callback_data, chat_id, user_id (и другие из registry в контексте).
-
-ЗАПРЕЩЕНО ссылаться на {переменная} в message/condition/send_file.file, если она не объявлена выше в этом handler/scenario/step и не системная.
-
-═══ ФАЙЛ ОТ ПОЛЬЗОВАТЕЛЯ (без медиа-триггеров) ═══
-
-В whitelist нет document_received — принимай файл только через ask в сценарии: пользователь может прислать документ, бот кладёт Telegram file_id в переменную varname.
-Пример приёма: step → ask("Пришлите файл", varname:"файл") → message("Принято. File ID: {файл}") → stop
-Не используй {файл_id} — только имя из varname (например {файл}).
-
-ВЫДАТЬ ФАЙЛ ОБРАТНО (хранилище, «скачать», по введённому File ID):
-- После ask, где пользователь вставил или прислал идентификатор, в переменной лежит строка file_id.
-- Обязателен action send_file: {"type":"send_file","file":"{имя_переменной_из_ask}"}
-- Можно краткий message перед send_file (например «📥 Ваш файл:»), затем send_file — пользователь получит вложение-документ, а не текст с id.
-- ЗАПРЕЩЕНО выдавать file_id только через message — это не отправит файл в Telegram.
+═══ СЕМАНТИЧЕСКИЕ ПРАВИЛА ═══
+1. entities[] — сущности (person, record, catalog, presentation), не экраны UI.
+2. tasks[] — цели с operations[] (что собрать/сообщить/сохранить).
+3. interactions[] — как пользователь запускает task (entry/engage/branch).
+4. capabilities[] — опционально; сервер дополнит зависимости автоматически.
+5. Переменные в notify.text только из field предыдущих collect/remember.
 `;
 
-// Few-shot — только Canonical AI IR (ядро 0.0.1)
-const IR_FEW_SHOT_USER = `бот принимает заказы: главное меню с кнопкой "Оформить заказ", сценарий спрашивает имя и телефон`;
-const IR_FEW_SHOT_ASSISTANT = `{"irVersion":1,"targetCore":"0.0.1","compatibilityMode":"0.0.1 exact","intent":{"primary":"order_form"},"state":{"globals":[]},"uiStates":[{"id":"ui_start","message":"Добро пожаловать! Выберите действие:","buttons":"Оформить заказ, ℹ️ О нас"}],"handlers":[{"id":"h_start","type":"start","trigger":"","actions":[{"type":"ui_state","uiStateId":"ui_start"},{"type":"stop"}]},{"id":"h_order","type":"callback","trigger":"Оформить заказ","actions":[{"type":"message","text":"Отлично! Заполним данные для заказа."},{"type":"run_scenario","target":"оформление"}]},{"id":"h_about","type":"callback","trigger":"ℹ️ О нас","actions":[{"type":"message","text":"Мы — магазин на Cicada Studio."},{"type":"stop"}]}],"blocks":[],"scenarios":[{"id":"sc_order","name":"оформление","steps":[{"id":"step_name","name":"имя","actions":[{"type":"ask","question":"Введите ваше имя:","varname":"имя"}]},{"id":"step_phone","name":"телефон","actions":[{"type":"ask","question":"Введите ваш телефон:","varname":"телефон"},{"type":"message","text":"✅ Заказ принят! Имя: {имя}, телефон: {телефон}"},{"type":"stop"}]}]}],"transitions":[{"from":"h_order","to":"sc_order","type":"run_scenario"}]}`;
+// Few-shot — только Bot Intent Plan
+const INTENT_PLAN_FEW_SHOT_USER = `бот принимает заказы: главное меню с кнопкой "Оформить заказ", сценарий спрашивает имя и телефон`;
+const INTENT_PLAN_FEW_SHOT_ASSISTANT = `{"intentPlanVersion":2,"summary":"Приём заказов","primaryGoal":"order_form","botType":"commerce","templateHint":"form_collection","entities":[{"id":"entity_menu","kind":"presentation","label":"Меню","attributes":["Оформить заказ"]},{"id":"entity_user","kind":"person","attributes":["имя","телефон"]}],"tasks":[{"id":"task_order","goal":"оформление","entityId":"entity_user","operations":[{"kind":"present","entityId":"entity_menu"},{"kind":"collect","field":"имя","prompt":"Введите имя:"},{"kind":"collect","field":"телефон","prompt":"Введите телефон:"},{"kind":"notify","text":"✅ Заказ: {имя}, {телефон}"},{"kind":"end"}]}],"interactions":[{"id":"ix_start","kind":"entry","trigger":{"type":"start"},"taskId":"task_order"},{"id":"ix_btn","kind":"engage","trigger":{"type":"button","value":"Оформить заказ"},"taskId":"task_order"}],"globals":[],"constraints":{}}`;
 
-const IR_FEW_SHOT_USER_2 = `магазин: категории и товары через inline-кнопки из БД`;
-const IR_FEW_SHOT_ASSISTANT_2 = `{"irVersion":1,"targetCore":"0.0.1","compatibilityMode":"0.0.1 exact","intent":{"primary":"db_inline_catalog"},"state":{"globals":[{"name":"категории","value":"[\\"Пицца\\", \\"Напитки\\"]"}]},"uiStates":[{"id":"ui_menu","message":"🏠 Главное меню","buttons":"📦 Каталог"},{"id":"ui_categories","message":"📦 Выберите категорию:","inlineDb":{"key":"категории","callbackPrefix":"cat:","backText":"⬅️ Назад","backCallback":"back","columns":"2"}}],"handlers":[{"id":"h_start","type":"start","trigger":"","actions":[{"type":"ui_state","uiStateId":"ui_menu"},{"type":"stop"}]},{"id":"h_catalog","type":"callback","trigger":"📦 Каталог","actions":[{"type":"ui_state","uiStateId":"ui_categories"},{"type":"stop"}]},{"id":"h_inline","type":"callback","trigger":"","actions":[{"type":"condition","cond":"начинается_с(callback_data, \\"cat:\\")","then":[{"type":"remember","varname":"категория","value":"срез(callback_data, 4)"},{"type":"message","text":"Товары категории: {категория}"},{"type":"inline_db","key":"товары","callbackPrefix":"prod:","backText":"⬅️ Категории","backCallback":"back_categories","columns":"1"},{"type":"stop"}],"else":[{"type":"condition","cond":"начинается_с(callback_data, \\"prod:\\")","then":[{"type":"remember","varname":"товар","value":"срез(callback_data, 5)"},{"type":"message","text":"📦 Товар: {товар}\\nЦена и описание берутся из БД."},{"type":"stop"}],"else":[{"type":"ui_state","uiStateId":"ui_categories"},{"type":"stop"}]}]}]}],"blocks":[],"scenarios":[],"transitions":[{"from":"h_catalog","to":"ui_categories","type":"ui_state"},{"from":"h_inline","to":"ui_categories","type":"inline_router"}]}`;
+const INTENT_PLAN_FEW_SHOT_USER_2 = `бот калькулятор: две кнопки посчитать`;
+const INTENT_PLAN_FEW_SHOT_ASSISTANT_2 = `{"intentPlanVersion":2,"summary":"Калькулятор","primaryGoal":"calculator","botType":"calculator","templateHint":"calculator","entities":[{"id":"entity_calc","kind":"presentation","label":"Калькулятор","attributes":["Посчитать"]}],"tasks":[{"id":"task_calc","goal":"расчет","operations":[{"kind":"collect","field":"число1","prompt":"Первое число:"},{"kind":"collect","field":"число2","prompt":"Второе число:"},{"kind":"notify","text":"Сумма: {число1} + {число2}"},{"kind":"end"}]}],"interactions":[{"id":"ix_calc","kind":"engage","trigger":{"type":"button","value":"Посчитать"},"taskId":"task_calc"}],"globals":[],"constraints":{}}`;
 
-const IR_FEW_SHOT_USER_3 = `создай бот телеграм прием заявок с бд и статусом`;
-const IR_FEW_SHOT_ASSISTANT_3 = `{"irVersion":1,"targetCore":"0.0.1","compatibilityMode":"0.0.1 exact","intent":{"primary":"request_intake_with_status"},"state":{"globals":[]},"uiStates":[{"id":"ui_start","message":"👋 Добро пожаловать! Здесь вы можете оставить заявку и проверить её статус.","buttons":"📝 Оставить заявку, 📊 Статус заявки"}],"handlers":[{"id":"h_start","type":"start","trigger":"","actions":[{"type":"ui_state","uiStateId":"ui_start"},{"type":"stop"}]},{"id":"h_new_request","type":"callback","trigger":"📝 Оставить заявку","actions":[{"type":"message","text":"Заполните заявку — я сохраню её в базе."},{"type":"run_scenario","target":"прием_заявки"}]},{"id":"h_status","type":"callback","trigger":"📊 Статус заявки","actions":[{"type":"get","key":"заявка_{user_id}","varname":"заявка"},{"type":"message","text":"📌 Статус вашей последней заявки:\n{заявка}\n\nЕсли данных нет — сначала оставьте заявку."},{"type":"stop"}]}],"blocks":[],"scenarios":[{"id":"sc_request","name":"прием_заявки","steps":[{"id":"step_name","name":"имя","actions":[{"type":"ask","question":"Как вас зовут?","varname":"имя"}]},{"id":"step_contact","name":"контакт","actions":[{"type":"ask","question":"Оставьте телефон или @username:","varname":"контакт"}]},{"id":"step_text","name":"описание","actions":[{"type":"ask","question":"Опишите заявку:","varname":"описание"},{"type":"remember","varname":"статус","value":"новая"},{"type":"save_global","key":"заявка_{user_id}","value":"№ {user_id} | Имя: {имя} | Контакт: {контакт} | Заявка: {описание} | Статус: {статус}"},{"type":"message","text":"✅ Заявка сохранена в базе.\nНомер: {user_id}\nСтатус: {статус}.\nПроверить позже можно кнопкой «📊 Статус заявки»."},{"type":"stop"}]}]}],"transitions":[{"from":"h_new_request","to":"sc_request","type":"run_scenario"},{"from":"h_status","to":"заявка_{user_id}","type":"get_status"}]}`;
-
-const IR_FEW_SHOT_USER_4 = `бот с условием: спрашивает возраст, если >= 18 пускает, иначе отказывает`;
-const IR_FEW_SHOT_ASSISTANT_4 = `{"irVersion":1,"targetCore":"0.0.1","compatibilityMode":"0.0.1 exact","intent":{"primary":"age_gate"},"state":{"globals":[]},"uiStates":[],"handlers":[{"id":"h_start","type":"start","trigger":"","actions":[{"type":"message","text":"Привет! Нужно проверить ваш возраст."},{"type":"run_scenario","target":"проверка_возраста"}]}],"blocks":[],"scenarios":[{"id":"sc_age","name":"проверка_возраста","steps":[{"id":"step_ask","name":"ввод","actions":[{"type":"ask","question":"Сколько вам лет?","varname":"возраст"},{"type":"condition","cond":"возраст >= 18","then":[{"type":"message","text":"✅ Добро пожаловать! Контент доступен."},{"type":"stop"}],"else":[{"type":"message","text":"❌ Доступ разрешён только с 18 лет."},{"type":"stop"}]}]}]}],"transitions":[{"from":"h_start","to":"sc_age","type":"run_scenario"}]}`;
-
-const IR_FEW_SHOT_USER_5 = `бот-хранилище: загрузить файл и выдать по File ID через send_file`;
-const IR_FEW_SHOT_ASSISTANT_5 = `{"irVersion":1,"targetCore":"0.0.1","compatibilityMode":"0.0.1 exact","intent":{"primary":"file_storage"},"state":{"globals":[]},"uiStates":[{"id":"ui_menu","message":"📁 Принимаю файл и отдам по File ID.","buttons":"📤 Загрузить, 📥 Получить"}],"handlers":[{"id":"h_start","type":"start","trigger":"","actions":[{"type":"ui_state","uiStateId":"ui_menu"},{"type":"stop"}]},{"id":"h_upload","type":"callback","trigger":"📤 Загрузить","actions":[{"type":"run_scenario","target":"загрузка"}]},{"id":"h_download","type":"callback","trigger":"📥 Получить","actions":[{"type":"run_scenario","target":"выдача"}]}],"blocks":[],"scenarios":[{"id":"sc_upload","name":"загрузка","steps":[{"id":"step_file","name":"файл","actions":[{"type":"ask","question":"Пришлите файл:","varname":"файл"},{"type":"message","text":"✅ Сохранено. File ID:\\n{файл}"},{"type":"stop"}]}]},{"id":"sc_download","name":"выдача","steps":[{"id":"step_id","name":"запрос","actions":[{"type":"ask","question":"Введите File ID:","varname":"сохранённый_файл"},{"type":"message","text":"📥 Ваш файл:"},{"type":"send_file","file":"{сохранённый_файл}"},{"type":"stop"}]}]}],"transitions":[{"from":"h_upload","to":"sc_upload","type":"run_scenario"},{"from":"h_download","to":"sc_download","type":"run_scenario"}]}`;
-
-const IR_FEW_SHOT_USER_6 = `кнопка «Город»: спросить город, remember город_label = «Город: {город}», ответить {город_label}`;
-const IR_FEW_SHOT_ASSISTANT_6 = `{"irVersion":1,"targetCore":"0.0.1","compatibilityMode":"0.0.1 exact","intent":{"primary":"city_remember"},"state":{"globals":[]},"uiStates":[{"id":"ui_start","message":"Выберите действие","buttons":"🌍 Указать город"}],"handlers":[{"id":"h_start","type":"start","trigger":"","actions":[{"type":"ui_state","uiStateId":"ui_start"},{"type":"stop"}]},{"id":"h_city","type":"callback","trigger":"🌍 Указать город","actions":[{"type":"run_scenario","target":"город_fsm"}]}],"blocks":[],"scenarios":[{"id":"sc_city","name":"город_fsm","steps":[{"id":"step_input","name":"ввод","actions":[{"type":"ask","question":"В каком вы городе?","varname":"город"},{"type":"remember","varname":"город_label","value":"Город: {город}"},{"type":"message","text":"Запомнил: {город_label}"},{"type":"stop"}]}]}],"transitions":[{"from":"h_city","to":"sc_city","type":"run_scenario"}]}`;
+const INTENT_PLAN_FEW_SHOT_USER_3 = `бот с условием: спрашивает возраст, если >= 18 пускает`;
+const INTENT_PLAN_FEW_SHOT_ASSISTANT_3 = `{"intentPlanVersion":2,"summary":"Проверка возраста","primaryGoal":"age_gate","entities":[{"id":"entity_user","kind":"person","attributes":["возраст"]}],"tasks":[{"id":"task_age","goal":"проверка_возраста","entityId":"entity_user","operations":[{"kind":"collect","field":"возраст","prompt":"Сколько вам лет?"},{"kind":"branch","expression":"возраст >= 18","ifTrue":[{"kind":"notify","text":"✅ Добро пожаловать!"},{"kind":"end"}],"ifFalse":[{"kind":"notify","text":"❌ Доступ только с 18 лет."},{"kind":"end"}]}]}],"interactions":[{"id":"ix_start","kind":"entry","trigger":{"type":"start"},"taskId":"task_age"}],"globals":[],"constraints":{}}`;
 
 function serverAiAstPolicyAppendix(astMode, allowedMemoryKeys) {
   const lines = [
@@ -6604,7 +6544,7 @@ function buildAiCoreContextAppendix() {
     '',
     '═══ КОНТЕКСТ ЯДРА cicada-studio 0.0.1 (источник истины) ═══',
     'Сверяйся с манифестами. Если пользователь просит неподдерживаемое — смоделируй через whitelist или опусти.',
-    'AI выдаёт только Canonical IR; runtime — aiogram 3 через compileCore.',
+    'AI выдаёт только Bot Intent Plan; Planner/Compiler строят Bot IR и executable graph; runtime — aiogram 3.',
     '',
     'api-manifest.json:',
     apiManifest || '(отсутствует)',
@@ -6617,28 +6557,16 @@ function buildAiCoreContextAppendix() {
   ].join('\n');
 }
 
-function buildIntentPlannedUserPrompt(prompt, intentPlan) {
+function buildIntentPlanRepairUserPrompt(errors, planJsonSnippet) {
   return [
-    'Создай Canonical AI IR строго по IntentPlan и MinimalExecutionGraph ниже.',
-    'Если исходный prompt просит больше, чем budget, сгенерируй minimal viable flow и НЕ добавляй extra handlers/scenarios.',
-    '',
-    'Original prompt:',
-    prompt,
-    '',
-    'IntentPlan:',
-    JSON.stringify(intentPlan, null, 2),
-  ].join('\n');
-}
-
-function buildIrRepairUserPrompt(errors, irJsonSnippet) {
-  return [
-    'Предыдущий ответ НЕ прошёл проверку Canonical AI IR / core parity. Исправь ТОЛЬКО JSON-объект IR.',
+    'Предыдущий ответ НЕ прошёл проверку Bot Intent Plan. Исправь ТОЛЬКО JSON Bot Intent Plan.',
+    'Запрещено: Canonical IR, handlers, scenarios, stacks, React Flow nodes.',
     '',
     'Ошибки:',
     ...errors.slice(0, 20).map((e, i) => `${i + 1}. ${e}`),
     '',
-    'Текущий IR для правки (сохрани handlers/blocks/scenarios где возможно):',
-    irJsonSnippet,
+    'Текущий план для правки:',
+    planJsonSnippet,
     '',
     'Вернёшь один JSON-объект {...} без markdown и без текста до/после.',
   ].join('\n');
@@ -6646,7 +6574,8 @@ function buildIrRepairUserPrompt(errors, irJsonSnippet) {
 
 function buildNonJsonRepairPrompt() {
   return (
-    'Ответ должен быть ОДНИМ JSON-объектом Canonical AI IR: с символа { до }. Без ```, без пояснений. Повтори попытку.'
+    'Ответ должен быть ОДНИМ JSON Bot Intent Plan (intentPlanVersion: 1): с символа { до }. ' +
+    'Без stacks, handlers, Canonical IR, nodes/edges. Повтори попытку.'
   );
 }
 
@@ -7261,22 +7190,12 @@ function completePartialJsonObject(raw) {
   return out;
 }
 
-function extractPrimaryPartialIrFromRaw(raw) {
-  const extracted = extractAiCanonicalIrFromRaw(raw);
-  if (extracted?.ir) return normalizeAiCanonicalIr(extracted.ir);
-  const completed = completePartialJsonObject(raw);
-  const parsed = parseJsonObjectLoose(completed);
-  if (!parsed) return null;
-  const unwrapped = parsed.ir || parsed.canonicalIr || parsed.runtimeGraph || parsed.result || parsed;
-  if (!unwrapped || typeof unwrapped !== 'object' || Array.isArray(unwrapped)) return null;
-  if (!Array.isArray(unwrapped.handlers) && !Array.isArray(unwrapped.blocks) && !Array.isArray(unwrapped.scenarios)) {
-    return null;
-  }
-  return normalizeAiCanonicalIr(unwrapped);
+function extractPrimaryPartialIrFromRaw(raw, deterministicPlan = null) {
+  return extractPartialBotIrFromLlmStream(raw, deterministicPlan);
 }
 
-function buildPrimaryPartialIrArtifact(raw, { source = AI_EXECUTION_MODE.AI_PRIMARY } = {}) {
-  const ir = extractPrimaryPartialIrFromRaw(raw);
+function buildPrimaryPartialIrArtifact(raw, { source = AI_EXECUTION_MODE.AI_PRIMARY, deterministicPlan = null } = {}) {
+  const ir = extractPrimaryPartialIrFromRaw(raw, deterministicPlan);
   if (!ir) return null;
   return {
     ir,
@@ -7292,6 +7211,7 @@ async function callAiPrimaryWithPartialSnapshots(messages, {
   max_tokens,
   temperature,
   onPartialIrArtifact,
+  deterministicPlan = null,
 }) {
   const controller = new AbortController();
   const remaining = aiTimeRemainingMs(attemptDeadline);
@@ -7301,7 +7221,10 @@ async function callAiPrimaryWithPartialSnapshots(messages, {
   let lastSnapshotKey = '';
 
   const persistSnapshot = () => {
-    const artifact = buildPrimaryPartialIrArtifact(rawSoFar, { source: AI_EXECUTION_MODE.AI_PRIMARY });
+    const artifact = buildPrimaryPartialIrArtifact(rawSoFar, {
+      source: AI_EXECUTION_MODE.AI_PRIMARY,
+      deterministicPlan,
+    });
     if (!artifact) return;
     const key = `${artifact.byteSize}:${artifact.completeness}:${jsonByteSize(artifact.ir.handlers)}:${jsonByteSize(artifact.ir.scenarios)}`;
     if (key === lastSnapshotKey) return;
@@ -8093,17 +8016,34 @@ function buildDeterministicSemanticTemplateResponse({
   sourceRepairActions = [],
   isRecovery = false,
 }) {
-  const budgetedTemplateIr = applyIntentBudgetToIr(
-    buildSemanticTemplateIr(intentPlan, { prompt }),
-    intentPlan,
-  ).ir;
-  const templateResolution = resolveFeatureDependencies(budgetedTemplateIr, {
-    intentPlan,
+  const templatePipeline = runTemplateGraphPipeline(intentPlan, {
+    prompt,
     astMode,
     allowedMemoryKeys,
   });
-  const templateIr = templateResolution.ir;
-  const templateStacks = canonicalIrToEditorStacks(templateIr);
+  if (!templatePipeline.ok) {
+    return buildAiGenerationResult({
+      status: AI_GENERATE_STATUS.FAILED,
+      reason: 'TEMPLATE_PIPELINE_FAILED',
+      canonicalIr: templatePipeline.canonicalIr,
+      diagnostics: [
+        ...filterTemplateRecoveryDiagnostics(sourceDiagnostics),
+        ...asArray(templatePipeline.diagnostics),
+      ],
+      repairActions: [...asArray(sourceRepairActions), ...asArray(templatePipeline.repairActions)],
+      meta: responseMeta({ ...(meta || {}), ...extraMeta, semanticTemplate: intentPlan.knownCapabilityTemplate }),
+      final: true,
+      safeToRun: false,
+      executionMode: AI_EXECUTION_MODE.SEMANTIC_TEMPLATE,
+    });
+  }
+  const templateIr = templatePipeline.canonicalIr;
+  const templateStacks = templatePipeline.stacks;
+  const templateResolution = {
+    diagnostics: templatePipeline.diagnostics,
+    repairActions: templatePipeline.repairActions,
+    changed: templatePipeline.repairActions.length > 0,
+  };
   const templateId = intentPlan.knownCapabilityTemplate;
   const filteredSourceDiagnostics = filterTemplateRecoveryDiagnostics(sourceDiagnostics);
   const diagnostics = [
@@ -8119,7 +8059,9 @@ function buildDeterministicSemanticTemplateResponse({
     ...aiArray(sourceRepairActions).filter((action) => (
       !/PRUNER:|no source IR artifact/i.test(String(action || ''))
     )),
-    ...templateResolution.repairActions.map((action) => `FDR: ${action}`),
+    ...aiArray(templatePipeline.repairActions).map((action) => (
+      String(action).startsWith('FDR:') ? action : `FDR: ${action}`
+    )),
     `Шаблон: ${templateId}`,
   ].slice(0, AI_PARTIAL_DIAGNOSTIC_LIMIT);
   return buildAiGenerationResult({
@@ -8510,10 +8452,9 @@ app.post('/api/ai-generate', requireUserAuth, aiGenerateRateLimit, async (req, r
     ...aiArray(items),
   ].slice(0, AI_PARTIAL_DIAGNOSTIC_LIMIT);
   const systemContent =
-    AI_SYSTEM_PROMPT +
+    AI_INTENT_PLAN_SYSTEM_PROMPT +
     buildAiCoreContextAppendix() +
-    buildIrSymbolRegistryPromptContext({ allowedMemoryKeys }) +
-    buildIntentPlanPromptContext(intentPlan) +
+    buildBotIntentPlanPromptContext(intentPlan) +
     serverAiAstPolicyAppendix(astMode, allowedMemoryKeys);
   const responseMeta = (extra = {}) => ({
     attempts: lastAttempt,
@@ -8555,22 +8496,18 @@ app.post('/api/ai-generate', requireUserAuth, aiGenerateRateLimit, async (req, r
   try {
     const maxAttempts = Math.min(AI_LLM_MAX_ATTEMPTS, AI_RETRY_BUDGET[AI_EXECUTION_MODE.AI_PRIMARY]);
 
-    const initialMessages = [
-      { role: 'system', content: systemContent },
-      { role: 'user', content: IR_FEW_SHOT_USER },
-      { role: 'assistant', content: IR_FEW_SHOT_ASSISTANT },
-      { role: 'user', content: IR_FEW_SHOT_USER_2 },
-      { role: 'assistant', content: IR_FEW_SHOT_ASSISTANT_2 },
-      { role: 'user', content: IR_FEW_SHOT_USER_3 },
-      { role: 'assistant', content: IR_FEW_SHOT_ASSISTANT_3 },
-      { role: 'user', content: IR_FEW_SHOT_USER_4 },
-      { role: 'assistant', content: IR_FEW_SHOT_ASSISTANT_4 },
-      { role: 'user', content: IR_FEW_SHOT_USER_5 },
-      { role: 'assistant', content: IR_FEW_SHOT_ASSISTANT_5 },
-      { role: 'user', content: IR_FEW_SHOT_USER_6 },
-      { role: 'assistant', content: IR_FEW_SHOT_ASSISTANT_6 },
-      { role: 'user', content: buildIntentPlannedUserPrompt(promptText, intentPlan) },
-    ];
+    const initialMessages = buildIntentPlanLlmMessages({
+      systemPrompt: AI_INTENT_PLAN_SYSTEM_PROMPT,
+      coreAppendix: buildAiCoreContextAppendix(),
+      intentPlanContext: buildBotIntentPlanPromptContext(intentPlan),
+      astPolicyAppendix: serverAiAstPolicyAppendix(astMode, allowedMemoryKeys),
+      userPrompt: buildBotIntentPlanUserPrompt(promptText, intentPlan),
+      fewShots: [
+        { user: INTENT_PLAN_FEW_SHOT_USER, assistant: INTENT_PLAN_FEW_SHOT_ASSISTANT },
+        { user: INTENT_PLAN_FEW_SHOT_USER_2, assistant: INTENT_PLAN_FEW_SHOT_ASSISTANT_2 },
+        { user: INTENT_PLAN_FEW_SHOT_USER_3, assistant: INTENT_PLAN_FEW_SHOT_ASSISTANT_3 },
+      ],
+    });
 
     const messages = [...initialMessages];
     let stacks = null;
@@ -8591,6 +8528,7 @@ app.post('/api/ai-generate', requireUserAuth, aiGenerateRateLimit, async (req, r
           max_tokens: 4000,
           temperature: 0.25,
           onPartialIrArtifact: persistLatestPrimaryPartialIrArtifact,
+          deterministicPlan: intentPlan,
         })
         : await withAiDeadline(
           callGroq(messages, {
@@ -8609,9 +8547,12 @@ app.post('/api/ai-generate', requireUserAuth, aiGenerateRateLimit, async (req, r
         lastRaw.slice(0, 300),
       );
 
-      const extracted = extractAiCanonicalIrFromRaw(lastRaw);
-      if (!extracted) {
-        lastDiagnostics = withIntentDiagnostics([{ code: 'IR_EXTRACTION_FAILED', message: 'AI response did not contain Canonical IR JSON' }]);
+      const extractedPlan = extractBotIntentPlanFromRaw(lastRaw);
+      if (!extractedPlan) {
+        lastDiagnostics = withIntentDiagnostics([{
+          code: 'INTENT_PLAN_EXTRACTION_FAILED',
+          message: 'AI response did not contain Bot Intent Plan JSON (no stacks/handlers/Canonical IR)',
+        }]);
         if (
           attempt < maxAttempts - 1 &&
           hasRetryBudget(AI_EXECUTION_MODE.AI_PARTIAL, attempt) &&
@@ -8622,189 +8563,83 @@ app.post('/api/ai-generate', requireUserAuth, aiGenerateRateLimit, async (req, r
           continue;
         }
         const cleaned = stripThinkingFromAiRaw(lastRaw);
-        console.error('AI вернул не Canonical IR после очистки:', cleaned.slice(0, 400));
+        console.error('AI вернул не Bot Intent Plan после очистки:', cleaned.slice(0, 400));
         return res.json(await buildAiRecoveryOrFallbackResponse({
-          errorCode: 'IR_EXTRACTION_FAILED',
+          errorCode: 'INTENT_PLAN_EXTRACTION_FAILED',
           canonicalIr: lastIrSnapshot,
           diagnostics: lastDiagnostics,
           repairActions: lastRepairActions,
-          meta: responseMeta(),
+          meta: responseMeta({ pipeline: 'SEMANTIC_AI' }),
           prompt: prompt.trim(),
           systemContent,
           astMode,
           allowedMemoryKeys,
           responseMeta,
+          intentPlan,
           sourceStage: attemptMode,
         }));
       }
 
-      let candidate = normalizeAiCanonicalIr(extracted.ir);
-      const budgeted = applyIntentBudgetToIr(candidate, intentPlan);
-      candidate = budgeted.ir;
-      if (budgeted.changed) {
-        const complexityDiagnostic = {
-          code: 'COMPLEXITY_REDUCED',
-          severity: 'info',
-          message:
-            `IR reduced to ${intentPlan.complexityScore} complexity budget: ${budgeted.notes.join('; ') || 'budget enforced'}.`,
-          details: {
-            complexityScore: intentPlan.complexityScore,
-            budget: intentPlan.budget,
-            notes: budgeted.notes,
-          },
-        };
-        intentPipelineDiagnostics = [...intentDiagnostics, complexityDiagnostic];
-        lastRepairActions = [
-          ...lastRepairActions,
-          ...budgeted.notes.map((note) => `INTENT_PLAN: ${note}`),
-        ];
-      }
-      const intentRepair = repairIntentSatisfaction(candidate, {
+      const semanticResult = runSemanticAiPipeline(extractedPlan.plan, intentPlan, {
         prompt: promptText,
-        intentPlan,
-      });
-      if (intentRepair.changed) {
-        candidate = applyIntentBudgetToIr(intentRepair.ir, intentPlan).ir;
-        intentPipelineDiagnostics = [
-          ...intentPipelineDiagnostics,
-          ...intentRepair.diagnostics,
-        ].slice(0, AI_PARTIAL_DIAGNOSTIC_LIMIT);
-        lastRepairActions = [
-          ...lastRepairActions,
-          ...intentRepair.repairNotes,
-        ];
-      }
-      const featureResolution = resolveFeatureDependencies(candidate, {
-        intentPlan,
-        astMode,
-        allowedMemoryKeys,
-      });
-      candidate = featureResolution.ir;
-      if (featureResolution.diagnostics.length) {
-        intentPipelineDiagnostics = [
-          ...intentPipelineDiagnostics,
-          ...featureResolution.diagnostics,
-        ].slice(0, AI_PARTIAL_DIAGNOSTIC_LIMIT);
-      }
-      if (featureResolution.changed) {
-        lastRepairActions = [
-          ...lastRepairActions,
-          ...featureResolution.repairActions.map((action) => `FDR: ${action}`),
-        ];
-      }
-      lastIrSnapshot = candidate;
-      if (!candidate || typeof candidate !== 'object') {
-        lastAstErrors = ['Ожидался JSON-объект Canonical AI IR'];
-        lastDiagnostics = withIntentDiagnostics(lastAstErrors.map((message) => ({ code: 'IR_STRUCTURE_ERROR', message })));
-        if (
-          attempt < maxAttempts - 1 &&
-          hasRetryBudget(AI_EXECUTION_MODE.AI_PARTIAL, attempt) &&
-          canUseNonPrimaryLlm(lastIrSnapshot, lastDiagnostics)
-        ) {
-          messages.push({ role: 'assistant', content: lastRaw.slice(0, 12000) });
-          messages.push({ role: 'user', content: buildIrRepairUserPrompt(lastAstErrors, '{}') });
-          continue;
-        }
-        return res.json(await buildAiRecoveryOrFallbackResponse({
-          errorCode: 'IR_INVALID',
-          canonicalIr: lastIrSnapshot,
-          diagnostics: lastDiagnostics,
-          repairActions: lastRepairActions,
-          meta: responseMeta(),
-          prompt: prompt.trim(),
-          systemContent,
-          astMode,
-          allowedMemoryKeys,
-          responseMeta,
-          sourceStage: attemptMode,
-        }));
-      }
-
-      const structuralValidation = validateAiCanonicalIr(candidate, { astMode, allowedMemoryKeys });
-      lastAstErrors = structuralValidation.errors;
-      lastDiagnostics = withIntentDiagnostics(lastAstErrors.map((message) => ({ code: 'IR_STRUCTURE_ERROR', message })));
-      if (lastAstErrors.length > 0) {
-        console.error('[AI] Canonical IR structure:', lastAstErrors.join(' | '));
-        if (
-          attempt < maxAttempts - 1 &&
-          hasRetryBudget(AI_EXECUTION_MODE.AI_PARTIAL, attempt) &&
-          canUseNonPrimaryLlm(candidate, lastDiagnostics)
-        ) {
-          messages.push({ role: 'assistant', content: lastRaw.slice(0, 12000) });
-          messages.push({
-            role: 'user',
-            content: buildIrRepairUserPrompt(lastAstErrors, JSON.stringify(candidate).slice(0, 14000)),
-          });
-          continue;
-        }
-        return res.json(await buildAiRecoveryOrFallbackResponse({
-          errorCode: 'IR_INVALID',
-          canonicalIr: lastIrSnapshot,
-          diagnostics: lastDiagnostics,
-          repairActions: lastRepairActions,
-          meta: responseMeta(),
-          prompt: prompt.trim(),
-          systemContent,
-          astMode,
-          allowedMemoryKeys,
-          responseMeta,
-          sourceStage: attemptMode,
-        }));
-      }
-
-      lastValidIrSnapshot = candidate;
-      const repaired = runDeterministicIrRepairLoop(candidate, {
         astMode,
         allowedMemoryKeys,
         deadline: attemptDeadline,
         maxRepairPasses: AI_IR_REPAIR_MAX_PASSES,
       });
-      lastIrSnapshot = repaired.ir;
-      lastDiagnostics = withIntentDiagnostics(repaired.validation?.diagnostics || []);
-      lastRepairActions = [...lastRepairActions, ...repaired.repairNotes];
-      if (!repaired.ok) {
-        const semanticErrors = irDiagnosticMessages(repaired.validation.diagnostics);
-        console.error('[AI] IR semantic gate:', semanticErrors.join(' | '));
+      intentPipelineDiagnostics = [
+        ...intentPipelineDiagnostics,
+        ...aiArray(semanticResult.diagnostics),
+      ].slice(0, AI_PARTIAL_DIAGNOSTIC_LIMIT);
+      lastRepairActions = [
+        ...lastRepairActions,
+        ...aiArray(semanticResult.repairActions),
+        `PIPELINE: ${semanticResult.pipeline}`,
+      ];
+      lastIrSnapshot = semanticResult.canonicalIr;
+      if (semanticResult.canonicalIr) lastValidIrSnapshot = semanticResult.canonicalIr;
+
+      if (!semanticResult.ok) {
+        lastAstErrors = semanticResult.errors || ['Semantic AI pipeline failed'];
+        lastDiagnostics = withIntentDiagnostics(
+          lastAstErrors.map((message) => ({ code: 'SEMANTIC_PIPELINE_FAILED', message })),
+        );
+        console.error('[AI] Semantic pipeline:', lastAstErrors.join(' | '));
         if (
           attempt < maxAttempts - 1 &&
           hasRetryBudget(AI_EXECUTION_MODE.AI_PARTIAL, attempt) &&
-          canUseNonPrimaryLlm(repaired.ir, repaired.validation.diagnostics)
+          canUseNonPrimaryLlm(semanticResult.canonicalIr, lastDiagnostics)
         ) {
-          messages.push({ role: 'assistant', content: JSON.stringify(repaired.ir).slice(0, 12000) });
+          messages.push({ role: 'assistant', content: lastRaw.slice(0, 12000) });
           messages.push({
             role: 'user',
-            content: buildIrRepairUserPrompt(
-              semanticErrors.length ? semanticErrors : ['IR semantic repair failed'],
-              JSON.stringify(repaired.ir).slice(0, 14000),
+            content: buildIntentPlanRepairUserPrompt(
+              lastAstErrors,
+              JSON.stringify(extractedPlan.plan).slice(0, 14000),
             ),
           });
           continue;
         }
         return res.json(await buildAiRecoveryOrFallbackResponse({
-          errorCode: 'IR_REPAIR_FAILED',
-          canonicalIr: repaired.ir,
+          errorCode: semanticResult.errors?.includes('IR semantic repair failed after intent planning')
+            ? 'IR_REPAIR_FAILED'
+            : 'INTENT_PLAN_INVALID',
+          canonicalIr: semanticResult.canonicalIr,
           diagnostics: lastDiagnostics,
           repairActions: lastRepairActions,
-          meta: {
-            repairPasses: AI_IR_REPAIR_MAX_PASSES,
-            ...responseMeta(),
-          },
+          meta: responseMeta({ pipeline: semanticResult.pipeline }),
           prompt: prompt.trim(),
           systemContent,
           astMode,
           allowedMemoryKeys,
           responseMeta,
+          intentPlan,
           sourceStage: attemptMode,
         }));
       }
 
-      if (repaired.repairNotes.length > 0) {
-        console.log('[AI] deterministic IR repair:', repaired.repairNotes.join(' | '));
-      }
-
-      canonicalIr = repaired.ir;
-      lastValidIrSnapshot = canonicalIr;
-      stacks = canonicalIrToEditorStacks(canonicalIr);
+      canonicalIr = semanticResult.canonicalIr;
+      stacks = semanticResult.stacks;
 
       assertAiDeadline(attemptDeadline, 'dsl-generation');
       const runtimeValidation = validateGeneratedGraphStacks(stacks, { deadline: attemptDeadline });
@@ -8836,9 +8671,9 @@ app.post('/api/ai-generate', requireUserAuth, aiGenerateRateLimit, async (req, r
           messages.push({ role: 'assistant', content: JSON.stringify(canonicalIr).slice(0, 12000) });
           messages.push({
             role: 'user',
-            content: buildIrRepairUserPrompt(
-              runtimeErrors.length ? runtimeErrors : ['Runtime validation rejected generated DSL'],
-              JSON.stringify(canonicalIr).slice(0, 14000),
+            content: buildIntentPlanRepairUserPrompt(
+              runtimeErrors.length ? runtimeErrors : ['Runtime validation rejected compiled graph'],
+              JSON.stringify(extractedPlan.plan).slice(0, 14000),
             ),
           });
           stacks = null;
@@ -8887,7 +8722,10 @@ app.post('/api/ai-generate', requireUserAuth, aiGenerateRateLimit, async (req, r
         canonicalIr,
         diagnostics: intentPipelineDiagnostics,
         repairActions: lastRepairActions,
-        meta: responseMeta(),
+        meta: responseMeta({
+          semanticPipeline: 'INTENT_PLAN',
+          pipelineStages: ['INTENT_PLAN', 'PLANNER', 'COMPILER'],
+        }),
         final: true,
         stacks,
       }),

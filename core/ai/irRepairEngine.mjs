@@ -1,9 +1,11 @@
+import { normalizeAiCanonicalIr } from './aiCanonicalIr.mjs';
+import { reconcileIrGraph } from './graphReconciler.mjs';
 import {
   canonicalSymbolFor,
   IR_USER_STORAGE_KEYS,
   isForbiddenInventedSymbol,
 } from './irSymbolRegistry.mjs';
-import { IR_ERROR_CODES } from './irSemanticGate.mjs';
+import { IR_ERROR_CODES, validateIrSemanticGate } from './irSemanticGate.mjs';
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -370,5 +372,56 @@ export function repairIrDeterministic(ir, diagnostics = [], options = {}) {
     ir: current,
     changed: notes.length > 0,
     notes,
+  };
+}
+
+/**
+ * Reconcile + semantic gate + deterministic repair (used by semantic AI pipeline).
+ */
+export function runDeterministicIrRepairLoop(ir, options = {}) {
+  const maxRepairPasses = Math.max(0, Number(options.maxRepairPasses ?? 2) || 0);
+  let current = normalizeAiCanonicalIr(ir);
+  const repairNotes = [];
+  const graphDiagnostics = [];
+
+  for (let repairPass = 0; repairPass <= maxRepairPasses; repairPass += 1) {
+    const reconciliation = reconcileIrGraph(current, options);
+    current = normalizeAiCanonicalIr(reconciliation.ir);
+    if (reconciliation.changed || reconciliation.diagnostics?.length) {
+      graphDiagnostics.push(...asArray(reconciliation.diagnostics));
+      repairNotes.push(...asArray(reconciliation.notes).map((note) => `pass ${repairPass}: GRAPH_RECONCILER: ${note}`));
+    }
+
+    const validation = validateIrSemanticGate(current, options);
+    const mergedValidation = {
+      ...validation,
+      diagnostics: [...graphDiagnostics, ...asArray(validation.diagnostics)],
+    };
+    if (validation.ok) {
+      return { ok: true, ir: current, validation: mergedValidation, repairNotes };
+    }
+    if (repairPass === maxRepairPasses) {
+      return { ok: false, ir: current, validation: mergedValidation, repairNotes };
+    }
+
+    const repaired = repairIrDeterministic(current, validation.diagnostics, options);
+    repairNotes.push(...asArray(repaired.notes).map((note) => `pass ${repairPass + 1}: ${note}`));
+    current = normalizeAiCanonicalIr(repaired.ir);
+    if (!repaired.changed) {
+      return { ok: false, ir: current, validation: mergedValidation, repairNotes };
+    }
+  }
+
+  const reconciliation = reconcileIrGraph(current, options);
+  current = normalizeAiCanonicalIr(reconciliation.ir);
+  const validation = validateIrSemanticGate(current, options);
+  return {
+    ok: validation.ok,
+    ir: current,
+    validation: {
+      ...validation,
+      diagnostics: [...graphDiagnostics, ...asArray(validation.diagnostics)],
+    },
+    repairNotes,
   };
 }

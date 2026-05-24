@@ -1,4 +1,7 @@
-import { INTENT_COMPLEXITY, SEMANTIC_TEMPLATE_IDS } from './intentPlanner.mjs';
+import {
+  INTENT_COMPLEXITY,
+  SEMANTIC_TEMPLATE_IDS,
+} from './intentPlanner.mjs';
 
 export const SEMANTIC_TEMPLATE_APPLIED_REASON = 'SEMANTIC_TEMPLATE_APPLIED';
 
@@ -16,10 +19,17 @@ export const TEMPLATE_RECOVERY_SUPPRESSED_DIAGNOSTIC_CODES = Object.freeze(
     'PRIMARY_NO_PARTIAL_IR',
     'PRIMARY_PARTIAL_IR_AVAILABLE',
     'PARTIAL_IR_SALVAGED',
+    'INTENT_PLAN_INVALID',
+    'IR_EXTRACTION_FAILED',
   ]),
 );
 
+/** Templates compiled deterministically without LLM (template-based graph generation). */
 const DETERMINISTIC_TEMPLATE_IDS = Object.freeze(
+  new Set(Object.values(SEMANTIC_TEMPLATE_IDS)),
+);
+
+const ALWAYS_DETERMINISTIC_TEMPLATE_IDS = Object.freeze(
   new Set([SEMANTIC_TEMPLATE_IDS.CALCULATOR]),
 );
 
@@ -36,7 +46,13 @@ export function shouldUseDeterministicSemanticTemplateSimpleOnly(intentPlan) {
 
 export function canRecoverWithSemanticTemplate(intentPlan) {
   const templateId = intentPlan?.knownCapabilityTemplate;
-  return Boolean(templateId && DETERMINISTIC_TEMPLATE_IDS.has(templateId));
+  if (!templateId || !DETERMINISTIC_TEMPLATE_IDS.has(templateId)) return false;
+  if (ALWAYS_DETERMINISTIC_TEMPLATE_IDS.has(templateId)) return true;
+  return intentPlan.complexityScore === INTENT_COMPLEXITY.SIMPLE;
+}
+
+export function shouldUseTemplateGraphGeneration(intentPlan) {
+  return shouldUseDeterministicSemanticTemplate(intentPlan);
 }
 
 export function filterTemplateRecoveryDiagnostics(diagnostics = []) {
@@ -44,17 +60,26 @@ export function filterTemplateRecoveryDiagnostics(diagnostics = []) {
 }
 
 export function semanticTemplateReadyMessage(templateId, { recovery = false } = {}) {
-  if (templateId === SEMANTIC_TEMPLATE_IDS.CALCULATOR) {
-    return recovery
-      ? 'Готовый шаблон калькулятора подставлен вместо неполной AI-схемы.'
-      : 'Собран готовый шаблон калькулятора без вызова AI.';
-  }
+  const labels = {
+    [SEMANTIC_TEMPLATE_IDS.CALCULATOR]: 'калькулятора',
+    [SEMANTIC_TEMPLATE_IDS.CATALOG]: 'каталога',
+    [SEMANTIC_TEMPLATE_IDS.SUBSCRIPTION]: 'подписки',
+    [SEMANTIC_TEMPLATE_IDS.FORM_COLLECTION]: 'сбора формы',
+    [SEMANTIC_TEMPLATE_IDS.MENU_BOT]: 'меню-бота',
+  };
+  const label = labels[templateId] || templateId;
   return recovery
-    ? `Готовый шаблон «${templateId}» подставлен вместо неполной AI-схемы.`
-    : `Собран готовый шаблон «${templateId}» без вызова AI.`;
+    ? `Готовый шаблон ${label} подставлен вместо неполной AI-схемы.`
+    : `Собран готовый шаблон ${label} без вызова AI.`;
 }
 
 export function semanticTemplateUserLabel(templateId) {
-  if (templateId === SEMANTIC_TEMPLATE_IDS.CALCULATOR) return 'Калькулятор';
-  return String(templateId || 'шаблон');
+  const labels = {
+    [SEMANTIC_TEMPLATE_IDS.CALCULATOR]: 'Калькулятор',
+    [SEMANTIC_TEMPLATE_IDS.CATALOG]: 'Каталог',
+    [SEMANTIC_TEMPLATE_IDS.SUBSCRIPTION]: 'Подписка',
+    [SEMANTIC_TEMPLATE_IDS.FORM_COLLECTION]: 'Форма',
+    [SEMANTIC_TEMPLATE_IDS.MENU_BOT]: 'Меню',
+  };
+  return labels[templateId] || String(templateId || 'шаблон');
 }

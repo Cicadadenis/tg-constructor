@@ -30,6 +30,7 @@
     "test:strict-validation": "tsx tests/compiler/strict_validation_pipeline.test.ts",
     "test:unified-pipeline": "tsx tests/compiler/unified_compile_pipeline.test.ts",
     "test:capability-engine": "tsx tests/compiler/capability_execution_engine.test.ts",
+    "test:semantic-ai-pipeline": "node --test core/tests/semantic-ai-pipeline.test.mjs core/tests/deterministic-semantic-template.test.mjs",
     "test:runtime": "tsx tests/compiler/runtime.test.ts",
     "parser-core-blocks": "node scripts/core-blocks-check.mjs",
     "jammer:publish": "node scripts/publish-jammer-firmware.mjs",

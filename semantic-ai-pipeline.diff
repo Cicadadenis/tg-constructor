@@ -1,0 +1,2072 @@
+diff --git a/core/ai/botIntentPlan.mjs b/core/ai/botIntentPlan.mjs
+new file mode 100644
+index 0000000..6edb6df
+--- /dev/null
++++ b/core/ai/botIntentPlan.mjs
+@@ -0,0 +1,311 @@
++/**
++ * Bot Intent Plan — semantic contract for AI output (no graph nodes, stacks, or Canonical IR).
++ */
++
++import { stripThinkingFromAiRaw } from './llmOutput.js';
++
++export const BOT_INTENT_PLAN_VERSION = 1;
++
++const FLOW_STEP_KINDS = new Set([
++  'show_screen',
++  'ask',
++  'message',
++  'remember',
++  'get',
++  'condition',
++  'save',
++  'save_global',
++  'send_file',
++  'run_flow',
++  'end',
++]);
++
++const TRIGGER_TYPES = new Set(['start', 'button', 'command', 'text', 'inline']);
++
++function asArray(value) {
++  return Array.isArray(value) ? value : [];
++}
++
++function isObject(value) {
++  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
++}
++
++function str(value, fallback = '') {
++  return typeof value === 'string' ? value.trim() : fallback;
++}
++
++function slug(raw, fallback) {
++  const cleaned = str(raw)
++    .toLowerCase()
++    .replace(/ё/g, 'е')
++    .replace(/[^a-zа-я0-9_]+/giu, '_')
++    .replace(/_+/g, '_')
++    .replace(/^_+|_+$/g, '');
++  return cleaned || fallback;
++}
++
++function normalizeFencedJsonText(raw) {
++  return stripThinkingFromAiRaw(raw)
++    .replace(/```(?:json|javascript|js)?\s*/gi, '')
++    .replace(/```/g, '')
++    .trim();
++}
++
++function parseJsonMaybeLenient(text) {
++  if (!text) return null;
++  try {
++    return JSON.parse(text);
++  } catch {
++    return null;
++  }
++}
++
++function findBalancedJsonCandidates(text) {
++  const out = [];
++  let depth = 0;
++  let start = -1;
++  let inString = false;
++  let escaped = false;
++  for (let i = 0; i < text.length; i += 1) {
++    const ch = text[i];
++    if (escaped) {
++      escaped = false;
++      continue;
++    }
++    if (ch === '\\' && inString) {
++      escaped = true;
++      continue;
++    }
++    if (ch === '"') {
++      inString = !inString;
++      continue;
++    }
++    if (inString) continue;
++    if (ch === '{') {
++      if (depth === 0) start = i;
++      depth += 1;
++    } else if (ch === '}') {
++      depth -= 1;
++      if (depth === 0 && start >= 0) {
++        out.push(text.slice(start, i + 1));
++        start = -1;
++      }
++    }
++  }
++  return out;
++}
++
++function isLegacyStacksPayload(value) {
++  if (!Array.isArray(value)) return false;
++  return value.some((item) => isObject(item) && (Array.isArray(item.blocks) || Number.isFinite(item.x)));
++}
++
++function isCanonicalIrPayload(value) {
++  if (!isObject(value)) return false;
++  return (
++    Array.isArray(value.handlers) ||
++    Array.isArray(value.scenarios) ||
++    Array.isArray(value.uiStates) ||
++    Number(value.irVersion) === 1
++  );
++}
++
++function unwrapBotIntentPlan(value) {
++  if (!isObject(value)) return null;
++  if (isLegacyStacksPayload(value)) return null;
++  if (isCanonicalIrPayload(value) && !Number(value.intentPlanVersion)) return null;
++  if (Number(value.intentPlanVersion) === BOT_INTENT_PLAN_VERSION) return value;
++  if (isObject(value.botIntentPlan)) return unwrapBotIntentPlan(value.botIntentPlan);
++  if (isObject(value.intentPlan) && Number(value.intentPlan.intentPlanVersion) === BOT_INTENT_PLAN_VERSION) {
++    return value.intentPlan;
++  }
++  if (isObject(value.plan) && Number(value.plan.intentPlanVersion) === BOT_INTENT_PLAN_VERSION) {
++    return value.plan;
++  }
++  return null;
++}
++
++function normalizeButtons(value) {
++  if (Array.isArray(value)) return value.map((v) => str(v)).filter(Boolean);
++  const text = str(value);
++  if (!text) return [];
++  return text.split(/[,;\n]/).map((part) => part.trim()).filter(Boolean);
++}
++
++function normalizeTrigger(trigger, fallbackType = 'start') {
++  if (!isObject(trigger)) return { type: fallbackType, value: '' };
++  const type = TRIGGER_TYPES.has(str(trigger.type)) ? str(trigger.type) : fallbackType;
++  return { type, value: str(trigger.value || trigger.label || trigger.trigger) };
++}
++
++function normalizeFlowStep(step, index) {
++  if (!isObject(step)) return null;
++  const kind = str(step.kind || step.type);
++  if (!FLOW_STEP_KINDS.has(kind)) return null;
++  const base = {
++    id: str(step.id, `step_${index + 1}`),
++    kind,
++  };
++  if (kind === 'show_screen') return { ...base, screenId: str(step.screenId || step.screen) };
++  if (kind === 'ask') {
++    return {
++      ...base,
++      question: str(step.question || step.prompt),
++      field: slug(step.field || step.varname, `field_${index + 1}`),
++    };
++  }
++  if (kind === 'message') return { ...base, text: str(step.text || step.message) };
++  if (kind === 'remember') {
++    return {
++      ...base,
++      field: slug(step.field || step.varname, `var_${index + 1}`),
++      value: str(step.value, '{text}'),
++    };
++  }
++  if (kind === 'get') {
++    return {
++      ...base,
++      key: str(step.key),
++      field: slug(step.field || step.varname, `loaded_${index + 1}`),
++    };
++  }
++  if (kind === 'condition') {
++    return {
++      ...base,
++      expression: str(step.expression || step.cond),
++      ifTrue: asArray(step.ifTrue || step.then).map((s, i) => normalizeFlowStep(s, i)).filter(Boolean),
++      ifFalse: asArray(step.ifFalse || step.else).map((s, i) => normalizeFlowStep(s, i)).filter(Boolean),
++    };
++  }
++  if (kind === 'save' || kind === 'save_global') {
++    return { ...base, key: str(step.key), value: str(step.value) };
++  }
++  if (kind === 'send_file') return { ...base, field: slug(step.field || step.varname, 'file') };
++  if (kind === 'run_flow') return { ...base, flowId: str(step.flowId || step.flow) };
++  return base;
++}
++
++function normalizeScreen(screen, index) {
++  if (!isObject(screen)) return null;
++  const id = str(screen.id, `ui_${index + 1}`);
++  const message = str(screen.message || screen.text);
++  if (!message) return null;
++  return {
++    id,
++    message,
++    buttons: normalizeButtons(screen.buttons || screen.buttonLabels),
++    ...(isObject(screen.inlineCatalog) ? { inlineCatalog: screen.inlineCatalog } : {}),
++  };
++}
++
++function normalizeFlow(flow, index) {
++  if (!isObject(flow)) return null;
++  const id = str(flow.id, `flow_${index + 1}`);
++  const name = str(flow.name, id);
++  const steps = asArray(flow.steps).map((s, i) => normalizeFlowStep(s, i)).filter(Boolean);
++  if (!steps.length) return null;
++  return {
++    id,
++    name: slug(name, id),
++    trigger: normalizeTrigger(flow.trigger, index === 0 ? 'start' : 'button'),
++    steps,
++  };
++}
++
++export function normalizeBotIntentPlan(plan) {
++  const src = isObject(plan) ? plan : {};
++  return {
++    intentPlanVersion: BOT_INTENT_PLAN_VERSION,
++    summary: str(src.summary || src.primaryGoal || src.intent?.primary),
++    primaryGoal: str(src.primaryGoal || src.summary || src.intent?.primary),
++    botType: str(src.botType),
++    templateHint: str(src.templateHint || src.semanticTemplate),
++    screens: asArray(src.screens).map((s, i) => normalizeScreen(s, i)).filter(Boolean),
++    flows: asArray(src.flows).map((f, i) => normalizeFlow(f, i)).filter(Boolean),
++    menuButtons: asArray(src.menuButtons).map((btn) => ({
++      label: str(btn.label || btn.text),
++      flowId: str(btn.flowId || btn.flow),
++    })).filter((btn) => btn.label && btn.flowId),
++    globals: asArray(src.globals || src.state?.globals).map((g) => ({
++      name: str(g?.name || g?.varname || g?.key),
++      value: g?.value ?? '',
++    })).filter((g) => g.name),
++    constraints: isObject(src.constraints) ? src.constraints : {},
++  };
++}
++
++export function validateBotIntentPlan(plan) {
++  const errors = [];
++  const warnings = [];
++  if (!isObject(plan)) return { ok: false, errors: ['BotIntentPlan: ожидался объект'], warnings };
++  if (Number(plan.intentPlanVersion) !== BOT_INTENT_PLAN_VERSION) {
++    errors.push(`BotIntentPlan: intentPlanVersion должен быть ${BOT_INTENT_PLAN_VERSION}`);
++  }
++  if (!str(plan.summary) && !str(plan.primaryGoal)) {
++    errors.push('BotIntentPlan: summary или primaryGoal обязателен');
++  }
++  if (!asArray(plan.flows).length) {
++    errors.push('BotIntentPlan: flows[] не может быть пустым');
++  }
++  const screenIds = new Set(asArray(plan.screens).map((s) => str(s.id)));
++  for (const [fi, flow] of asArray(plan.flows).entries()) {
++    if (!str(flow.name)) errors.push(`flows[${fi}]: name обязателен`);
++    if (!asArray(flow.steps).length) errors.push(`flows[${fi}]: steps[] не может быть пустым`);
++    for (const [si, step] of asArray(flow.steps).entries()) {
++      if (step.kind === 'show_screen' && step.screenId && !screenIds.has(step.screenId)) {
++        warnings.push(`flows[${fi}].steps[${si}]: screenId "${step.screenId}" не объявлен в screens[]`);
++      }
++    }
++  }
++  return { ok: errors.length === 0, errors, warnings };
++}
++
++export function extractBotIntentPlanFromRaw(raw) {
++  const cleaned = normalizeFencedJsonText(raw);
++  if (/\[\s*\{[^}]*"blocks"\s*:/.test(cleaned) || /\[\s*\{[^}]*"x"\s*:/.test(cleaned)) {
++    return null;
++  }
++  const direct = unwrapBotIntentPlan(parseJsonMaybeLenient(cleaned));
++  if (direct) return { plan: normalizeBotIntentPlan(direct), jsonText: cleaned };
++
++  for (const candidate of findBalancedJsonCandidates(cleaned)) {
++    const plan = unwrapBotIntentPlan(parseJsonMaybeLenient(candidate));
++    if (plan) return { plan: normalizeBotIntentPlan(plan), jsonText: candidate };
++  }
++  return null;
++}
++
++export function buildBotIntentPlanPromptContext(deterministicPlan) {
++  const plan = isObject(deterministicPlan) ? deterministicPlan : {};
++  return [
++    '',
++    '═══ DETERMINISTIC INTENT PLAN (сервер, обязателен к учёту) ═══',
++    'Сервер уже классифицировал запрос. Твой BotIntentPlan должен укладываться в budget и requiredFeatures.',
++    `botType: ${plan.botType || 'informational'}`,
++    `complexityScore: ${plan.complexityScore || 'SIMPLE'}`,
++    `knownCapabilityTemplate: ${plan.knownCapabilityTemplate || 'menu_bot'}`,
++    `requiredFeatures: ${JSON.stringify(plan.requiredFeatures || [])}`,
++    `budget: ${JSON.stringify(plan.budget || {})}`,
++    'Не добавляй flows/screens сверх budget. Не возвращай Canonical IR, stacks, nodes, edges, x/y.',
++  ].join('\n');
++}
++
++export function buildBotIntentPlanUserPrompt(prompt, deterministicPlan) {
++  return [
++    'Создай Bot Intent Plan (JSON) по запросу пользователя.',
++    'Учти Deterministic Intent Plan ниже — не расширяй функциональность сверх budget.',
++    '',
++    'User prompt:',
++    prompt,
++    '',
++    'Deterministic Intent Plan:',
++    JSON.stringify({
++      botType: deterministicPlan?.botType,
++      requiredFeatures: deterministicPlan?.requiredFeatures,
++      complexityScore: deterministicPlan?.complexityScore,
++      budget: deterministicPlan?.budget,
++      knownCapabilityTemplate: deterministicPlan?.knownCapabilityTemplate,
++      minimalFlows: deterministicPlan?.minimalFlows,
++    }, null, 2),
++  ].join('\n');
++}
+diff --git a/core/ai/deterministicSemanticTemplate.mjs b/core/ai/deterministicSemanticTemplate.mjs
+index 27336a3..217559f 100644
+--- a/core/ai/deterministicSemanticTemplate.mjs
++++ b/core/ai/deterministicSemanticTemplate.mjs
+@@ -1,4 +1,7 @@
+-import { INTENT_COMPLEXITY, SEMANTIC_TEMPLATE_IDS } from './intentPlanner.mjs';
++import {
++  INTENT_COMPLEXITY,
++  SEMANTIC_TEMPLATE_IDS,
++} from './intentPlanner.mjs';
+ 
+ export const SEMANTIC_TEMPLATE_APPLIED_REASON = 'SEMANTIC_TEMPLATE_APPLIED';
+ 
+@@ -16,10 +19,17 @@ export const TEMPLATE_RECOVERY_SUPPRESSED_DIAGNOSTIC_CODES = Object.freeze(
+     'PRIMARY_NO_PARTIAL_IR',
+     'PRIMARY_PARTIAL_IR_AVAILABLE',
+     'PARTIAL_IR_SALVAGED',
++    'INTENT_PLAN_INVALID',
++    'IR_EXTRACTION_FAILED',
+   ]),
+ );
+ 
++/** Templates compiled deterministically without LLM (template-based graph generation). */
+ const DETERMINISTIC_TEMPLATE_IDS = Object.freeze(
++  new Set(Object.values(SEMANTIC_TEMPLATE_IDS)),
++);
++
++const ALWAYS_DETERMINISTIC_TEMPLATE_IDS = Object.freeze(
+   new Set([SEMANTIC_TEMPLATE_IDS.CALCULATOR]),
+ );
+ 
+@@ -36,7 +46,13 @@ export function shouldUseDeterministicSemanticTemplateSimpleOnly(intentPlan) {
+ 
+ export function canRecoverWithSemanticTemplate(intentPlan) {
+   const templateId = intentPlan?.knownCapabilityTemplate;
+-  return Boolean(templateId && DETERMINISTIC_TEMPLATE_IDS.has(templateId));
++  if (!templateId || !DETERMINISTIC_TEMPLATE_IDS.has(templateId)) return false;
++  if (ALWAYS_DETERMINISTIC_TEMPLATE_IDS.has(templateId)) return true;
++  return intentPlan.complexityScore === INTENT_COMPLEXITY.SIMPLE;
++}
++
++export function shouldUseTemplateGraphGeneration(intentPlan) {
++  return shouldUseDeterministicSemanticTemplate(intentPlan);
+ }
+ 
+ export function filterTemplateRecoveryDiagnostics(diagnostics = []) {
+@@ -44,17 +60,26 @@ export function filterTemplateRecoveryDiagnostics(diagnostics = []) {
+ }
+ 
+ export function semanticTemplateReadyMessage(templateId, { recovery = false } = {}) {
+-  if (templateId === SEMANTIC_TEMPLATE_IDS.CALCULATOR) {
+-    return recovery
+-      ? 'Готовый шаблон калькулятора подставлен вместо неполной AI-схемы.'
+-      : 'Собран готовый шаблон калькулятора без вызова AI.';
+-  }
++  const labels = {
++    [SEMANTIC_TEMPLATE_IDS.CALCULATOR]: 'калькулятора',
++    [SEMANTIC_TEMPLATE_IDS.CATALOG]: 'каталога',
++    [SEMANTIC_TEMPLATE_IDS.SUBSCRIPTION]: 'подписки',
++    [SEMANTIC_TEMPLATE_IDS.FORM_COLLECTION]: 'сбора формы',
++    [SEMANTIC_TEMPLATE_IDS.MENU_BOT]: 'меню-бота',
++  };
++  const label = labels[templateId] || templateId;
+   return recovery
+-    ? `Готовый шаблон «${templateId}» подставлен вместо неполной AI-схемы.`
+-    : `Собран готовый шаблон «${templateId}» без вызова AI.`;
++    ? `Готовый шаблон ${label} подставлен вместо неполной AI-схемы.`
++    : `Собран готовый шаблон ${label} без вызова AI.`;
+ }
+ 
+ export function semanticTemplateUserLabel(templateId) {
+-  if (templateId === SEMANTIC_TEMPLATE_IDS.CALCULATOR) return 'Калькулятор';
+-  return String(templateId || 'шаблон');
++  const labels = {
++    [SEMANTIC_TEMPLATE_IDS.CALCULATOR]: 'Калькулятор',
++    [SEMANTIC_TEMPLATE_IDS.CATALOG]: 'Каталог',
++    [SEMANTIC_TEMPLATE_IDS.SUBSCRIPTION]: 'Подписка',
++    [SEMANTIC_TEMPLATE_IDS.FORM_COLLECTION]: 'Форма',
++    [SEMANTIC_TEMPLATE_IDS.MENU_BOT]: 'Меню',
++  };
++  return labels[templateId] || String(templateId || 'шаблон');
+ }
+diff --git a/core/ai/graphCompiler.mjs b/core/ai/graphCompiler.mjs
+new file mode 100644
+index 0000000..d8723f1
+--- /dev/null
++++ b/core/ai/graphCompiler.mjs
+@@ -0,0 +1,88 @@
++/**
++ * Compiler: valid Canonical AI IR (Bot IR) → executable editor stacks.
++ * Rejects invalid IR — never emits graph from broken input.
++ */
++
++import {
++  canonicalIrToEditorStacks,
++  normalizeAiCanonicalIr,
++  validateAiCanonicalIr,
++} from './aiCanonicalIr.mjs';
++import { validateIrSemanticGate } from './irSemanticGate.mjs';
++import { reconcileIrGraph } from './graphReconciler.mjs';
++
++function asArray(value) {
++  return Array.isArray(value) ? value : [];
++}
++
++/**
++ * Compile Canonical AI IR to editor stacks after validation gates.
++ * @param {object} ir
++ * @param {{ astMode?: string, allowedMemoryKeys?: string[], reconcile?: boolean }} [options]
++ */
++export function compileBotIrToExecutableGraph(ir, options = {}) {
++  const normalized = normalizeAiCanonicalIr(ir);
++  const structural = validateAiCanonicalIr(normalized, {
++    astMode: options.astMode,
++    allowedMemoryKeys: options.allowedMemoryKeys,
++  });
++  if (structural.errors.length > 0) {
++    return {
++      ok: false,
++      stacks: null,
++      ir: normalized,
++      errors: structural.errors,
++      diagnostics: structural.errors.map((message) => ({
++        code: 'IR_STRUCTURE_ERROR',
++        severity: 'error',
++        message,
++      })),
++    };
++  }
++
++  let candidate = normalized;
++  if (options.reconcile !== false) {
++    const reconciled = reconcileIrGraph(candidate);
++    candidate = reconciled.ir;
++  }
++
++  const semantic = validateIrSemanticGate(candidate, {
++    astMode: options.astMode,
++    allowedMemoryKeys: options.allowedMemoryKeys,
++  });
++  if (!semantic.ok) {
++    const messages = asArray(semantic.diagnostics).map((d) => d.message || String(d));
++    return {
++      ok: false,
++      stacks: null,
++      ir: candidate,
++      errors: messages.length ? messages : ['IR semantic gate failed'],
++      diagnostics: semantic.diagnostics,
++    };
++  }
++
++  const stacks = canonicalIrToEditorStacks(candidate);
++  if (!Array.isArray(stacks) || stacks.length === 0) {
++    return {
++      ok: false,
++      stacks: null,
++      ir: candidate,
++      errors: ['Compiler produced empty stacks'],
++      diagnostics: [{ code: 'COMPILER_EMPTY', severity: 'error', message: 'Empty executable graph' }],
++    };
++  }
++
++  return {
++    ok: true,
++    stacks,
++    ir: candidate,
++    errors: [],
++    diagnostics: [
++      {
++        code: 'GRAPH_COMPILED',
++        severity: 'info',
++        message: `Executable graph compiled: ${stacks.length} stacks.`,
++      },
++    ],
++  };
++}
+diff --git a/core/ai/index.js b/core/ai/index.js
+index dca9d9a..4348a18 100644
+--- a/core/ai/index.js
++++ b/core/ai/index.js
+@@ -9,3 +9,18 @@ export {
+ } from './syntaxDiagnostics.js';
+ export { dryRunFlowPolicy } from './dryRunFlow.js';
+ export { semanticValidateFlow } from './semanticValidateFlow.js';
++export {
++  BOT_INTENT_PLAN_VERSION,
++  extractBotIntentPlanFromRaw,
++  normalizeBotIntentPlan,
++  validateBotIntentPlan,
++  buildBotIntentPlanPromptContext,
++  buildBotIntentPlanUserPrompt,
++} from './botIntentPlan.mjs';
++export { compileIntentPlanToBotIr } from './intentToBotIr.mjs';
++export { compileBotIrToExecutableGraph } from './graphCompiler.mjs';
++export { runSemanticAiPipeline, runTemplateGraphPipeline } from './semanticAiPipeline.mjs';
++export {
++  extractPartialBotIrFromLlmStream,
++  buildIntentPlanLlmMessages,
++} from './intentPlanLlm.mjs';
+diff --git a/core/ai/intentPlanLlm.mjs b/core/ai/intentPlanLlm.mjs
+new file mode 100644
+index 0000000..d6f5880
+--- /dev/null
++++ b/core/ai/intentPlanLlm.mjs
+@@ -0,0 +1,121 @@
++/**
++ * LLM streaming helpers: partial Bot Intent Plan → compiled Bot IR snapshot.
++ * AI must never emit stacks, React Flow nodes, or raw Canonical IR.
++ */
++
++import { normalizeAiCanonicalIr } from './aiCanonicalIr.mjs';
++import {
++  BOT_INTENT_PLAN_VERSION,
++  extractBotIntentPlanFromRaw,
++} from './botIntentPlan.mjs';
++import { compileIntentPlanToBotIr } from './intentToBotIr.mjs';
++
++function parseJsonMaybe(text) {
++  if (!text) return null;
++  try {
++    return JSON.parse(text);
++  } catch {
++    return null;
++  }
++}
++
++function completePartialJsonObject(raw) {
++  const source = String(raw || '').trim();
++  if (!source || source[0] !== '{') return null;
++  let out = source;
++  const stack = [];
++  let inString = false;
++  let escaped = false;
++  for (let i = 0; i < source.length; i += 1) {
++    const ch = source[i];
++    if (escaped) {
++      escaped = false;
++      continue;
++    }
++    if (ch === '\\' && inString) {
++      escaped = true;
++      continue;
++    }
++    if (ch === '"') {
++      inString = !inString;
++      continue;
++    }
++    if (inString) continue;
++    if (ch === '{') stack.push('}');
++    else if (ch === '[') stack.push(']');
++    else if ((ch === '}' || ch === ']') && stack[stack.length - 1] === ch) stack.pop();
++    if (stack.length === 0 && out.trim().endsWith('}')) break;
++  }
++  if (!out.trim()) return null;
++  if (escaped) out = out.slice(0, -1);
++  if (inString) out += '"';
++  out = out.replace(/,\s*$/g, '');
++  while (stack.length > 0) {
++    const closer = stack.pop();
++    out = out.replace(/,\s*$/g, '');
++    out += closer;
++  }
++  return out;
++}
++
++function unwrapIntentPlanPayload(value) {
++  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
++  if (Number(value.intentPlanVersion) === BOT_INTENT_PLAN_VERSION) return value;
++  if (value.botIntentPlan && typeof value.botIntentPlan === 'object') {
++    return unwrapIntentPlanPayload(value.botIntentPlan);
++  }
++  if (value.intentPlan && typeof value.intentPlan === 'object') {
++    return unwrapIntentPlanPayload(value.intentPlan);
++  }
++  if (value.plan && typeof value.plan === 'object') {
++    return unwrapIntentPlanPayload(value.plan);
++  }
++  return null;
++}
++
++/**
++ * Compile partial/full LLM text to Bot IR only when it contains Bot Intent Plan JSON.
++ * Rejects legacy stacks and Canonical IR emitted directly by the model.
++ */
++export function extractPartialBotIrFromLlmStream(raw, deterministicPlan = null) {
++  const intentExtracted = extractBotIntentPlanFromRaw(raw);
++  if (intentExtracted?.plan) {
++    try {
++      return normalizeAiCanonicalIr(compileIntentPlanToBotIr(intentExtracted.plan, deterministicPlan));
++    } catch {
++      return null;
++    }
++  }
++
++  const completed = completePartialJsonObject(raw);
++  const parsed = parseJsonMaybe(completed);
++  if (!parsed || typeof parsed !== 'object') return null;
++
++  const unwrapped = unwrapIntentPlanPayload(
++    parsed.botIntentPlan || parsed.intentPlan || parsed.plan || parsed,
++  );
++  if (!unwrapped) return null;
++
++  try {
++    return normalizeAiCanonicalIr(compileIntentPlanToBotIr(unwrapped, deterministicPlan));
++  } catch {
++    return null;
++  }
++}
++
++export function buildIntentPlanLlmMessages({
++  systemPrompt,
++  coreAppendix,
++  intentPlanContext,
++  astPolicyAppendix,
++  userPrompt,
++  fewShots = [],
++}) {
++  const messages = [{ role: 'system', content: systemPrompt + coreAppendix + intentPlanContext + astPolicyAppendix }];
++  for (const shot of fewShots) {
++    messages.push({ role: 'user', content: shot.user });
++    messages.push({ role: 'assistant', content: shot.assistant });
++  }
++  messages.push({ role: 'user', content: userPrompt });
++  return messages;
++}
+diff --git a/core/ai/intentToBotIr.mjs b/core/ai/intentToBotIr.mjs
+new file mode 100644
+index 0000000..3899b45
+--- /dev/null
++++ b/core/ai/intentToBotIr.mjs
+@@ -0,0 +1,313 @@
++/**
++ * Planner: Bot Intent Plan → Canonical AI IR (Bot IR for AI pipeline).
++ */
++
++import { AI_TARGET_CORE_EXACT, normalizeAiCanonicalIr } from './aiCanonicalIr.mjs';
++import { normalizeBotIntentPlan } from './botIntentPlan.mjs';
++import { SEMANTIC_TEMPLATE_IDS, buildSemanticTemplateIr } from './intentPlanner.mjs';
++
++function asArray(value) {
++  return Array.isArray(value) ? value : [];
++}
++
++function isObject(value) {
++  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
++}
++
++function str(value, fallback = '') {
++  return typeof value === 'string' ? value.trim() : fallback;
++}
++
++function slug(raw, fallback) {
++  const cleaned = str(raw)
++    .toLowerCase()
++    .replace(/ё/g, 'е')
++    .replace(/[^a-zа-я0-9_]+/giu, '_')
++    .replace(/_+/g, '_')
++    .replace(/^_+|_+$/g, '');
++  return cleaned || fallback;
++}
++
++let handlerSeq = 0;
++let scenarioSeq = 0;
++
++function nextHandlerId(prefix = 'h') {
++  handlerSeq += 1;
++  return `${prefix}_${handlerSeq}`;
++}
++
++function nextScenarioId(name) {
++  scenarioSeq += 1;
++  return `sc_${slug(name, `scenario_${scenarioSeq}`)}`;
++}
++
++function resetIds() {
++  handlerSeq = 0;
++  scenarioSeq = 0;
++}
++
++function flowStepToActions(step, ctx) {
++  if (!isObject(step)) return [];
++  const kind = str(step.kind);
++  if (kind === 'show_screen') {
++    const screenId = str(step.screenId, 'ui_start');
++    return [{ type: 'ui_state', uiStateId: screenId }, { type: 'stop' }];
++  }
++  if (kind === 'ask') {
++    return [{ type: 'ask', question: str(step.question, 'Введите значение:'), varname: slug(step.field, 'value') }];
++  }
++  if (kind === 'message') {
++    return [{ type: 'message', text: str(step.text, '...') }];
++  }
++  if (kind === 'remember') {
++    return [{ type: 'remember', varname: slug(step.field, 'var'), value: str(step.value, '{text}') }];
++  }
++  if (kind === 'get') {
++    return [{ type: 'get', key: str(step.key), varname: slug(step.field, 'value') }];
++  }
++  if (kind === 'save') {
++    return [{ type: 'save', key: str(step.key), value: str(step.value) }];
++  }
++  if (kind === 'save_global') {
++    return [{ type: 'save_global', key: str(step.key), value: str(step.value) }];
++  }
++  if (kind === 'send_file') {
++    return [{ type: 'send_file', file: `{${slug(step.field, 'file')}}` }];
++  }
++  if (kind === 'condition') {
++    return [{
++      type: 'condition',
++      cond: str(step.expression, 'true'),
++      then: asArray(step.ifTrue).flatMap((s) => flowStepToActions(s, ctx)),
++      ...(asArray(step.ifFalse).length ? { else: asArray(step.ifFalse).flatMap((s) => flowStepToActions(s, ctx)) } : {}),
++    }];
++  }
++  if (kind === 'end') return [{ type: 'stop' }];
++  if (kind === 'run_flow') {
++    const targetFlow = ctx.flowById.get(str(step.flowId));
++    if (targetFlow) return [{ type: 'run_scenario', target: slug(targetFlow.name, targetFlow.id) }];
++  }
++  return [];
++}
++
++function buildUiStates(screens) {
++  return asArray(screens).map((screen, index) => {
++    const buttons = asArray(screen.buttons).join(', ');
++    const state = {
++      id: str(screen.id, `ui_${index + 1}`),
++      message: str(screen.message),
++      ...(buttons ? { buttons } : {}),
++    };
++    if (isObject(screen.inlineCatalog) && str(screen.inlineCatalog.key)) {
++      state.inlineDb = {
++        key: str(screen.inlineCatalog.key),
++        callbackPrefix: str(screen.inlineCatalog.callbackPrefix, 'item:'),
++        backText: str(screen.inlineCatalog.backText, 'Назад'),
++        backCallback: str(screen.inlineCatalog.backCallback, 'back'),
++        columns: String(screen.inlineCatalog.columns || '1'),
++      };
++    }
++    return state;
++  });
++}
++
++function flowToScenario(flow, ctx = { flowById: new Map() }) {
++  const steps = [];
++  let stepBuffer = [];
++  let stepIndex = 0;
++
++  const flushStep = (name) => {
++    if (!stepBuffer.length) return;
++    steps.push({
++      id: `step_${slug(name, String(stepIndex + 1))}`,
++      name: slug(name, `шаг_${stepIndex + 1}`),
++      actions: [...stepBuffer],
++    });
++    stepBuffer = [];
++    stepIndex += 1;
++  };
++
++  for (const step of asArray(flow.steps)) {
++    const kind = str(step.kind);
++    if (kind === 'ask') {
++      flushStep(step.field || `step_${stepIndex}`);
++      stepBuffer.push(...flowStepToActions(step, ctx));
++      flushStep(step.field || `step_${stepIndex}`);
++      continue;
++    }
++    if (kind === 'end') {
++      stepBuffer.push(...flowStepToActions(step, ctx));
++      flushStep(`final_${stepIndex}`);
++      continue;
++    }
++    stepBuffer.push(...flowStepToActions(step, ctx));
++  }
++  if (stepBuffer.length) flushStep(`final_${stepIndex}`);
++
++  if (!steps.length) {
++    const fallbackActions = asArray(flow.steps).flatMap((s) => flowStepToActions(s, ctx));
++    if (fallbackActions.length) {
++      steps.push({ id: 'step_1', name: 'main', actions: fallbackActions });
++    }
++  }
++
++  return {
++    id: nextScenarioId(flow.name),
++    name: slug(flow.name, flow.id),
++    steps,
++  };
++}
++
++/**
++ * @param {import('./botIntentPlan.mjs').normalizeBotIntentPlan extends Function ? ReturnType<typeof normalizeBotIntentPlan> : object} botIntentPlan
++ * @param {object} [deterministicPlan]
++ */
++export function compileIntentPlanToBotIr(botIntentPlan, deterministicPlan = {}) {
++  resetIds();
++  const plan = normalizeBotIntentPlan(botIntentPlan);
++  const templateHint = str(plan.templateHint || deterministicPlan?.knownCapabilityTemplate);
++  if (
++    templateHint &&
++    Object.values(SEMANTIC_TEMPLATE_IDS).includes(templateHint) &&
++    !asArray(plan.flows).length
++  ) {
++    return buildSemanticTemplateIr(
++      { ...deterministicPlan, knownCapabilityTemplate: templateHint },
++      { prompt: plan.summary },
++    );
++  }
++
++  const flowById = new Map(asArray(plan.flows).map((f) => [str(f.id), f]));
++  const uiStates = buildUiStates(plan.screens);
++  const handlers = [];
++  const scenarios = [];
++  const transitions = [];
++
++  if (!uiStates.length && asArray(plan.flows).some((f) => f.trigger?.type === 'start')) {
++    uiStates.push({
++      id: 'ui_start',
++      message: str(plan.summary, 'Добро пожаловать!'),
++      buttons: asArray(plan.menuButtons).map((b) => b.label).join(', '),
++    });
++  }
++
++  const startFlow = asArray(plan.flows).find((f) => f.trigger?.type === 'start') || plan.flows[0];
++  if (startFlow) {
++    const startScreen = asArray(startFlow.steps).find((s) => s.kind === 'show_screen');
++    const startActions = [];
++    if (startScreen) {
++      startActions.push({ type: 'ui_state', uiStateId: str(startScreen.screenId, 'ui_start') });
++    } else if (uiStates.length) {
++      startActions.push({ type: 'ui_state', uiStateId: uiStates[0].id });
++    } else {
++      startActions.push({ type: 'message', text: str(plan.summary, 'Привет!') });
++    }
++    const hasScenario = asArray(startFlow.steps).some((s) => ['ask', 'run_flow'].includes(s.kind));
++    if (hasScenario && asArray(startFlow.steps).some((s) => s.kind === 'ask')) {
++      const scenario = flowToScenario(startFlow, { flowById });
++      scenarios.push(scenario);
++      startActions.push({ type: 'run_scenario', target: scenario.name });
++    } else {
++      startActions.push(...asArray(startFlow.steps).flatMap((s) => flowStepToActions(s, { flowById })));
++    }
++    if (!startActions.some((a) => a.type === 'stop')) startActions.push({ type: 'stop' });
++    handlers.push({ id: nextHandlerId('start'), type: 'start', trigger: '', actions: startActions });
++  }
++
++  for (const menuBtn of asArray(plan.menuButtons)) {
++    const flow = flowById.get(str(menuBtn.flowId));
++    if (!flow) continue;
++    const scenario = flowToScenario(flow, { flowById });
++    scenarios.push(scenario);
++    handlers.push({
++      id: nextHandlerId('cb'),
++      type: 'callback',
++      trigger: str(menuBtn.label),
++      actions: [
++        { type: 'message', text: `Запуск: ${flow.name}` },
++        { type: 'run_scenario', target: scenario.name },
++      ],
++    });
++    transitions.push({ from: handlers[handlers.length - 1].id, to: scenario.id, type: 'run_scenario' });
++  }
++
++  for (const flow of asArray(plan.flows)) {
++    const trigger = flow.trigger || {};
++    if (trigger.type === 'start') continue;
++    if (trigger.type === 'button' || trigger.type === 'callback') {
++      const scenario = flowToScenario(flow, { flowById });
++      const existing = scenarios.find((s) => s.name === scenario.name);
++      if (!existing) scenarios.push(scenario);
++      const scenarioName = existing?.name || scenario.name;
++      handlers.push({
++        id: nextHandlerId('cb'),
++        type: 'callback',
++        trigger: str(trigger.value),
++        actions: [{ type: 'run_scenario', target: scenarioName }],
++      });
++      transitions.push({
++        from: handlers[handlers.length - 1].id,
++        to: existing?.id || scenario.id,
++        type: 'run_scenario',
++      });
++      continue;
++    }
++    if (trigger.type === 'command') {
++      handlers.push({
++        id: nextHandlerId('cmd'),
++        type: 'command',
++        trigger: str(trigger.value).replace(/^\/+/, '') || 'help',
++        actions: asArray(flow.steps).flatMap((s) => flowStepToActions(s, { flowById })),
++      });
++      continue;
++    }
++    if (trigger.type === 'text') {
++      const scenario = flowToScenario(flow, { flowById });
++      scenarios.push(scenario);
++      handlers.push({
++        id: nextHandlerId('text'),
++        type: 'text',
++        trigger: '',
++        actions: [{ type: 'run_scenario', target: scenario.name }],
++      });
++    }
++  }
++
++  if (!handlers.some((h) => h.type === 'start')) {
++    handlers.unshift({
++      id: nextHandlerId('start'),
++      type: 'start',
++      trigger: '',
++      actions: [
++        { type: 'message', text: str(plan.summary, 'Привет!') },
++        { type: 'stop' },
++      ],
++    });
++  }
++
++  const ir = normalizeAiCanonicalIr({
++    irVersion: 1,
++    targetCore: AI_TARGET_CORE_EXACT,
++    compatibilityMode: `${AI_TARGET_CORE_EXACT} exact`,
++    intent: {
++      primary: str(plan.primaryGoal, plan.summary),
++      botType: str(plan.botType || deterministicPlan?.botType),
++      semanticTemplate: templateHint || deterministicPlan?.knownCapabilityTemplate,
++      plannedFrom: 'bot_intent_plan',
++    },
++    state: {
++      globals: asArray(plan.globals).map((g) => ({ name: g.name, value: g.value })),
++    },
++    handlers,
++    blocks: [],
++    scenarios,
++    transitions,
++    uiStates,
++    meta: {
++      compiledFrom: 'bot_intent_plan',
++      intentPlanVersion: plan.intentPlanVersion,
++    },
++  });
++
++  return ir;
++}
+diff --git a/core/ai/irRepairEngine.mjs b/core/ai/irRepairEngine.mjs
+index ab57210..7e9615a 100644
+--- a/core/ai/irRepairEngine.mjs
++++ b/core/ai/irRepairEngine.mjs
+@@ -1,9 +1,11 @@
++import { normalizeAiCanonicalIr } from './aiCanonicalIr.mjs';
++import { reconcileIrGraph } from './graphReconciler.mjs';
+ import {
+   canonicalSymbolFor,
+   IR_USER_STORAGE_KEYS,
+   isForbiddenInventedSymbol,
+ } from './irSymbolRegistry.mjs';
+-import { IR_ERROR_CODES } from './irSemanticGate.mjs';
++import { IR_ERROR_CODES, validateIrSemanticGate } from './irSemanticGate.mjs';
+ 
+ function asArray(value) {
+   return Array.isArray(value) ? value : [];
+@@ -372,3 +374,54 @@ export function repairIrDeterministic(ir, diagnostics = [], options = {}) {
+     notes,
+   };
+ }
++
++/**
++ * Reconcile + semantic gate + deterministic repair (used by semantic AI pipeline).
++ */
++export function runDeterministicIrRepairLoop(ir, options = {}) {
++  const maxRepairPasses = Math.max(0, Number(options.maxRepairPasses ?? 2) || 0);
++  let current = normalizeAiCanonicalIr(ir);
++  const repairNotes = [];
++  const graphDiagnostics = [];
++
++  for (let repairPass = 0; repairPass <= maxRepairPasses; repairPass += 1) {
++    const reconciliation = reconcileIrGraph(current, options);
++    current = normalizeAiCanonicalIr(reconciliation.ir);
++    if (reconciliation.changed || reconciliation.diagnostics?.length) {
++      graphDiagnostics.push(...asArray(reconciliation.diagnostics));
++      repairNotes.push(...asArray(reconciliation.notes).map((note) => `pass ${repairPass}: GRAPH_RECONCILER: ${note}`));
++    }
++
++    const validation = validateIrSemanticGate(current, options);
++    const mergedValidation = {
++      ...validation,
++      diagnostics: [...graphDiagnostics, ...asArray(validation.diagnostics)],
++    };
++    if (validation.ok) {
++      return { ok: true, ir: current, validation: mergedValidation, repairNotes };
++    }
++    if (repairPass === maxRepairPasses) {
++      return { ok: false, ir: current, validation: mergedValidation, repairNotes };
++    }
++
++    const repaired = repairIrDeterministic(current, validation.diagnostics, options);
++    repairNotes.push(...asArray(repaired.notes).map((note) => `pass ${repairPass + 1}: ${note}`));
++    current = normalizeAiCanonicalIr(repaired.ir);
++    if (!repaired.changed) {
++      return { ok: false, ir: current, validation: mergedValidation, repairNotes };
++    }
++  }
++
++  const reconciliation = reconcileIrGraph(current, options);
++  current = normalizeAiCanonicalIr(reconciliation.ir);
++  const validation = validateIrSemanticGate(current, options);
++  return {
++    ok: validation.ok,
++    ir: current,
++    validation: {
++      ...validation,
++      diagnostics: [...graphDiagnostics, ...asArray(validation.diagnostics)],
++    },
++    repairNotes,
++  };
++}
+diff --git a/core/ai/semanticAiPipeline.mjs b/core/ai/semanticAiPipeline.mjs
+new file mode 100644
+index 0000000..13b02fb
+--- /dev/null
++++ b/core/ai/semanticAiPipeline.mjs
+@@ -0,0 +1,170 @@
++/**
++ * Semantic AI planning pipeline:
++ *   1. AI → Bot Intent Plan (semantic JSON only; no graph nodes)
++ *   2. Planner → Bot IR (Canonical AI IR)
++ *   3. Compiler → executable editor stacks (validated; never raw React Flow)
++ *   Template path: deterministic IntentPlan → template IR → Compiler
++ */
++
++/** @typedef {'SEMANTIC_AI' | 'TEMPLATE'} SemanticPipelineId */
++
++/**
++ * Full semantic planning: Bot Intent Plan → Bot IR → stacks.
++ * @param {object} botIntentPlan
++ * @param {object} deterministicPlan
++ * @param {object} [options]
++ * @returns {Promise<{ ok: boolean, canonicalIr: object|null, stacks: object[]|null, diagnostics: object[], repairActions: string[], errors: string[], pipeline: SemanticPipelineId }>}
++ */
++export function runSemanticPlanningPipeline(botIntentPlan, deterministicPlan, options = {}) {
++  return runSemanticAiPipeline(botIntentPlan, deterministicPlan, options);
++}
++import { applyIntentBudgetToIr, buildSemanticTemplateIr } from './intentPlanner.mjs';
++import { normalizeBotIntentPlan, validateBotIntentPlan } from './botIntentPlan.mjs';
++import { compileIntentPlanToBotIr } from './intentToBotIr.mjs';
++import { compileBotIrToExecutableGraph } from './graphCompiler.mjs';
++import { resolveFeatureDependencies } from './featureDependencyResolver.mjs';
++import { repairIntentSatisfaction } from './intentSatisfactionValidator.mjs';
++import { runDeterministicIrRepairLoop } from './irRepairEngine.mjs';
++
++function asArray(value) {
++  return Array.isArray(value) ? value : [];
++}
++
++/**
++ * Template-based generation: deterministic IntentPlan → IR → executable graph.
++ */
++export function runTemplateGraphPipeline(intentPlan, options = {}) {
++  const templateIr = buildSemanticTemplateIr(intentPlan, { prompt: options.prompt });
++  const budgeted = applyIntentBudgetToIr(templateIr, intentPlan);
++  let ir = budgeted.ir;
++  const diagnostics = [];
++  const repairActions = [];
++
++  if (budgeted.changed) {
++    repairActions.push(...budgeted.notes.map((n) => `INTENT_BUDGET: ${n}`));
++  }
++
++  const featureResolution = resolveFeatureDependencies(ir, {
++    intentPlan,
++    astMode: options.astMode,
++    allowedMemoryKeys: options.allowedMemoryKeys,
++  });
++  ir = featureResolution.ir;
++  diagnostics.push(...asArray(featureResolution.diagnostics));
++  repairActions.push(...asArray(featureResolution.repairActions).map((a) => `FDR: ${a}`));
++
++  const compiled = compileBotIrToExecutableGraph(ir, options);
++  return {
++    ok: compiled.ok,
++    canonicalIr: compiled.ir,
++    stacks: compiled.stacks,
++    diagnostics: [...diagnostics, ...asArray(compiled.diagnostics)],
++    repairActions,
++    errors: compiled.errors,
++    pipeline: 'TEMPLATE',
++  };
++}
++
++/**
++ * AI semantic path: Bot Intent Plan → Bot IR → executable graph.
++ */
++export function runSemanticAiPipeline(botIntentPlan, deterministicPlan, options = {}) {
++  const normalizedPlan = normalizeBotIntentPlan(botIntentPlan);
++  const validation = validateBotIntentPlan(normalizedPlan);
++  const diagnostics = [...asArray(validation.warnings).map((message) => ({
++    code: 'INTENT_PLAN_WARNING',
++    severity: 'warning',
++    message,
++  }))];
++  const repairActions = [];
++
++  if (!validation.ok) {
++    return {
++      ok: false,
++      canonicalIr: null,
++      stacks: null,
++      diagnostics: [
++        ...diagnostics,
++        ...validation.errors.map((message) => ({
++          code: 'INTENT_PLAN_INVALID',
++          severity: 'error',
++          message,
++        })),
++      ],
++      repairActions,
++      errors: validation.errors,
++      pipeline: 'SEMANTIC_AI',
++    };
++  }
++
++  diagnostics.push({
++    code: 'INTENT_PLAN_ACCEPTED',
++    severity: 'info',
++    message: `Bot Intent Plan accepted: ${normalizedPlan.flows.length} flows, ${normalizedPlan.screens.length} screens.`,
++  });
++
++  let ir = compileIntentPlanToBotIr(normalizedPlan, deterministicPlan);
++
++  const budgeted = applyIntentBudgetToIr(ir, deterministicPlan);
++  ir = budgeted.ir;
++  if (budgeted.changed) {
++    repairActions.push(...budgeted.notes.map((n) => `INTENT_BUDGET: ${n}`));
++    diagnostics.push({
++      code: 'COMPLEXITY_REDUCED',
++      severity: 'info',
++      message: budgeted.notes.join('; ') || 'budget enforced',
++    });
++  }
++
++  const intentRepair = repairIntentSatisfaction(ir, {
++    prompt: options.prompt,
++    intentPlan: deterministicPlan,
++  });
++  if (intentRepair.changed) {
++    ir = applyIntentBudgetToIr(intentRepair.ir, deterministicPlan).ir;
++    diagnostics.push(...asArray(intentRepair.diagnostics));
++    repairActions.push(...asArray(intentRepair.repairNotes));
++  }
++
++  const featureResolution = resolveFeatureDependencies(ir, {
++    intentPlan: deterministicPlan,
++    astMode: options.astMode,
++    allowedMemoryKeys: options.allowedMemoryKeys,
++  });
++  ir = featureResolution.ir;
++  diagnostics.push(...asArray(featureResolution.diagnostics));
++  repairActions.push(...asArray(featureResolution.repairActions).map((a) => `FDR: ${a}`));
++
++  const repaired = runDeterministicIrRepairLoop(ir, {
++    astMode: options.astMode,
++    allowedMemoryKeys: options.allowedMemoryKeys,
++    deadline: options.deadline,
++    maxRepairPasses: options.maxRepairPasses ?? 2,
++  });
++  ir = repaired.ir;
++  diagnostics.push(...asArray(repaired.validation?.diagnostics));
++  repairActions.push(...asArray(repaired.repairNotes));
++
++  if (!repaired.ok) {
++    return {
++      ok: false,
++      canonicalIr: ir,
++      stacks: null,
++      diagnostics,
++      repairActions,
++      errors: ['IR semantic repair failed after intent planning'],
++      pipeline: 'SEMANTIC_AI',
++    };
++  }
++
++  const compiled = compileBotIrToExecutableGraph(ir, options);
++  return {
++    ok: compiled.ok,
++    canonicalIr: compiled.ir,
++    stacks: compiled.stacks,
++    diagnostics: [...diagnostics, ...asArray(compiled.diagnostics)],
++    repairActions,
++    errors: compiled.errors,
++    pipeline: 'SEMANTIC_AI',
++  };
++}
+diff --git a/core/tests/semantic-ai-pipeline.test.mjs b/core/tests/semantic-ai-pipeline.test.mjs
+new file mode 100644
+index 0000000..bf0b121
+--- /dev/null
++++ b/core/tests/semantic-ai-pipeline.test.mjs
+@@ -0,0 +1,125 @@
++import assert from 'node:assert/strict';
++import test from 'node:test';
++import {
++  extractBotIntentPlanFromRaw,
++  normalizeBotIntentPlan,
++  validateBotIntentPlan,
++} from '../ai/botIntentPlan.mjs';
++import { compileIntentPlanToBotIr } from '../ai/intentToBotIr.mjs';
++import { compileBotIrToExecutableGraph } from '../ai/graphCompiler.mjs';
++import { intentPlanner } from '../ai/intentPlanner.mjs';
++import {
++  runSemanticAiPipeline,
++  runSemanticPlanningPipeline,
++  runTemplateGraphPipeline,
++} from '../ai/semanticAiPipeline.mjs';
++import { extractPartialBotIrFromLlmStream } from '../ai/intentPlanLlm.mjs';
++import {
++  shouldUseDeterministicSemanticTemplate,
++} from '../ai/deterministicSemanticTemplate.mjs';
++
++test('extractBotIntentPlanFromRaw rejects legacy stacks output', () => {
++  const raw = '[{"id":"s0","x":40,"y":0,"blocks":[{"type":"bot","props":{"token":"x"}}]}]';
++  assert.equal(extractBotIntentPlanFromRaw(raw), null);
++});
++
++test('extractBotIntentPlanFromRaw rejects Canonical IR from AI', () => {
++  const raw = '{"irVersion":1,"handlers":[{"id":"h1","type":"start","trigger":"","actions":[]}],"scenarios":[]}';
++  assert.equal(extractBotIntentPlanFromRaw(raw), null);
++});
++
++test('planner compiles intent plan to Bot IR with handlers', () => {
++  const plan = normalizeBotIntentPlan({
++    intentPlanVersion: 1,
++    summary: 'Test bot',
++    primaryGoal: 'test',
++    screens: [{ id: 'ui_start', message: 'Hi', buttons: ['Go'] }],
++    flows: [{
++      id: 'flow_main',
++      name: 'main',
++      trigger: { type: 'start' },
++      steps: [
++        { kind: 'show_screen', screenId: 'ui_start' },
++        { kind: 'end' },
++      ],
++    }],
++  });
++  const ir = compileIntentPlanToBotIr(plan, intentPlanner('привет'));
++  assert.ok(Array.isArray(ir.handlers) && ir.handlers.length > 0);
++  assert.ok(Array.isArray(ir.uiStates) && ir.uiStates.length > 0);
++});
++
++test('compiler builds executable stacks only from valid Bot IR', () => {
++  const deterministic = intentPlanner('бот калькулятор');
++  const templateResult = runTemplateGraphPipeline(deterministic, { prompt: 'бот калькулятор' });
++  assert.equal(templateResult.ok, true);
++  assert.ok(Array.isArray(templateResult.stacks) && templateResult.stacks.length > 0);
++  assert.ok(templateResult.canonicalIr);
++});
++
++test('semantic pipeline end-to-end from Bot Intent Plan JSON', () => {
++  const raw = `{
++    "intentPlanVersion": 1,
++    "summary": "Echo bot",
++    "primaryGoal": "echo",
++    "screens": [],
++    "flows": [{
++      "id": "flow_echo",
++      "name": "echo",
++      "trigger": {"type": "start"},
++      "steps": [
++        {"kind": "message", "text": "Привет!"},
++        {"kind": "end"}
++      ]
++    }]
++  }`;
++  const extracted = extractBotIntentPlanFromRaw(raw);
++  assert.ok(extracted?.plan);
++  const validation = validateBotIntentPlan(extracted.plan);
++  assert.equal(validation.ok, true);
++  const deterministic = intentPlanner('эхо бот');
++  const result = runSemanticAiPipeline(extracted.plan, deterministic, { prompt: 'эхо бот' });
++  assert.equal(result.ok, true);
++  assert.ok(result.stacks?.length > 0);
++});
++
++test('simple menu bot uses deterministic template path', () => {
++  const plan = intentPlanner('бот меню с кнопками помощь');
++  assert.equal(plan.knownCapabilityTemplate, 'menu_bot');
++  assert.equal(shouldUseDeterministicSemanticTemplate(plan), true);
++});
++
++test('compiler rejects empty invalid IR', () => {
++  const compiled = compileBotIrToExecutableGraph({ irVersion: 2, handlers: [], scenarios: [], uiStates: [] });
++  assert.equal(compiled.ok, false);
++});
++
++test('partial stream compiles Bot Intent Plan only, rejects Canonical IR', () => {
++  const irFromPlan = extractPartialBotIrFromLlmStream(
++    '{"intentPlanVersion":1,"summary":"x","flows":[{"id":"f","name":"m","trigger":{"type":"start"},"steps":[{"kind":"message","text":"hi"},{"kind":"end"}]}]}',
++    intentPlanner('привет'),
++  );
++  assert.ok(irFromPlan?.handlers?.length);
++  const irFromLegacy = extractPartialBotIrFromLlmStream(
++    '{"irVersion":1,"handlers":[{"id":"h1","type":"start","trigger":"","actions":[]}]}',
++  );
++  assert.equal(irFromLegacy, null);
++});
++
++test('runSemanticPlanningPipeline alias matches semantic pipeline', () => {
++  const plan = {
++    intentPlanVersion: 1,
++    summary: 'Menu',
++    flows: [{
++      id: 'flow_main',
++      name: 'main',
++      trigger: { type: 'start' },
++      steps: [{ kind: 'message', text: 'OK' }, { kind: 'end' }],
++    }],
++  };
++  const det = intentPlanner('меню');
++  const a = runSemanticAiPipeline(plan, det, { prompt: 'меню' });
++  const b = runSemanticPlanningPipeline(plan, det, { prompt: 'меню' });
++  assert.equal(a.ok, b.ok);
++  assert.equal(a.pipeline, b.pipeline);
++});
+diff --git a/package.json b/package.json
+index 20c0bcd..f203d7c 100644
+--- a/package.json
++++ b/package.json
+@@ -30,6 +30,7 @@
+     "test:strict-validation": "tsx tests/compiler/strict_validation_pipeline.test.ts",
+     "test:unified-pipeline": "tsx tests/compiler/unified_compile_pipeline.test.ts",
+     "test:capability-engine": "tsx tests/compiler/capability_execution_engine.test.ts",
++    "test:semantic-ai-pipeline": "node --test core/tests/semantic-ai-pipeline.test.mjs core/tests/deterministic-semantic-template.test.mjs",
+     "test:runtime": "tsx tests/compiler/runtime.test.ts",
+     "parser-core-blocks": "node scripts/core-blocks-check.mjs",
+     "jammer:publish": "node scripts/publish-jammer-firmware.mjs",
+diff --git a/server.mjs b/server.mjs
+index 3561236..a900f34 100644
+--- a/server.mjs
++++ b/server.mjs
+@@ -81,7 +81,6 @@ import { stripThinkingFromAiRaw } from './core/ai/llmOutput.js';
+ import {
+   AI_TARGET_CORE_EXACT,
+   canonicalIrToEditorStacks,
+-  extractAiCanonicalIrFromRaw,
+   normalizeAiCanonicalIr,
+   validateAiCanonicalIr,
+ } from './core/ai/aiCanonicalIr.mjs';
+@@ -98,9 +97,16 @@ import {
+   applyIntentBudgetToIr,
+   SEMANTIC_TEMPLATE_IDS,
+   buildSemanticTemplateIr,
+-  buildIntentPlanPromptContext,
+   intentPlanner,
+ } from './core/ai/intentPlanner.mjs';
++import {
++  BOT_INTENT_PLAN_VERSION,
++  buildBotIntentPlanPromptContext,
++  buildBotIntentPlanUserPrompt,
++  extractBotIntentPlanFromRaw,
++} from './core/ai/botIntentPlan.mjs';
++import { extractPartialBotIrFromLlmStream, buildIntentPlanLlmMessages } from './core/ai/intentPlanLlm.mjs';
++import { runSemanticAiPipeline, runTemplateGraphPipeline } from './core/ai/semanticAiPipeline.mjs';
+ import {
+   SEMANTIC_TEMPLATE_APPLIED_REASON,
+   canRecoverWithSemanticTemplate,
+@@ -6416,154 +6422,80 @@ async function callGroq(messages, options = {}) {
+ 
+ // Статический разбор AI IR: structural validator + strict semantic gate + deterministic repair.
+ 
+-const AI_SYSTEM_PROMPT = `Ты — проектировщик runtime-graph для Telegram-ботов Cicada Studio.
+-Целевое ядро: cicada-studio ${AI_TARGET_CORE_EXACT} (runtime aiogram 3). Верни ТОЛЬКО валидный JSON Canonical AI IR: первый символ {, последний }. Без markdown и без текста до/после.
++const AI_INTENT_PLAN_SYSTEM_PROMPT = `Ты — семантический планировщик Telegram-ботов Cicada Studio.
++Целевое ядро: cicada-studio ${AI_TARGET_CORE_EXACT} (runtime aiogram 3).
++Верни ТОЛЬКО валидный JSON Bot Intent Plan: первый символ {, последний }. Без markdown и без текста до/после.
+ 
+-═══ ЦЕПОЧКА КОМПИЛЯЦИИ (ты отвечаешь только за IR) ═══
+-Твой JSON → сервер (normalize → semantic gate → repair) → граф блоков в редакторе → Python bot.py.
+-Ты НЕ пишешь: DSL/.ccd, Python, массив editor stacks, координаты x/y, блок bot/token.
++═══ ЦЕПОЧКА КОМПИЛЯЦИИ (ты отвечаешь только за семантический план) ═══
++Твой Bot Intent Plan → Planner (сервер) → Bot IR → Compiler → executable graph → Python bot.py.
++Ты НЕ пишешь: Canonical AI IR, handlers/scenarios/actions, editor stacks, React Flow nodes/edges, координаты x/y, DSL, Python.
+ 
+-═══ ЗАПРЕЩЁННЫЙ УСТАРЕВШИЙ ФОРМАТ ═══
+-Никогда не возвращай массив stacks вида [{"id":"s0","x":40,"blocks":[{"type":"bot","props":{...}}]}].
+-Это legacy-формат редактора; сервер ожидает один объект Canonical AI IR.
++═══ ЗАПРЕЩЁННЫЕ ФОРМАТЫ ═══
++Никогда не возвращай:
++- массив stacks [{"id":"s0","x":40,"blocks":[...]}]
++- Canonical AI IR с handlers/scenarios/uiStates/transitions
++- React Flow nodes или edges
++Это legacy; сервер ожидает только Bot Intent Plan.
+ 
+ ═══ БРЕНДИНГ ИИ ═══
+ Если в тексте сообщений бота нужно назвать ИИ, используй только название "Cicada 3301".
+ Никогда не используй названия моделей/вендоров вроде "Meta Llama 3", "Llama", "Qwen", "OpenAI", "Groq".
+ 
+-═══ CANONICAL AI IR (единственный выходной контракт) ═══
+-ИИ строит runtime graph (handlers, scenarios, uiStates), а не визуальные stacks:
++═══ BOT INTENT PLAN (единственный выходной контракт) ═══
+ {
+-  "irVersion": 1,
+-  "targetCore": "0.0.1",
+-  "compatibilityMode": "0.0.1 exact",
+-  "intent": {"primary": "..."},
+-  "state": {"globals": []},
+-  "handlers": [],
+-  "blocks": [],
+-  "scenarios": [],
+-  "transitions": [],
+-  "uiStates": []
++  "intentPlanVersion": ${BOT_INTENT_PLAN_VERSION},
++  "summary": "краткое описание бота",
++  "primaryGoal": "order_form | calculator | catalog | ...",
++  "botType": "informational | calculator | commerce | ...",
++  "templateHint": "calculator | catalog | subscription | form_collection | menu_bot",
++  "screens": [
++    {"id":"ui_start","message":"Текст экрана","buttons":["Кнопка 1","Кнопка 2"]}
++  ],
++  "flows": [
++    {
++      "id":"flow_main",
++      "name":"оформление",
++      "trigger":{"type":"start"},
++      "steps":[
++        {"kind":"show_screen","screenId":"ui_start"},
++        {"kind":"ask","question":"Введите имя:","field":"имя"},
++        {"kind":"message","text":"Спасибо, {имя}!"},
++        {"kind":"end"}
++      ]
++    }
++  ],
++  "menuButtons":[{"label":"Оформить заказ","flowId":"flow_order"}],
++  "globals":[{"name":"категории","value":"[\\"A\\",\\"B\\"]"}],
++  "constraints":{}
+ }
+ 
+-Поля action — на верхнем уровне объекта (text, rows, key, varname, file, target), без обёртки props.
+-Сервер сам выполнит: Canonical IR → normalize → semantic gate → repair → граф блоков → Python (aiogram 3).
+-
+-Разрешены ТОЛЬКО следующие handler.type:
+-  start, command, callback, text
+-
+-Разрешены ТОЛЬКО следующие action.type:
+-  message, buttons, inline_db, ask, remember, get, save, save_global, condition,
+-  run_scenario, goto_command, goto_block, goto_scenario, goto, use_block, stop, send_file, ui_state
+-
+-Запрещено придумывать type вне списка (legacy callbacks, inline, http, pause, document, photo, media_received, append, insert, bot, start/message как отдельные блоки stacks и т.д.).
+-Если нужна другая возможность — только эквивалент из whitelist ядра 0.0.1.
+-
+-Для записи в KV используй только save/save_global. Не придумывай append/insert/update_many: если нужно изменить список, сначала собери новое значение в remember, затем save/save_global.
+-
+-═══ АЛГОРИТМ ПОСТРОЕНИЯ ГРАФА (выполни мысленно, затем выведи только JSON) ═══
+-
+-Даже если пользователь написал коротко или расплывчато, НЕ расширяй граф сверх IntentPlan и complexity budget.
+-Строй минимальный viable flow из IntentPlan: меньше handlers/scenarios лучше, чем сырой сложный IR.
+-
+-1) ИНТЕНТ — что делает бот, цель и точка входа: /start или первая reply-кнопка.
+-2) СОСТОЯНИЯ — uiStates для экранов: text/message, buttons или inlineDb.
+-3) HANDLERS — start, command, callback, text; callback.trigger может быть "" для общего inline-router «при нажатии:».
+-4) ПЕРЕХОДЫ — через actions run_scenario/goto_command/goto_block/goto_scenario/use_block и дублируй важные связи в transitions.
+-5) УСЛОВИЯ — action condition с then/else.
+-6) ДАННЫЕ — любая {переменная} в message/condition объявлена выше ask/get/remember или это системная переменная из registry. get допустим только если сервер в режиме advanced и ключ get.key входит в разрешённый список. В safe-режиме get не используй — только remember/ask/save известных значений.
+-
+-Промежуточный план уже будет передан сервером. Не печатай его — только JSON Canonical IR.
+-
+-═══ IR SHAPES ═══
+-
+-handler:
+-  {"id":"h_catalog","type":"callback","trigger":"📦 Каталог","actions":[...]}
+-  {"id":"h_inline_router","type":"callback","trigger":"","actions":[...]}  // общий handler для inline callback
+-  {"id":"h_catalog_cmd","type":"command","trigger":"/catalog","actions":[...]}
+-
+-block:
+-  {"id":"b_menu","name":"главное_меню","actions":[...]}
++Разрешённые kind в flows[].steps:
++  show_screen, ask, message, remember, get, condition, save, save_global, send_file, run_flow, end
+ 
+-scenario:
+-  {"id":"s_checkout","name":"оформление","steps":[{"id":"step_name","name":"имя","actions":[...]}]}
++Разрешённые trigger.type в flows[]:
++  start, button, command, text, inline
+ 
+-uiState:
+-  {"id":"ui_catalog","message":"📦 Категории:","buttons":"📦 Каталог, 🛒 Корзина"}
+-  {"id":"ui_categories","message":"Выберите категорию","inlineDb":{"key":"категории","callbackPrefix":"cat:","backText":"⬅️ Назад","backCallback":"back","columns":"2"}}
++Сервер сам: Intent Plan → Planner → Bot IR → Compiler → executable graph.
++Не расширяй flows/screens сверх Deterministic Intent Plan и budget.
++Строй minimal viable flow: 1–2 flows, 1–3 screens, только необходимые ask/message шаги.
+ 
+-action examples:
+-  {"type":"message","text":"..."}
+-  {"type":"buttons","rows":"A, B\\nC"}
+-  {"type":"inline_db","key":"категории","callbackPrefix":"cat:","backText":"⬅️ Назад","backCallback":"back","columns":"2"}
+-  {"type":"condition","cond":"начинается_с(callback_data, \"cat:\")","then":[...],"else":[...]}
+-  {"type":"run_scenario","target":"оформление"}
+-  {"type":"goto_command","target":"/catalog"}
+-  {"type":"goto_block","target":"главное_меню"}
+-  {"type":"use_block","target":"главное_меню"}
+-
+-═══ АРХИТЕКТУРА ═══
+-
+-КНОПКИ + ОБРАБОТЧИКИ:
+-  start handler показывает uiState/menu.
+-  Reply buttons требуют отдельный callback handler с trigger == тексту кнопки.
+-  Inline из БД требует общий callback handler trigger == "" и conditions по переменной callback_data.
+-
+-СЦЕНАРИЙ, НЕСКОЛЬКО ВОПРОСОВ:
+-  start/callback → run(имя) БЕЗ stop | scenario(имя) → step → ask → step → ask → … → message/condition → stop
+-  После ask всегда дай пользователю следующее message или кнопки.
+-
+-УСЛОВИЕ:
+-  … → condition(cond) → message → else → message → stop
+-
+-═══ СТРОГИЕ ПРАВИЛА ═══
+-
+-1. Не указывай bot/token/editor coordinates — это сделает серверный generator.
+-2. Не ставь stop сразу после run_scenario в том же handler.
+-3. Для 2+ вопросов используй scenarios.steps, а handler только запускает scenario.
+-4. Reply callback trigger совпадает с текстом в buttons.rows.
+-5. Inline callback router: handler.type callback, trigger "".
+-6. Используй только объявленные переменные и canonical system variables; не придумывай бд/callback/data/state.
+-7. В ключе get.key при подстановке chat_id используй только корректные скобки: "поле_{chat_id}", не опечатывай }.
+-
+-═══ ПЕРЕМЕННЫЕ ═══
+-
+-Объявление: ask (varname), get (varname), remember (varname).
+-Системные без объявления: пользователь, текст, callback_data, chat_id, user_id (и другие из registry в контексте).
+-
+-ЗАПРЕЩЕНО ссылаться на {переменная} в message/condition/send_file.file, если она не объявлена выше в этом handler/scenario/step и не системная.
+-
+-═══ ФАЙЛ ОТ ПОЛЬЗОВАТЕЛЯ (без медиа-триггеров) ═══
+-
+-В whitelist нет document_received — принимай файл только через ask в сценарии: пользователь может прислать документ, бот кладёт Telegram file_id в переменную varname.
+-Пример приёма: step → ask("Пришлите файл", varname:"файл") → message("Принято. File ID: {файл}") → stop
+-Не используй {файл_id} — только имя из varname (например {файл}).
+-
+-ВЫДАТЬ ФАЙЛ ОБРАТНО (хранилище, «скачать», по введённому File ID):
+-- После ask, где пользователь вставил или прислал идентификатор, в переменной лежит строка file_id.
+-- Обязателен action send_file: {"type":"send_file","file":"{имя_переменной_из_ask}"}
+-- Можно краткий message перед send_file (например «📥 Ваш файл:»), затем send_file — пользователь получит вложение-документ, а не текст с id.
+-- ЗАПРЕЩЕНО выдавать file_id только через message — это не отправит файл в Telegram.
++═══ СЕМАНТИЧЕСКИЕ ПРАВИЛА ═══
++1. screens[] — только тексты и кнопки; inlineCatalog только если нужен каталог из БД.
++2. flows[] — логика диалога; несколько ask подряд — отдельные steps.
++3. menuButtons связывает кнопки экрана с flowId.
++4. Переменные в message используй только из field предыдущих ask или remember.
++5. Не описывай handlers, scenarios, actions, stacks, nodes, edges — это сделает Planner/Compiler.
+ `;
+ 
+-// Few-shot — только Canonical AI IR (ядро 0.0.1)
+-const IR_FEW_SHOT_USER = `бот принимает заказы: главное меню с кнопкой "Оформить заказ", сценарий спрашивает имя и телефон`;
+-const IR_FEW_SHOT_ASSISTANT = `{"irVersion":1,"targetCore":"0.0.1","compatibilityMode":"0.0.1 exact","intent":{"primary":"order_form"},"state":{"globals":[]},"uiStates":[{"id":"ui_start","message":"Добро пожаловать! Выберите действие:","buttons":"Оформить заказ, ℹ️ О нас"}],"handlers":[{"id":"h_start","type":"start","trigger":"","actions":[{"type":"ui_state","uiStateId":"ui_start"},{"type":"stop"}]},{"id":"h_order","type":"callback","trigger":"Оформить заказ","actions":[{"type":"message","text":"Отлично! Заполним данные для заказа."},{"type":"run_scenario","target":"оформление"}]},{"id":"h_about","type":"callback","trigger":"ℹ️ О нас","actions":[{"type":"message","text":"Мы — магазин на Cicada Studio."},{"type":"stop"}]}],"blocks":[],"scenarios":[{"id":"sc_order","name":"оформление","steps":[{"id":"step_name","name":"имя","actions":[{"type":"ask","question":"Введите ваше имя:","varname":"имя"}]},{"id":"step_phone","name":"телефон","actions":[{"type":"ask","question":"Введите ваш телефон:","varname":"телефон"},{"type":"message","text":"✅ Заказ принят! Имя: {имя}, телефон: {телефон}"},{"type":"stop"}]}]}],"transitions":[{"from":"h_order","to":"sc_order","type":"run_scenario"}]}`;
+-
+-const IR_FEW_SHOT_USER_2 = `магазин: категории и товары через inline-кнопки из БД`;
+-const IR_FEW_SHOT_ASSISTANT_2 = `{"irVersion":1,"targetCore":"0.0.1","compatibilityMode":"0.0.1 exact","intent":{"primary":"db_inline_catalog"},"state":{"globals":[{"name":"категории","value":"[\\"Пицца\\", \\"Напитки\\"]"}]},"uiStates":[{"id":"ui_menu","message":"🏠 Главное меню","buttons":"📦 Каталог"},{"id":"ui_categories","message":"📦 Выберите категорию:","inlineDb":{"key":"категории","callbackPrefix":"cat:","backText":"⬅️ Назад","backCallback":"back","columns":"2"}}],"handlers":[{"id":"h_start","type":"start","trigger":"","actions":[{"type":"ui_state","uiStateId":"ui_menu"},{"type":"stop"}]},{"id":"h_catalog","type":"callback","trigger":"📦 Каталог","actions":[{"type":"ui_state","uiStateId":"ui_categories"},{"type":"stop"}]},{"id":"h_inline","type":"callback","trigger":"","actions":[{"type":"condition","cond":"начинается_с(callback_data, \\"cat:\\")","then":[{"type":"remember","varname":"категория","value":"срез(callback_data, 4)"},{"type":"message","text":"Товары категории: {категория}"},{"type":"inline_db","key":"товары","callbackPrefix":"prod:","backText":"⬅️ Категории","backCallback":"back_categories","columns":"1"},{"type":"stop"}],"else":[{"type":"condition","cond":"начинается_с(callback_data, \\"prod:\\")","then":[{"type":"remember","varname":"товар","value":"срез(callback_data, 5)"},{"type":"message","text":"📦 Товар: {товар}\\nЦена и описание берутся из БД."},{"type":"stop"}],"else":[{"type":"ui_state","uiStateId":"ui_categories"},{"type":"stop"}]}]}]}],"blocks":[],"scenarios":[],"transitions":[{"from":"h_catalog","to":"ui_categories","type":"ui_state"},{"from":"h_inline","to":"ui_categories","type":"inline_router"}]}`;
+-
+-const IR_FEW_SHOT_USER_3 = `создай бот телеграм прием заявок с бд и статусом`;
+-const IR_FEW_SHOT_ASSISTANT_3 = `{"irVersion":1,"targetCore":"0.0.1","compatibilityMode":"0.0.1 exact","intent":{"primary":"request_intake_with_status"},"state":{"globals":[]},"uiStates":[{"id":"ui_start","message":"👋 Добро пожаловать! Здесь вы можете оставить заявку и проверить её статус.","buttons":"📝 Оставить заявку, 📊 Статус заявки"}],"handlers":[{"id":"h_start","type":"start","trigger":"","actions":[{"type":"ui_state","uiStateId":"ui_start"},{"type":"stop"}]},{"id":"h_new_request","type":"callback","trigger":"📝 Оставить заявку","actions":[{"type":"message","text":"Заполните заявку — я сохраню её в базе."},{"type":"run_scenario","target":"прием_заявки"}]},{"id":"h_status","type":"callback","trigger":"📊 Статус заявки","actions":[{"type":"get","key":"заявка_{user_id}","varname":"заявка"},{"type":"message","text":"📌 Статус вашей последней заявки:\n{заявка}\n\nЕсли данных нет — сначала оставьте заявку."},{"type":"stop"}]}],"blocks":[],"scenarios":[{"id":"sc_request","name":"прием_заявки","steps":[{"id":"step_name","name":"имя","actions":[{"type":"ask","question":"Как вас зовут?","varname":"имя"}]},{"id":"step_contact","name":"контакт","actions":[{"type":"ask","question":"Оставьте телефон или @username:","varname":"контакт"}]},{"id":"step_text","name":"описание","actions":[{"type":"ask","question":"Опишите заявку:","varname":"описание"},{"type":"remember","varname":"статус","value":"новая"},{"type":"save_global","key":"заявка_{user_id}","value":"№ {user_id} | Имя: {имя} | Контакт: {контакт} | Заявка: {описание} | Статус: {статус}"},{"type":"message","text":"✅ Заявка сохранена в базе.\nНомер: {user_id}\nСтатус: {статус}.\nПроверить позже можно кнопкой «📊 Статус заявки»."},{"type":"stop"}]}]}],"transitions":[{"from":"h_new_request","to":"sc_request","type":"run_scenario"},{"from":"h_status","to":"заявка_{user_id}","type":"get_status"}]}`;
+-
+-const IR_FEW_SHOT_USER_4 = `бот с условием: спрашивает возраст, если >= 18 пускает, иначе отказывает`;
+-const IR_FEW_SHOT_ASSISTANT_4 = `{"irVersion":1,"targetCore":"0.0.1","compatibilityMode":"0.0.1 exact","intent":{"primary":"age_gate"},"state":{"globals":[]},"uiStates":[],"handlers":[{"id":"h_start","type":"start","trigger":"","actions":[{"type":"message","text":"Привет! Нужно проверить ваш возраст."},{"type":"run_scenario","target":"проверка_возраста"}]}],"blocks":[],"scenarios":[{"id":"sc_age","name":"проверка_возраста","steps":[{"id":"step_ask","name":"ввод","actions":[{"type":"ask","question":"Сколько вам лет?","varname":"возраст"},{"type":"condition","cond":"возраст >= 18","then":[{"type":"message","text":"✅ Добро пожаловать! Контент доступен."},{"type":"stop"}],"else":[{"type":"message","text":"❌ Доступ разрешён только с 18 лет."},{"type":"stop"}]}]}]}],"transitions":[{"from":"h_start","to":"sc_age","type":"run_scenario"}]}`;
++// Few-shot — только Bot Intent Plan
++const INTENT_PLAN_FEW_SHOT_USER = `бот принимает заказы: главное меню с кнопкой "Оформить заказ", сценарий спрашивает имя и телефон`;
++const INTENT_PLAN_FEW_SHOT_ASSISTANT = `{"intentPlanVersion":1,"summary":"Приём заказов","primaryGoal":"order_form","botType":"commerce","templateHint":"form_collection","screens":[{"id":"ui_start","message":"Добро пожаловать! Выберите действие:","buttons":["Оформить заказ"]}],"flows":[{"id":"flow_start","name":"entry","trigger":{"type":"start"},"steps":[{"kind":"show_screen","screenId":"ui_start"},{"kind":"end"}]},{"id":"flow_order","name":"оформление","trigger":{"type":"button","value":"Оформить заказ"},"steps":[{"kind":"ask","question":"Введите имя:","field":"имя"},{"kind":"ask","question":"Введите телефон:","field":"телефон"},{"kind":"message","text":"✅ Заказ принят! Имя: {имя}, телефон: {телефон}"},{"kind":"end"}]}],"menuButtons":[{"label":"Оформить заказ","flowId":"flow_order"}],"globals":[],"constraints":{}}`;
+ 
+-const IR_FEW_SHOT_USER_5 = `бот-хранилище: загрузить файл и выдать по File ID через send_file`;
+-const IR_FEW_SHOT_ASSISTANT_5 = `{"irVersion":1,"targetCore":"0.0.1","compatibilityMode":"0.0.1 exact","intent":{"primary":"file_storage"},"state":{"globals":[]},"uiStates":[{"id":"ui_menu","message":"📁 Принимаю файл и отдам по File ID.","buttons":"📤 Загрузить, 📥 Получить"}],"handlers":[{"id":"h_start","type":"start","trigger":"","actions":[{"type":"ui_state","uiStateId":"ui_menu"},{"type":"stop"}]},{"id":"h_upload","type":"callback","trigger":"📤 Загрузить","actions":[{"type":"run_scenario","target":"загрузка"}]},{"id":"h_download","type":"callback","trigger":"📥 Получить","actions":[{"type":"run_scenario","target":"выдача"}]}],"blocks":[],"scenarios":[{"id":"sc_upload","name":"загрузка","steps":[{"id":"step_file","name":"файл","actions":[{"type":"ask","question":"Пришлите файл:","varname":"файл"},{"type":"message","text":"✅ Сохранено. File ID:\\n{файл}"},{"type":"stop"}]}]},{"id":"sc_download","name":"выдача","steps":[{"id":"step_id","name":"запрос","actions":[{"type":"ask","question":"Введите File ID:","varname":"сохранённый_файл"},{"type":"message","text":"📥 Ваш файл:"},{"type":"send_file","file":"{сохранённый_файл}"},{"type":"stop"}]}]}],"transitions":[{"from":"h_upload","to":"sc_upload","type":"run_scenario"},{"from":"h_download","to":"sc_download","type":"run_scenario"}]}`;
++const INTENT_PLAN_FEW_SHOT_USER_2 = `бот калькулятор: две кнопки посчитать`;
++const INTENT_PLAN_FEW_SHOT_ASSISTANT_2 = `{"intentPlanVersion":1,"summary":"Калькулятор","primaryGoal":"calculator","botType":"calculator","templateHint":"calculator","screens":[{"id":"ui_start","message":"Калькулятор: выберите действие.","buttons":["Посчитать"]}],"flows":[{"id":"flow_calc","name":"расчет","trigger":{"type":"button","value":"Посчитать"},"steps":[{"kind":"ask","question":"Введите первое число:","field":"число1"},{"kind":"ask","question":"Введите второе число:","field":"число2"},{"kind":"message","text":"Сумма: {число1} + {число2}"},{"kind":"end"}]}],"menuButtons":[],"globals":[],"constraints":{}}`;
+ 
+-const IR_FEW_SHOT_USER_6 = `кнопка «Город»: спросить город, remember город_label = «Город: {город}», ответить {город_label}`;
+-const IR_FEW_SHOT_ASSISTANT_6 = `{"irVersion":1,"targetCore":"0.0.1","compatibilityMode":"0.0.1 exact","intent":{"primary":"city_remember"},"state":{"globals":[]},"uiStates":[{"id":"ui_start","message":"Выберите действие","buttons":"🌍 Указать город"}],"handlers":[{"id":"h_start","type":"start","trigger":"","actions":[{"type":"ui_state","uiStateId":"ui_start"},{"type":"stop"}]},{"id":"h_city","type":"callback","trigger":"🌍 Указать город","actions":[{"type":"run_scenario","target":"город_fsm"}]}],"blocks":[],"scenarios":[{"id":"sc_city","name":"город_fsm","steps":[{"id":"step_input","name":"ввод","actions":[{"type":"ask","question":"В каком вы городе?","varname":"город"},{"type":"remember","varname":"город_label","value":"Город: {город}"},{"type":"message","text":"Запомнил: {город_label}"},{"type":"stop"}]}]}],"transitions":[{"from":"h_city","to":"sc_city","type":"run_scenario"}]}`;
++const INTENT_PLAN_FEW_SHOT_USER_3 = `бот с условием: спрашивает возраст, если >= 18 пускает`;
++const INTENT_PLAN_FEW_SHOT_ASSISTANT_3 = `{"intentPlanVersion":1,"summary":"Проверка возраста","primaryGoal":"age_gate","botType":"informational","screens":[],"flows":[{"id":"flow_age","name":"проверка_возраста","trigger":{"type":"start"},"steps":[{"kind":"ask","question":"Сколько вам лет?","field":"возраст"},{"kind":"condition","expression":"возраст >= 18","ifTrue":[{"kind":"message","text":"✅ Добро пожаловать!"},{"kind":"end"}],"ifFalse":[{"kind":"message","text":"❌ Доступ только с 18 лет."},{"kind":"end"}]}]}],"menuButtons":[],"globals":[],"constraints":{}}`;
+ 
+ function serverAiAstPolicyAppendix(astMode, allowedMemoryKeys) {
+   const lines = [
+@@ -6604,7 +6536,7 @@ function buildAiCoreContextAppendix() {
+     '',
+     '═══ КОНТЕКСТ ЯДРА cicada-studio 0.0.1 (источник истины) ═══',
+     'Сверяйся с манифестами. Если пользователь просит неподдерживаемое — смоделируй через whitelist или опусти.',
+-    'AI выдаёт только Canonical IR; runtime — aiogram 3 через compileCore.',
++    'AI выдаёт только Bot Intent Plan; Planner/Compiler строят Bot IR и executable graph; runtime — aiogram 3.',
+     '',
+     'api-manifest.json:',
+     apiManifest || '(отсутствует)',
+@@ -6617,28 +6549,16 @@ function buildAiCoreContextAppendix() {
+   ].join('\n');
+ }
+ 
+-function buildIntentPlannedUserPrompt(prompt, intentPlan) {
++function buildIntentPlanRepairUserPrompt(errors, planJsonSnippet) {
+   return [
+-    'Создай Canonical AI IR строго по IntentPlan и MinimalExecutionGraph ниже.',
+-    'Если исходный prompt просит больше, чем budget, сгенерируй minimal viable flow и НЕ добавляй extra handlers/scenarios.',
+-    '',
+-    'Original prompt:',
+-    prompt,
+-    '',
+-    'IntentPlan:',
+-    JSON.stringify(intentPlan, null, 2),
+-  ].join('\n');
+-}
+-
+-function buildIrRepairUserPrompt(errors, irJsonSnippet) {
+-  return [
+-    'Предыдущий ответ НЕ прошёл проверку Canonical AI IR / core parity. Исправь ТОЛЬКО JSON-объект IR.',
++    'Предыдущий ответ НЕ прошёл проверку Bot Intent Plan. Исправь ТОЛЬКО JSON Bot Intent Plan.',
++    'Запрещено: Canonical IR, handlers, scenarios, stacks, React Flow nodes.',
+     '',
+     'Ошибки:',
+     ...errors.slice(0, 20).map((e, i) => `${i + 1}. ${e}`),
+     '',
+-    'Текущий IR для правки (сохрани handlers/blocks/scenarios где возможно):',
+-    irJsonSnippet,
++    'Текущий план для правки:',
++    planJsonSnippet,
+     '',
+     'Вернёшь один JSON-объект {...} без markdown и без текста до/после.',
+   ].join('\n');
+@@ -6646,7 +6566,8 @@ function buildIrRepairUserPrompt(errors, irJsonSnippet) {
+ 
+ function buildNonJsonRepairPrompt() {
+   return (
+-    'Ответ должен быть ОДНИМ JSON-объектом Canonical AI IR: с символа { до }. Без ```, без пояснений. Повтори попытку.'
++    'Ответ должен быть ОДНИМ JSON Bot Intent Plan (intentPlanVersion: 1): с символа { до }. ' +
++    'Без stacks, handlers, Canonical IR, nodes/edges. Повтори попытку.'
+   );
+ }
+ 
+@@ -7261,22 +7182,12 @@ function completePartialJsonObject(raw) {
+   return out;
+ }
+ 
+-function extractPrimaryPartialIrFromRaw(raw) {
+-  const extracted = extractAiCanonicalIrFromRaw(raw);
+-  if (extracted?.ir) return normalizeAiCanonicalIr(extracted.ir);
+-  const completed = completePartialJsonObject(raw);
+-  const parsed = parseJsonObjectLoose(completed);
+-  if (!parsed) return null;
+-  const unwrapped = parsed.ir || parsed.canonicalIr || parsed.runtimeGraph || parsed.result || parsed;
+-  if (!unwrapped || typeof unwrapped !== 'object' || Array.isArray(unwrapped)) return null;
+-  if (!Array.isArray(unwrapped.handlers) && !Array.isArray(unwrapped.blocks) && !Array.isArray(unwrapped.scenarios)) {
+-    return null;
+-  }
+-  return normalizeAiCanonicalIr(unwrapped);
++function extractPrimaryPartialIrFromRaw(raw, deterministicPlan = null) {
++  return extractPartialBotIrFromLlmStream(raw, deterministicPlan);
+ }
+ 
+-function buildPrimaryPartialIrArtifact(raw, { source = AI_EXECUTION_MODE.AI_PRIMARY } = {}) {
+-  const ir = extractPrimaryPartialIrFromRaw(raw);
++function buildPrimaryPartialIrArtifact(raw, { source = AI_EXECUTION_MODE.AI_PRIMARY, deterministicPlan = null } = {}) {
++  const ir = extractPrimaryPartialIrFromRaw(raw, deterministicPlan);
+   if (!ir) return null;
+   return {
+     ir,
+@@ -7292,6 +7203,7 @@ async function callAiPrimaryWithPartialSnapshots(messages, {
+   max_tokens,
+   temperature,
+   onPartialIrArtifact,
++  deterministicPlan = null,
+ }) {
+   const controller = new AbortController();
+   const remaining = aiTimeRemainingMs(attemptDeadline);
+@@ -7301,7 +7213,10 @@ async function callAiPrimaryWithPartialSnapshots(messages, {
+   let lastSnapshotKey = '';
+ 
+   const persistSnapshot = () => {
+-    const artifact = buildPrimaryPartialIrArtifact(rawSoFar, { source: AI_EXECUTION_MODE.AI_PRIMARY });
++    const artifact = buildPrimaryPartialIrArtifact(rawSoFar, {
++      source: AI_EXECUTION_MODE.AI_PRIMARY,
++      deterministicPlan,
++    });
+     if (!artifact) return;
+     const key = `${artifact.byteSize}:${artifact.completeness}:${jsonByteSize(artifact.ir.handlers)}:${jsonByteSize(artifact.ir.scenarios)}`;
+     if (key === lastSnapshotKey) return;
+@@ -8093,17 +8008,34 @@ function buildDeterministicSemanticTemplateResponse({
+   sourceRepairActions = [],
+   isRecovery = false,
+ }) {
+-  const budgetedTemplateIr = applyIntentBudgetToIr(
+-    buildSemanticTemplateIr(intentPlan, { prompt }),
+-    intentPlan,
+-  ).ir;
+-  const templateResolution = resolveFeatureDependencies(budgetedTemplateIr, {
+-    intentPlan,
++  const templatePipeline = runTemplateGraphPipeline(intentPlan, {
++    prompt,
+     astMode,
+     allowedMemoryKeys,
+   });
+-  const templateIr = templateResolution.ir;
+-  const templateStacks = canonicalIrToEditorStacks(templateIr);
++  if (!templatePipeline.ok) {
++    return buildAiGenerationResult({
++      status: AI_GENERATE_STATUS.FAILED,
++      reason: 'TEMPLATE_PIPELINE_FAILED',
++      canonicalIr: templatePipeline.canonicalIr,
++      diagnostics: [
++        ...filterTemplateRecoveryDiagnostics(sourceDiagnostics),
++        ...asArray(templatePipeline.diagnostics),
++      ],
++      repairActions: [...asArray(sourceRepairActions), ...asArray(templatePipeline.repairActions)],
++      meta: responseMeta({ ...(meta || {}), ...extraMeta, semanticTemplate: intentPlan.knownCapabilityTemplate }),
++      final: true,
++      safeToRun: false,
++      executionMode: AI_EXECUTION_MODE.SEMANTIC_TEMPLATE,
++    });
++  }
++  const templateIr = templatePipeline.canonicalIr;
++  const templateStacks = templatePipeline.stacks;
++  const templateResolution = {
++    diagnostics: templatePipeline.diagnostics,
++    repairActions: templatePipeline.repairActions,
++    changed: templatePipeline.repairActions.length > 0,
++  };
+   const templateId = intentPlan.knownCapabilityTemplate;
+   const filteredSourceDiagnostics = filterTemplateRecoveryDiagnostics(sourceDiagnostics);
+   const diagnostics = [
+@@ -8119,7 +8051,9 @@ function buildDeterministicSemanticTemplateResponse({
+     ...aiArray(sourceRepairActions).filter((action) => (
+       !/PRUNER:|no source IR artifact/i.test(String(action || ''))
+     )),
+-    ...templateResolution.repairActions.map((action) => `FDR: ${action}`),
++    ...aiArray(templatePipeline.repairActions).map((action) => (
++      String(action).startsWith('FDR:') ? action : `FDR: ${action}`
++    )),
+     `Шаблон: ${templateId}`,
+   ].slice(0, AI_PARTIAL_DIAGNOSTIC_LIMIT);
+   return buildAiGenerationResult({
+@@ -8510,10 +8444,9 @@ app.post('/api/ai-generate', requireUserAuth, aiGenerateRateLimit, async (req, r
+     ...aiArray(items),
+   ].slice(0, AI_PARTIAL_DIAGNOSTIC_LIMIT);
+   const systemContent =
+-    AI_SYSTEM_PROMPT +
++    AI_INTENT_PLAN_SYSTEM_PROMPT +
+     buildAiCoreContextAppendix() +
+-    buildIrSymbolRegistryPromptContext({ allowedMemoryKeys }) +
+-    buildIntentPlanPromptContext(intentPlan) +
++    buildBotIntentPlanPromptContext(intentPlan) +
+     serverAiAstPolicyAppendix(astMode, allowedMemoryKeys);
+   const responseMeta = (extra = {}) => ({
+     attempts: lastAttempt,
+@@ -8555,22 +8488,18 @@ app.post('/api/ai-generate', requireUserAuth, aiGenerateRateLimit, async (req, r
+   try {
+     const maxAttempts = Math.min(AI_LLM_MAX_ATTEMPTS, AI_RETRY_BUDGET[AI_EXECUTION_MODE.AI_PRIMARY]);
+ 
+-    const initialMessages = [
+-      { role: 'system', content: systemContent },
+-      { role: 'user', content: IR_FEW_SHOT_USER },
+-      { role: 'assistant', content: IR_FEW_SHOT_ASSISTANT },
+-      { role: 'user', content: IR_FEW_SHOT_USER_2 },
+-      { role: 'assistant', content: IR_FEW_SHOT_ASSISTANT_2 },
+-      { role: 'user', content: IR_FEW_SHOT_USER_3 },
+-      { role: 'assistant', content: IR_FEW_SHOT_ASSISTANT_3 },
+-      { role: 'user', content: IR_FEW_SHOT_USER_4 },
+-      { role: 'assistant', content: IR_FEW_SHOT_ASSISTANT_4 },
+-      { role: 'user', content: IR_FEW_SHOT_USER_5 },
+-      { role: 'assistant', content: IR_FEW_SHOT_ASSISTANT_5 },
+-      { role: 'user', content: IR_FEW_SHOT_USER_6 },
+-      { role: 'assistant', content: IR_FEW_SHOT_ASSISTANT_6 },
+-      { role: 'user', content: buildIntentPlannedUserPrompt(promptText, intentPlan) },
+-    ];
++    const initialMessages = buildIntentPlanLlmMessages({
++      systemPrompt: AI_INTENT_PLAN_SYSTEM_PROMPT,
++      coreAppendix: buildAiCoreContextAppendix(),
++      intentPlanContext: buildBotIntentPlanPromptContext(intentPlan),
++      astPolicyAppendix: serverAiAstPolicyAppendix(astMode, allowedMemoryKeys),
++      userPrompt: buildBotIntentPlanUserPrompt(promptText, intentPlan),
++      fewShots: [
++        { user: INTENT_PLAN_FEW_SHOT_USER, assistant: INTENT_PLAN_FEW_SHOT_ASSISTANT },
++        { user: INTENT_PLAN_FEW_SHOT_USER_2, assistant: INTENT_PLAN_FEW_SHOT_ASSISTANT_2 },
++        { user: INTENT_PLAN_FEW_SHOT_USER_3, assistant: INTENT_PLAN_FEW_SHOT_ASSISTANT_3 },
++      ],
++    });
+ 
+     const messages = [...initialMessages];
+     let stacks = null;
+@@ -8591,6 +8520,7 @@ app.post('/api/ai-generate', requireUserAuth, aiGenerateRateLimit, async (req, r
+           max_tokens: 4000,
+           temperature: 0.25,
+           onPartialIrArtifact: persistLatestPrimaryPartialIrArtifact,
++          deterministicPlan: intentPlan,
+         })
+         : await withAiDeadline(
+           callGroq(messages, {
+@@ -8609,9 +8539,12 @@ app.post('/api/ai-generate', requireUserAuth, aiGenerateRateLimit, async (req, r
+         lastRaw.slice(0, 300),
+       );
+ 
+-      const extracted = extractAiCanonicalIrFromRaw(lastRaw);
+-      if (!extracted) {
+-        lastDiagnostics = withIntentDiagnostics([{ code: 'IR_EXTRACTION_FAILED', message: 'AI response did not contain Canonical IR JSON' }]);
++      const extractedPlan = extractBotIntentPlanFromRaw(lastRaw);
++      if (!extractedPlan) {
++        lastDiagnostics = withIntentDiagnostics([{
++          code: 'INTENT_PLAN_EXTRACTION_FAILED',
++          message: 'AI response did not contain Bot Intent Plan JSON (no stacks/handlers/Canonical IR)',
++        }]);
+         if (
+           attempt < maxAttempts - 1 &&
+           hasRetryBudget(AI_EXECUTION_MODE.AI_PARTIAL, attempt) &&
+@@ -8622,189 +8555,83 @@ app.post('/api/ai-generate', requireUserAuth, aiGenerateRateLimit, async (req, r
+           continue;
+         }
+         const cleaned = stripThinkingFromAiRaw(lastRaw);
+-        console.error('AI вернул не Canonical IR после очистки:', cleaned.slice(0, 400));
++        console.error('AI вернул не Bot Intent Plan после очистки:', cleaned.slice(0, 400));
+         return res.json(await buildAiRecoveryOrFallbackResponse({
+-          errorCode: 'IR_EXTRACTION_FAILED',
++          errorCode: 'INTENT_PLAN_EXTRACTION_FAILED',
+           canonicalIr: lastIrSnapshot,
+           diagnostics: lastDiagnostics,
+           repairActions: lastRepairActions,
+-          meta: responseMeta(),
++          meta: responseMeta({ pipeline: 'SEMANTIC_AI' }),
+           prompt: prompt.trim(),
+           systemContent,
+           astMode,
+           allowedMemoryKeys,
+           responseMeta,
++          intentPlan,
+           sourceStage: attemptMode,
+         }));
+       }
+ 
+-      let candidate = normalizeAiCanonicalIr(extracted.ir);
+-      const budgeted = applyIntentBudgetToIr(candidate, intentPlan);
+-      candidate = budgeted.ir;
+-      if (budgeted.changed) {
+-        const complexityDiagnostic = {
+-          code: 'COMPLEXITY_REDUCED',
+-          severity: 'info',
+-          message:
+-            `IR reduced to ${intentPlan.complexityScore} complexity budget: ${budgeted.notes.join('; ') || 'budget enforced'}.`,
+-          details: {
+-            complexityScore: intentPlan.complexityScore,
+-            budget: intentPlan.budget,
+-            notes: budgeted.notes,
+-          },
+-        };
+-        intentPipelineDiagnostics = [...intentDiagnostics, complexityDiagnostic];
+-        lastRepairActions = [
+-          ...lastRepairActions,
+-          ...budgeted.notes.map((note) => `INTENT_PLAN: ${note}`),
+-        ];
+-      }
+-      const intentRepair = repairIntentSatisfaction(candidate, {
++      const semanticResult = runSemanticAiPipeline(extractedPlan.plan, intentPlan, {
+         prompt: promptText,
+-        intentPlan,
+-      });
+-      if (intentRepair.changed) {
+-        candidate = applyIntentBudgetToIr(intentRepair.ir, intentPlan).ir;
+-        intentPipelineDiagnostics = [
+-          ...intentPipelineDiagnostics,
+-          ...intentRepair.diagnostics,
+-        ].slice(0, AI_PARTIAL_DIAGNOSTIC_LIMIT);
+-        lastRepairActions = [
+-          ...lastRepairActions,
+-          ...intentRepair.repairNotes,
+-        ];
+-      }
+-      const featureResolution = resolveFeatureDependencies(candidate, {
+-        intentPlan,
+-        astMode,
+-        allowedMemoryKeys,
+-      });
+-      candidate = featureResolution.ir;
+-      if (featureResolution.diagnostics.length) {
+-        intentPipelineDiagnostics = [
+-          ...intentPipelineDiagnostics,
+-          ...featureResolution.diagnostics,
+-        ].slice(0, AI_PARTIAL_DIAGNOSTIC_LIMIT);
+-      }
+-      if (featureResolution.changed) {
+-        lastRepairActions = [
+-          ...lastRepairActions,
+-          ...featureResolution.repairActions.map((action) => `FDR: ${action}`),
+-        ];
+-      }
+-      lastIrSnapshot = candidate;
+-      if (!candidate || typeof candidate !== 'object') {
+-        lastAstErrors = ['Ожидался JSON-объект Canonical AI IR'];
+-        lastDiagnostics = withIntentDiagnostics(lastAstErrors.map((message) => ({ code: 'IR_STRUCTURE_ERROR', message })));
+-        if (
+-          attempt < maxAttempts - 1 &&
+-          hasRetryBudget(AI_EXECUTION_MODE.AI_PARTIAL, attempt) &&
+-          canUseNonPrimaryLlm(lastIrSnapshot, lastDiagnostics)
+-        ) {
+-          messages.push({ role: 'assistant', content: lastRaw.slice(0, 12000) });
+-          messages.push({ role: 'user', content: buildIrRepairUserPrompt(lastAstErrors, '{}') });
+-          continue;
+-        }
+-        return res.json(await buildAiRecoveryOrFallbackResponse({
+-          errorCode: 'IR_INVALID',
+-          canonicalIr: lastIrSnapshot,
+-          diagnostics: lastDiagnostics,
+-          repairActions: lastRepairActions,
+-          meta: responseMeta(),
+-          prompt: prompt.trim(),
+-          systemContent,
+-          astMode,
+-          allowedMemoryKeys,
+-          responseMeta,
+-          sourceStage: attemptMode,
+-        }));
+-      }
+-
+-      const structuralValidation = validateAiCanonicalIr(candidate, { astMode, allowedMemoryKeys });
+-      lastAstErrors = structuralValidation.errors;
+-      lastDiagnostics = withIntentDiagnostics(lastAstErrors.map((message) => ({ code: 'IR_STRUCTURE_ERROR', message })));
+-      if (lastAstErrors.length > 0) {
+-        console.error('[AI] Canonical IR structure:', lastAstErrors.join(' | '));
+-        if (
+-          attempt < maxAttempts - 1 &&
+-          hasRetryBudget(AI_EXECUTION_MODE.AI_PARTIAL, attempt) &&
+-          canUseNonPrimaryLlm(candidate, lastDiagnostics)
+-        ) {
+-          messages.push({ role: 'assistant', content: lastRaw.slice(0, 12000) });
+-          messages.push({
+-            role: 'user',
+-            content: buildIrRepairUserPrompt(lastAstErrors, JSON.stringify(candidate).slice(0, 14000)),
+-          });
+-          continue;
+-        }
+-        return res.json(await buildAiRecoveryOrFallbackResponse({
+-          errorCode: 'IR_INVALID',
+-          canonicalIr: lastIrSnapshot,
+-          diagnostics: lastDiagnostics,
+-          repairActions: lastRepairActions,
+-          meta: responseMeta(),
+-          prompt: prompt.trim(),
+-          systemContent,
+-          astMode,
+-          allowedMemoryKeys,
+-          responseMeta,
+-          sourceStage: attemptMode,
+-        }));
+-      }
+-
+-      lastValidIrSnapshot = candidate;
+-      const repaired = runDeterministicIrRepairLoop(candidate, {
+         astMode,
+         allowedMemoryKeys,
+         deadline: attemptDeadline,
+         maxRepairPasses: AI_IR_REPAIR_MAX_PASSES,
+       });
+-      lastIrSnapshot = repaired.ir;
+-      lastDiagnostics = withIntentDiagnostics(repaired.validation?.diagnostics || []);
+-      lastRepairActions = [...lastRepairActions, ...repaired.repairNotes];
+-      if (!repaired.ok) {
+-        const semanticErrors = irDiagnosticMessages(repaired.validation.diagnostics);
+-        console.error('[AI] IR semantic gate:', semanticErrors.join(' | '));
++      intentPipelineDiagnostics = [
++        ...intentPipelineDiagnostics,
++        ...aiArray(semanticResult.diagnostics),
++      ].slice(0, AI_PARTIAL_DIAGNOSTIC_LIMIT);
++      lastRepairActions = [
++        ...lastRepairActions,
++        ...aiArray(semanticResult.repairActions),
++        `PIPELINE: ${semanticResult.pipeline}`,
++      ];
++      lastIrSnapshot = semanticResult.canonicalIr;
++      if (semanticResult.canonicalIr) lastValidIrSnapshot = semanticResult.canonicalIr;
++
++      if (!semanticResult.ok) {
++        lastAstErrors = semanticResult.errors || ['Semantic AI pipeline failed'];
++        lastDiagnostics = withIntentDiagnostics(
++          lastAstErrors.map((message) => ({ code: 'SEMANTIC_PIPELINE_FAILED', message })),
++        );
++        console.error('[AI] Semantic pipeline:', lastAstErrors.join(' | '));
+         if (
+           attempt < maxAttempts - 1 &&
+           hasRetryBudget(AI_EXECUTION_MODE.AI_PARTIAL, attempt) &&
+-          canUseNonPrimaryLlm(repaired.ir, repaired.validation.diagnostics)
++          canUseNonPrimaryLlm(semanticResult.canonicalIr, lastDiagnostics)
+         ) {
+-          messages.push({ role: 'assistant', content: JSON.stringify(repaired.ir).slice(0, 12000) });
++          messages.push({ role: 'assistant', content: lastRaw.slice(0, 12000) });
+           messages.push({
+             role: 'user',
+-            content: buildIrRepairUserPrompt(
+-              semanticErrors.length ? semanticErrors : ['IR semantic repair failed'],
+-              JSON.stringify(repaired.ir).slice(0, 14000),
++            content: buildIntentPlanRepairUserPrompt(
++              lastAstErrors,
++              JSON.stringify(extractedPlan.plan).slice(0, 14000),
+             ),
+           });
+           continue;
+         }
+         return res.json(await buildAiRecoveryOrFallbackResponse({
+-          errorCode: 'IR_REPAIR_FAILED',
+-          canonicalIr: repaired.ir,
++          errorCode: semanticResult.errors?.includes('IR semantic repair failed after intent planning')
++            ? 'IR_REPAIR_FAILED'
++            : 'INTENT_PLAN_INVALID',
++          canonicalIr: semanticResult.canonicalIr,
+           diagnostics: lastDiagnostics,
+           repairActions: lastRepairActions,
+-          meta: {
+-            repairPasses: AI_IR_REPAIR_MAX_PASSES,
+-            ...responseMeta(),
+-          },
++          meta: responseMeta({ pipeline: semanticResult.pipeline }),
+           prompt: prompt.trim(),
+           systemContent,
+           astMode,
+           allowedMemoryKeys,
+           responseMeta,
++          intentPlan,
+           sourceStage: attemptMode,
+         }));
+       }
+ 
+-      if (repaired.repairNotes.length > 0) {
+-        console.log('[AI] deterministic IR repair:', repaired.repairNotes.join(' | '));
+-      }
+-
+-      canonicalIr = repaired.ir;
+-      lastValidIrSnapshot = canonicalIr;
+-      stacks = canonicalIrToEditorStacks(canonicalIr);
++      canonicalIr = semanticResult.canonicalIr;
++      stacks = semanticResult.stacks;
+ 
+       assertAiDeadline(attemptDeadline, 'dsl-generation');
+       const runtimeValidation = validateGeneratedGraphStacks(stacks, { deadline: attemptDeadline });
+@@ -8836,9 +8663,9 @@ app.post('/api/ai-generate', requireUserAuth, aiGenerateRateLimit, async (req, r
+           messages.push({ role: 'assistant', content: JSON.stringify(canonicalIr).slice(0, 12000) });
+           messages.push({
+             role: 'user',
+-            content: buildIrRepairUserPrompt(
+-              runtimeErrors.length ? runtimeErrors : ['Runtime validation rejected generated DSL'],
+-              JSON.stringify(canonicalIr).slice(0, 14000),
++            content: buildIntentPlanRepairUserPrompt(
++              runtimeErrors.length ? runtimeErrors : ['Runtime validation rejected compiled graph'],
++              JSON.stringify(extractedPlan.plan).slice(0, 14000),
+             ),
+           });
+           stacks = null;
+@@ -8887,7 +8714,10 @@ app.post('/api/ai-generate', requireUserAuth, aiGenerateRateLimit, async (req, r
+         canonicalIr,
+         diagnostics: intentPipelineDiagnostics,
+         repairActions: lastRepairActions,
+-        meta: responseMeta(),
++        meta: responseMeta({
++          semanticPipeline: 'INTENT_PLAN',
++          pipelineStages: ['INTENT_PLAN', 'PLANNER', 'COMPILER'],
++        }),
+         final: true,
+         stacks,
+       }),
