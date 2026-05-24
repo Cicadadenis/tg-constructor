@@ -35,12 +35,22 @@ export function hasUserVisibleCanvasNodes(document) {
 }
 
 /**
- * Onboarding overlay — only when canvas has zero nodes or settings-only shell.
+ * Onboarding overlay — only when the canvas has no blocks at all.
+ * Settings nodes (version, bot, …) count as content and hide the overlay.
  * @param {object} document
  */
 export function shouldShowCanvasOnboardingOverlay(document) {
   const doc = createGraphDocument(document);
-  if (Object.keys(doc.nodes || {}).length === 0) return true;
+  return Object.keys(doc.nodes || {}).length === 0;
+}
+
+/**
+ * Graph has blocks but only metadata (version/bot/commands) — no handlers for bot.py yet.
+ * @param {object} document
+ */
+export function isGraphSettingsOnlyShell(document) {
+  const doc = createGraphDocument(document);
+  if (Object.keys(doc.nodes || {}).length === 0) return false;
   return !hasUserVisibleCanvasNodes(doc);
 }
 
@@ -71,7 +81,7 @@ export function isGraphBrokenShell(document) {
   const hasEntry = nodes.some((n) => ROOT_ENTRY_TYPES.has(String(n.type || '').trim()));
   const flowNodes = nodes.filter((n) => !SETTINGS_TYPES.has(String(n.type || '').trim()));
 
-  if (flowNodes.length === 0) return true;
+  if (flowNodes.length === 0) return false;
   if (!hasEntry && validEdges.length === 0) return true;
   return false;
 }
@@ -83,6 +93,7 @@ export function isGraphBrokenShell(document) {
 export function isGraphEffectivelyEmpty(document) {
   const doc = createGraphDocument(document);
   if (Object.keys(doc.nodes || {}).length === 0) return true;
+  if (isGraphSettingsOnlyShell(document)) return false;
   if (isGraphBrokenShell(document)) return true;
   try {
     const flow = projectGraphToFlow(graphDocumentToProjectGraph(doc));

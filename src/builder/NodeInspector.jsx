@@ -13,6 +13,7 @@ import {
   validateNodeProps,
 } from '../constructor/graph_document/operation_registry.js';
 import { getCompatibleBlockTypes } from '../constructor/block_catalog.js';
+import { graphResolveNodeType } from '../app/graph/graphHelpers.js';
 import { CompatibleBlocksHint } from './BuilderComponents.jsx';
 import { AddBlockContext } from '../builderContext.js';
 import { patchNodeData } from '../constructor/graph_document/graph_operation_client.js';
@@ -89,8 +90,18 @@ export default function NodeInspector({
 }) {
   const document = graph?.getGraphDocument();
   const node = nodeId && document ? document.nodes[nodeId] : null;
-  const contract = useMemo(() => (node ? getOperationContract(node.type) : null), [node?.type]);
-  const allowed = useMemo(() => (node ? describeAllowedConnections(node.type) : null), [node?.type]);
+  const resolvedType = useMemo(
+    () => (node ? graphResolveNodeType(node) : null),
+    [node?.type, node?.data?.type, node?.data?.blockType],
+  );
+  const contract = useMemo(
+    () => (resolvedType ? getOperationContract(resolvedType) : null),
+    [resolvedType],
+  );
+  const allowed = useMemo(
+    () => (resolvedType ? describeAllowedConnections(resolvedType) : null),
+    [resolvedType],
+  );
 
   const [draft, setDraft] = useState(() => ({ ...(node?.data || {}) }));
   const [validation, setValidation] = useState(null);
@@ -287,7 +298,7 @@ export default function NodeInspector({
 
   const quickAdd = (type) => {
     setQuickAddWarning(null);
-    const compatible = getCompatibleBlockTypes(node.type);
+    const compatible = getCompatibleBlockTypes(resolvedType || graphResolveNodeType(node));
     if (!compatible.includes(type)) {
       setQuickAddWarning('Работает только после совместимого блока');
       return;
@@ -485,7 +496,7 @@ export default function NodeInspector({
             <div style={{ fontSize: 11, color: 'rgba(199,210,254,0.65)', marginBottom: 8 }}>Можно добавить ниже</div>
             <div style={{ maxHeight: 220, overflowY: 'auto', paddingRight: 6 }}>
               <CompatibleBlocksHint
-                type={node.type}
+                type={resolvedType || node.type}
                 color="#60a5fa"
                 mode="modal"
                 onAdd={addBlock ? (t) => {

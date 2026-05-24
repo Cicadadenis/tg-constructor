@@ -86,28 +86,61 @@ export function graphGetNextCommandName(graph) {
 
 // ─── UNIQUE BLOCK VALIDATION ─────────────────────────────────────────────────
 
-const UNIQUE_BLOCK_TYPES = new Set([
+export const GRAPH_UNIQUE_BLOCK_TYPES = Object.freeze([
   'version', 'bot', 'commands', 'global', 'start', 'middleware',
 ]);
 
-export function graphGetUniqueConflictMessage(graph, type, props = {}) {
+const UNIQUE_BLOCK_TYPES = new Set(GRAPH_UNIQUE_BLOCK_TYPES);
+
+const UNIQUE_BLOCK_LABEL_RU = Object.freeze({
+  version: 'Версия',
+  bot: 'Бот',
+  commands: 'Команды меню',
+  global: 'Глобальная',
+  start: 'Старт',
+  middleware: 'Middleware',
+});
+
+export function graphUniqueBlockLabel(type, lang = 'ru') {
+  const t = String(type || '').trim();
+  if (lang === 'en') {
+    const en = { version: 'Version', bot: 'Bot', commands: 'Menu commands', global: 'Global', start: 'Start' };
+    return en[t] || t;
+  }
+  return UNIQUE_BLOCK_LABEL_RU[t] || t;
+}
+
+export function graphGetUniqueConflictMessage(graph, type, props = {}, lang = 'ru') {
   if (UNIQUE_BLOCK_TYPES.has(type) && graphHasNodeOfType(graph, type)) {
-    return `Блок «${type}» уже есть на холсте. Удалите старый, чтобы добавить новый.`;
+    const label = graphUniqueBlockLabel(type, lang);
+    return lang === 'en'
+      ? `Block "${label}" is already on the canvas. Remove the existing one first.`
+      : `Блок «${label}» уже есть на холсте. Удалите старый, чтобы добавить новый.`;
   }
   if (type === 'start' && graphHasCommandNamed(graph, 'start')) {
-    return 'Для /start уже есть блок «Команда /start». Удалите его перед добавлением «Старт».';
+    return lang === 'en'
+      ? 'Command /start already exists. Remove it before adding Start.'
+      : 'Для /start уже есть блок «Команда /start». Удалите его перед добавлением «Старт».';
   }
   if (type === 'command') {
     const cmd = graphNormalizeCmd(props.cmd ?? 'start');
     if (!cmd) return null;
     if (cmd === 'start' && graphHasNodeOfType(graph, 'start')) {
-      return 'Для /start уже есть блок «Старт». Используйте другую команду.';
+      return lang === 'en'
+        ? 'Start block already exists. Use a different command.'
+        : 'Для /start уже есть блок «Старт». Используйте другую команду.';
     }
     if (graphHasCommandNamed(graph, cmd)) {
-      return `Команда /${cmd} уже есть на холсте.`;
+      return lang === 'en'
+        ? `Command /${cmd} is already on the canvas.`
+        : `Команда /${cmd} уже есть на холсте.`;
     }
   }
   return null;
+}
+
+export function graphCanDuplicateNodeType(type) {
+  return !UNIQUE_BLOCK_TYPES.has(String(type || '').trim());
 }
 
 // ─── BOT TOKEN RESOLUTION ────────────────────────────────────────────────────
@@ -145,6 +178,36 @@ export function graphMakePropsForNewNode(graph, type, currentUser) {
 }
 
 // ─── FLOW CHAIN LAYOUT ───────────────────────────────────────────────────────
+
+const SETTINGS_NODE_TYPES = new Set(['bot', 'version', 'commands', 'global']);
+
+/**
+ * Resolve where to attach a new flow block when inserting after `anchorId`.
+ * Settings nodes (bot, version, …) have no flow output — follow the chain to
+ * «Старт» / command or the single start node on canvas.
+ */
+export function resolveFlowInsertAnchorId(doc, anchorId, newType) {
+  const id = String(anchorId || '').trim();
+  const type = String(newType || '').trim();
+  if (!id || !doc?.nodes?.[id]) return id;
+
+  const anchorType = graphResolveNodeType(doc.nodes[id]);
+  if (graphCanChainAfter(anchorType, type)) return id;
+
+  if (SETTINGS_NODE_TYPES.has(anchorType)) {
+    const out = getOutgoingFlowEdge(doc, id);
+    if (out?.target && doc.nodes[out.target]) {
+      const childType = graphResolveNodeType(doc.nodes[out.target]);
+      if (graphCanChainAfter(childType, type)) return out.target;
+    }
+    const starts = Object.values(doc.nodes || {}).filter(
+      (n) => graphResolveNodeType(n) === 'start',
+    );
+    if (starts.length === 1) return starts[0].id;
+  }
+
+  return id;
+}
 
 /**
  * Find nearest downstream node that can host UI attachments (inline/buttons/media).

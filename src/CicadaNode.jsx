@@ -90,12 +90,6 @@ function CicadaNode({ id, data, selected }) {
     actions?.onDeleteNode?.(nodeId);
   };
 
-  const onDuplicateClick = (e) => {
-    e.stopPropagation();
-    e.preventDefault();
-    actions?.onDuplicateNode?.(nodeId);
-  };
-
   const onHitPointerDown = (e) => {
     if (e.button !== 0) return;
     actions?.onSelectNode?.(nodeId);
@@ -261,16 +255,6 @@ function CicadaNode({ id, data, selected }) {
         }}
         onPointerDown={stopNodeBubble}
       >
-        {actions?.onDuplicateNode && (
-          <button
-            type="button"
-            title="Дублировать"
-            style={CTRL_BTN}
-            onClick={onDuplicateClick}
-          >
-            ⧉
-          </button>
-        )}
         {actions?.onDeleteNode && (
           <button
             type="button"

@@ -1019,5 +1019,27 @@ if (autoOpsEl) {
   });
 }
 
+async function ensureAdminAccess() {
+  try {
+    await api(`${API_FILES}/tree`);
+    return true;
+  } catch (err) {
+    if (String(err?.message || '') === 'forbidden') {
+      document.body.innerHTML = `
+        <div style="font-family:system-ui,sans-serif;background:#0d0d12;color:#e8e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem">
+          <div style="max-width:28rem;line-height:1.55">
+            <h1 style="margin:0 0 1rem;font-size:1.35rem">Нужен вход администратора</h1>
+            <p style="margin:0 0 1rem;color:#a8b0d8">Debug IDE доступна только после входа в админ-панель.</p>
+            <p style="margin:0"><a href="/admin" style="color:#7eb8ff">Открыть /admin</a> · <a href="/" style="color:#7eb8ff;margin-left:1rem">Studio</a></p>
+          </div>
+        </div>`;
+      return false;
+    }
+    return true;
+  }
+}
+
 initChats();
-loadTree();
+ensureAdminAccess().then((ok) => {
+  if (ok) loadTree();
+});

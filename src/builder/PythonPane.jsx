@@ -6,7 +6,6 @@ import { getConstructorStrings } from '../builderI18n.js';
 import { useGraphPythonCompile } from './useGraphPythonCompile.js';
 import { VALIDATION_MODE } from '../constructor/graph_document/validation_modes.js';
 import { useGraphValidation } from './graphValidationContext.jsx';
-import ValidationStatusBadge from './ValidationStatusBadge.jsx';
 
 function PythonPane({ getGraphDocument, graphRevision, isMobile, onClose }) {
   const ctx = React.useContext(BuilderUiContext);
@@ -16,20 +15,13 @@ function PythonPane({ getGraphDocument, graphRevision, isMobile, onClose }) {
   const {
     pythonMeta,
     isEmpty,
+    emptyPreviewReason,
     generatedPython,
   } = useGraphPythonCompile(getGraphDocument, graphRevision, ctx?.lang || 'ru', {
     validationMode: VALIDATION_MODE.SOFT,
   });
 
   const [copied, setCopied] = React.useState(false);
-  const [checking, setChecking] = React.useState(false);
-
-  const handleCheck = () => {
-    if (checking || !validation?.requestFullValidation) return;
-    setChecking(true);
-    validation.requestFullValidation();
-    setTimeout(() => setChecking(false), 400);
-  };
 
   const copy = () => {
     if (isEmpty || !generatedPython) return;
@@ -70,6 +62,35 @@ function PythonPane({ getGraphDocument, graphRevision, isMobile, onClose }) {
   const canClose = !isRuntimeMobile && typeof onClose === 'function';
   const fullHasErrors = validation?.fullResult?.badge === 'errors';
 
+  const emptyPreviewCopy = React.useMemo(() => {
+    if (emptyPreviewReason === 'settings_only') {
+      return {
+        title: ui.pythonPreviewSettingsOnlyTitle || 'Нужны блоки сценария',
+        hint: ui.pythonPreviewSettingsOnlyHint
+          || 'Сейчас на холсте только настройки (версия, бот). Добавьте «Старт» и «Ответ» и соедините их — здесь появится bot.py.',
+      };
+    }
+    if (emptyPreviewReason === 'no_edges') {
+      return {
+        title: ui.pythonPreviewNoEdgesTitle || 'Соедините блоки',
+        hint: ui.pythonPreviewNoEdgesHint
+          || 'Проведите стрелку от «Старт» к «Ответ» (или другим действиям), чтобы собрать сценарий.',
+      };
+    }
+    if (emptyPreviewReason === 'no_handlers') {
+      return {
+        title: ui.pythonPreviewNoHandlersTitle || 'Добавьте обработчики',
+        hint: ui.pythonPreviewNoHandlersHint
+          || 'Перетащите «Старт», «Ответ» или кнопки и свяжите их на схеме.',
+      };
+    }
+    return {
+      title: ui.pythonPreviewEmptyTitle || 'Перетащите блоки на холст',
+      hint: ui.pythonPreviewEmptyHint
+        || 'Preview появится после добавления обработчиков и действий на схему.',
+    };
+  }, [emptyPreviewReason, ui]);
+
   return (
     <div style={{
       display: 'flex',
@@ -95,7 +116,6 @@ function PythonPane({ getGraphDocument, graphRevision, isMobile, onClose }) {
         gap: 8,
       }}>
         <span>{ui.pythonPreviewTitle || 'Python Preview'}</span>
-        <ValidationStatusBadge onClick={handleCheck} compact />
       </div>
 
       <div style={{
@@ -107,7 +127,7 @@ function PythonPane({ getGraphDocument, graphRevision, isMobile, onClose }) {
       }}>
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
           gap: 6,
           width: '100%',
         }}>
@@ -123,21 +143,6 @@ function PythonPane({ getGraphDocument, graphRevision, isMobile, onClose }) {
             style={{ padding: '4px 10px', fontSize: 10, opacity: isEmpty ? 0.45 : 1 }}
           >
             {copied ? (ui.pythonCopied || 'Скопировано') : (ui.pythonCopy || 'Копировать')}
-          </button>
-          <button
-            type="button"
-            onClick={handleCheck}
-            disabled={isEmpty || checking}
-            style={{
-              padding: '4px 10px',
-              fontSize: 10,
-              fontWeight: 700,
-              opacity: isEmpty ? 0.45 : 1,
-              borderColor: 'rgba(99,102,241,0.45)',
-              color: 'rgba(167,139,250,0.95)',
-            }}
-          >
-            {checking ? '…' : (ui.graphCheckButton || 'Проверить')}
           </button>
           <button
             type="button"
@@ -178,10 +183,10 @@ function PythonPane({ getGraphDocument, graphRevision, isMobile, onClose }) {
         {isEmpty ? (
           <div style={{ maxWidth: 280 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text2)', marginBottom: 8 }}>
-              {ui.pythonPreviewEmptyTitle || 'Перетащите блоки на холст'}
+              {emptyPreviewCopy.title}
             </div>
             <div style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--text3)' }}>
-              {ui.pythonPreviewEmptyHint || 'Preview появится после добавления обработчиков и действий на схему.'}
+              {emptyPreviewCopy.hint}
             </div>
           </div>
         ) : (

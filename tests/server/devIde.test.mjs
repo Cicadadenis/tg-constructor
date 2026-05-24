@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import express from 'express';
+import cookieParser from 'cookie-parser';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 
@@ -141,12 +142,18 @@ try {
   process.env.DEV_IDE_ADMIN = '1';
   const prodAdminIde = await loadDevIde();
   const prodAdminApp = express();
+  prodAdminApp.use(cookieParser());
   prodAdminIde.setDevIdeAdminAccessChecker(async () => false);
+  prodAdminIde.registerDevIdePage(prodAdminApp);
   prodAdminIde.registerDevIdeRoutes(prodAdminApp);
   await withServer(prodAdminApp, async (port) => {
+    const deniedPage = await fetch(`http://127.0.0.1:${port}/debug`);
+    assert.equal(deniedPage.status, 403);
     const denied = await fetch(`http://127.0.0.1:${port}/api/files/tree`);
     assert.equal(denied.status, 403);
     prodAdminIde.setDevIdeAdminAccessChecker(async () => true);
+    const okPage = await fetch(`http://127.0.0.1:${port}/debug`);
+    assert.equal(okPage.status, 200);
     const ok = await fetch(`http://127.0.0.1:${port}/api/files/tree`);
     assert.equal(ok.status, 200);
   });

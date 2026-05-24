@@ -23,6 +23,7 @@ import {
   getBlockDef,
   getCompatibleBlockTypes,
   getPaletteBlockTypes,
+  QUICK_ADD_FREQUENT_BLOCK_TYPES,
   resolveBuilderCatalog,
 } from '../constructor/block_catalog.js';
 import { UI_ATTACHMENT_LEGACY_BLOCK_TYPES } from '../../core/blockRegistry.js';
@@ -447,7 +448,7 @@ function normalizeAiPartialResponse(data) {
   const repairActions = normalizeAiDiagnosticItems(
     (data?.repairActions || []).map((action) => ({
       code: 'IR_AUTO_REPAIR',
-      title: 'Automatic IR repair',
+      title: 'Автоисправление схемы',
       detail: action,
       severity: 'info',
     })),
@@ -1002,6 +1003,64 @@ function BlockNoteBox({ note, compact }) {
   );
 }
 
+function CompatibleBlockChip({ def, isModal, color, onAdd, ui }) {
+  const hasNote = !!BLOCK_NOTES[def.type];
+  return (
+    <span
+      key={def.type}
+      onClick={isModal && onAdd ? (e) => { e.stopPropagation(); onAdd(def.type); } : undefined}
+      title={isModal && onAdd ? ui.compatibleAddBlock(def.label) : undefined}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 4,
+        background: isModal ? `${def.color}18` : def.color + '22',
+        border: `1px solid ${hasNote ? def.color + (isModal ? '55' : 'aa') : def.color + (isModal ? '35' : '55')}`,
+        borderRadius: 6,
+        padding: isModal ? '4px 8px' : '2px 5px',
+        fontSize: isModal ? 11 : 10,
+        color: def.color,
+        fontFamily: 'system-ui',
+        cursor: (isModal && onAdd) ? 'pointer' : 'default',
+        transition: 'background 0.15s',
+      }}
+    >
+      <span style={{ fontSize: isModal ? 12 : 9 }}>{def.icon}</span>
+      {def.label}
+      {hasNote && <span style={{ fontSize: 8, opacity: 0.7 }}>ℹ</span>}
+      {isModal && onAdd && <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 1 }}>＋</span>}
+    </span>
+  );
+}
+
+function CompatibleBlocksSection({ header, blocks, isModal, color, onAdd, ui }) {
+  if (!blocks?.length) return null;
+  return (
+    <div style={{ marginBottom: isModal ? 10 : 6 }}>
+      {header ? (
+        <div style={{
+          fontSize: isModal ? 10 : 9,
+          color: isModal ? 'var(--text3)' : 'rgba(255,255,255,0.4)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.08em',
+          marginBottom: isModal ? 5 : 3,
+          fontFamily: 'Syne, system-ui',
+        }}>{header}</div>
+      ) : null}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: isModal ? 5 : 3 }}>
+        {blocks.map((def) => (
+          <CompatibleBlockChip
+            key={def.type}
+            def={def}
+            isModal={isModal}
+            color={color}
+            onAdd={onAdd}
+            ui={ui}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** Список типов блоков, которые можно поставить под данным (по CAN_STACK_BELOW). mode: tooltip — тёмный фон тултипа; modal — панель модалки */
 function CompatibleBlocksHint({ type, color, mode = 'tooltip', onAdd }) {
   const ctx = React.useContext(BuilderUiContext);
@@ -1010,13 +1069,11 @@ function CompatibleBlocksHint({ type, color, mode = 'tooltip', onAdd }) {
 
   const allowed = getCompatibleBlockTypes(type);
   const isModal = mode === 'modal';
-  const grouped = {};
+  const allowedSet = new Set(allowed);
+  const defsByType = new Map();
   allowed.forEach((ct) => {
     const d = blockTypes.find((b) => b.type === ct);
-    if (!d) return;
-    const gid = d.groupId || RU_GROUP_TO_ID[d.group] || d.group;
-    if (!grouped[gid]) grouped[gid] = [];
-    grouped[gid].push(d);
+    if (d) defsByType.set(ct, d);
   });
 
   if (allowed.length === 0) {
@@ -1031,6 +1088,20 @@ function CompatibleBlocksHint({ type, color, mode = 'tooltip', onAdd }) {
     );
   }
 
+  const grouped = {};
+  for (const def of defsByType.values()) {
+    const gid = def.groupId || RU_GROUP_TO_ID[def.group] || def.group;
+    if (!grouped[gid]) grouped[gid] = [];
+    grouped[gid].push(def);
+  }
+
+  const frequentBlocks = isModal
+    ? QUICK_ADD_FREQUENT_BLOCK_TYPES
+      .filter((ct) => allowedSet.has(ct) && defsByType.has(ct))
+      .map((ct) => defsByType.get(ct))
+    : [];
+  const frequentTypes = new Set(frequentBlocks.map((d) => d.type));
+
   return (
     <div style={{ minWidth: isModal ? undefined : 200, maxWidth: isModal ? undefined : 260 }}>
       <div style={{
@@ -1044,48 +1115,30 @@ function CompatibleBlocksHint({ type, color, mode = 'tooltip', onAdd }) {
         borderBottom: isModal ? '1px solid var(--border)' : `1px solid ${color}44`,
         paddingBottom: isModal ? 8 : 5,
       }}>{ui.compatibleCanAddBelow}</div>
+      {isModal && frequentBlocks.length > 0 && (
+        <CompatibleBlocksSection
+          header={ui.compatibleFrequentBelow || 'Часто используются'}
+          blocks={frequentBlocks}
+          isModal={isModal}
+          color={color}
+          onAdd={onAdd}
+          ui={ui}
+        />
+      )}
       {paletteSidebarSectionOrder().map((gid) => {
-        const groupBlocks = grouped[gid];
-        if (!groupBlocks?.length) return null;
+        const groupBlocks = (grouped[gid] || []).filter((def) => !frequentTypes.has(def.type));
+        if (!groupBlocks.length) return null;
         const header = groupBlocks[0]?.group || gid;
         return (
-          <div key={gid} style={{ marginBottom: isModal ? 10 : 6 }}>
-            <div style={{
-              fontSize: isModal ? 10 : 9,
-              color: isModal ? 'var(--text3)' : 'rgba(255,255,255,0.4)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              marginBottom: isModal ? 5 : 3,
-              fontFamily: 'Syne, system-ui',
-            }}>{header}</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: isModal ? 5 : 3 }}>
-              {groupBlocks.map((def) => {
-                const hasNote = !!BLOCK_NOTES[def.type];
-                return (
-                  <span key={def.type}
-                  onClick={isModal && onAdd ? (e) => { e.stopPropagation(); onAdd(def.type); } : undefined}
-                  title={isModal && onAdd ? ui.compatibleAddBlock(def.label) : undefined}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 4,
-                    background: isModal ? `${def.color}18` : def.color + '22',
-                    border: `1px solid ${hasNote ? def.color + (isModal ? '55' : 'aa') : def.color + (isModal ? '35' : '55')}`,
-                    borderRadius: 6,
-                    padding: isModal ? '4px 8px' : '2px 5px',
-                    fontSize: isModal ? 11 : 10,
-                    color: def.color,
-                    fontFamily: 'system-ui',
-                    cursor: (isModal && onAdd) ? 'pointer' : 'default',
-                    transition: 'background 0.15s',
-                  }}>
-                    <span style={{ fontSize: isModal ? 12 : 9 }}>{def.icon}</span>
-                    {def.label}
-                    {hasNote && <span style={{ fontSize: 8, opacity: 0.7 }}>ℹ</span>}
-                    {isModal && onAdd && <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 1 }}>＋</span>}
-                  </span>
-                );
-              })}
-            </div>
-          </div>
+          <CompatibleBlocksSection
+            key={gid}
+            header={header}
+            blocks={groupBlocks}
+            isModal={isModal}
+            color={color}
+            onAdd={onAdd}
+            ui={ui}
+          />
         );
       })}
     </div>
@@ -2300,6 +2353,7 @@ function PropsPanel({
   hasActiveProSubscription = false,
 }) {
   const ctx = React.useContext(BuilderUiContext);
+  const addBlockFromContext = React.useContext(AddBlockContext);
   const filePickerRef = React.useRef(null);
   const onChangeRef = React.useRef(onChange);
   const [pendingUploadField, setPendingUploadField] = React.useState(null);
@@ -2661,7 +2715,19 @@ function PropsPanel({
         style={{ display: 'none' }}
       />
       {fields.length === 0 && !CustomInspector && (
-        <div style={{ color: 'var(--text3)', fontSize: 10 }}>{ui.noSettings}</div>
+        <>
+          <div style={{ color: 'var(--text3)', fontSize: 10, marginBottom: addBlockFromContext ? 10 : 0 }}>
+            {ui.noSettings}
+          </div>
+          {addBlockFromContext && (
+            <CompatibleBlocksHint
+              type={block.type}
+              color={def?.color || '#60a5fa'}
+              mode="modal"
+              onAdd={(t) => addBlockFromContext(t)}
+            />
+          )}
+        </>
       )}
       {!CustomInspector && (
         <>

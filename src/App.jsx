@@ -125,15 +125,11 @@ import { GraphCanvasActionsProvider } from './builder/graphCanvasActionsContext.
 import {
   getNodeDeleteSummary,
   removeGraphNodes,
-  duplicateGraphNode,
 } from './builder/graph_node_delete.js';
 import { getChainStepBelow } from './builder/blockLayout.js';
 import { validateGraphSemantics, getNodePortDescriptors, canConnect, validateConnection } from './constructor/graph_document/operation_registry.js';
 import { normalizeGraphError, normalizeConnectionError } from './builder/graph_error_messages.js';
-import {
-  shouldShowCanvasOnboardingOverlay,
-  hasUserVisibleCanvasNodes,
-} from './constructor/graph_document/graph_canvas_state.js';
+import { shouldShowCanvasOnboardingOverlay } from './constructor/graph_document/graph_canvas_state.js';
 import CanvasOnboardingOverlay from './builder/CanvasOnboardingOverlay.jsx';
 import { scheduleCanvasFocusAfterMutation } from './builder/canvas_graph_focus.js';
 import { useCanvasAutosave } from './app/autosave/useCanvasAutosave.js';
@@ -142,7 +138,6 @@ import '@xyflow/react/dist/style.css';
 import { DebugTracePanel } from './builder/DebugTracePanel.jsx';
 import { GraphDiagnosticsPanel } from './builder/GraphDiagnosticsPanel.jsx';
 import { GraphValidationProvider } from './builder/graphValidationContext.jsx';
-import ValidationStatusBadge from './builder/ValidationStatusBadge.jsx';
 import { useGraphSoftValidation } from './builder/useGraphSoftValidation.js';
 import { useGraphReferenceIndex } from './builder/useGraphReferenceIndex.js';
 import { createCallbackHandlerForReference } from './constructor/graph_document/graph_reference_actions.js';
@@ -938,6 +933,8 @@ import {
   layoutAllFlowChains,
   spreadOverlappingNodes,
   resolveUiAttachmentTargetNodeId,
+  resolveFlowInsertAnchorId,
+  graphUniqueBlockLabel,
 } from './app/graph/graphHelpers.js';
 import { isPlaceholderBotToken } from '../core/botTokenPlaceholders.mjs';
 
@@ -1000,10 +997,8 @@ export default function App() {
 
   const showCanvasOnboarding = React.useMemo(() => {
     const doc = graph.getGraphDocument();
-    const projectionNodes = canvasProjection?.nodes?.length ?? 0;
-    if (projectionNodes > 0 && hasUserVisibleCanvasNodes(doc)) return false;
     return shouldShowCanvasOnboardingOverlay(doc);
-  }, [graph, graphRevision, graphNodeCount, canvasProjection?.nodes?.length]);
+  }, [graph, graphRevision, graphNodeCount]);
 
   const focusCanvasAfterContent = useCallback(() => {
     scheduleCanvasFocusAfterMutation(
@@ -1474,8 +1469,11 @@ export default function App() {
 
   const insertNodeAfter = useCallback((parentId, nodeId, type, props) => {
     if (!parentId) return { ok: false, error: 'No parent' };
+    const conflict = graphGetUniqueConflictMessage(graph, type, props, uiLang);
+    if (conflict) return { ok: false, error: conflict };
     const doc = graph.getGraphDocument();
-    const parent = doc.nodes[parentId];
+    const effectiveParentId = resolveFlowInsertAnchorId(doc, parentId, type);
+    const parent = doc.nodes[effectiveParentId];
     if (!parent) return { ok: false, error: 'Unknown parent' };
     const newPos = {
       x: parent.position.x,
@@ -1483,6 +1481,8 @@ export default function App() {
     };
 
     const parentType = graphResolveNodeType(parent);
+    const requestedParentId = parentId;
+    parentId = effectiveParentId;
     // Бот/версия/старт и т.п. нельзя вставить в одну flow-цепочку (нет выхода или входа).
     if (!graphCanChainAfter(parentType, type)) {
       const added = graphAddNode(graph, { nodeId, type, position: newPos, data: props });
@@ -1612,8 +1612,13 @@ export default function App() {
 
     // Layout only after successful full transaction
     layoutChainRef.current?.(parentId);
-    return { ok: true, nodeId };
-  }, [currentUser, showToast, graph]);
+    return {
+      ok: true,
+      nodeId,
+      effectiveParentId: parentId,
+      requestedParentId,
+    };
+  }, [currentUser, showToast, graph, uiLang]);
 
   const applyAiGeneratedStacks = useCallback((stacks, options = {}) => {
     if (!Array.isArray(stacks) || stacks.length === 0) return;
@@ -1773,7 +1778,14 @@ export default function App() {
     const doc = graph.getGraphDocument();
     const node = doc.nodes[nodeId];
     if (!node) return;
-    setBlockInfo({ type: node.type, props: { ...(node.data || {}) } });
+    const resolvedType = graphResolveNodeType(node);
+    const data = node.data || {};
+    const props = data.props && typeof data.props === 'object'
+      ? { ...data.props }
+      : { ...data };
+    if (props.type) delete props.type;
+    if (props.blockType) delete props.blockType;
+    setBlockInfo({ type: resolvedType, props, nodeId });
     if (isMobileView) setMobileTab('props');
   }, [graph, isMobileView]);
 
@@ -1866,27 +1878,10 @@ export default function App() {
     if (ok) executeRemoveNodeIds(ids);
   }, [handleRequestDeleteNode, executeRemoveNodeIds, uiLang]);
 
-  const handleDuplicateNode = useCallback((nodeId) => {
-    const id = String(nodeId || '').trim();
-    if (!id) return;
-    const result = duplicateGraphNode(graph.getGraphDocument(), id);
-    if (!result.ok) {
-      showToast(uiLang === 'en' ? 'Could not duplicate' : 'Не удалось дублировать', 'error');
-      return;
-    }
-    applyComposition(graph, { ok: true, operations: result.operations });
-    if (result.newNodeId) {
-      setSelectedBlockId(result.newNodeId);
-      beginNodeEdit(result.newNodeId);
-    }
-    showToast(uiLang === 'en' ? 'Block duplicated' : 'Блок продублирован', 'success');
-  }, [graph, showToast, uiLang]);
-
   const graphCanvasActions = React.useMemo(() => ({
     onSelectNode: handleSelectNode,
     onDeleteNode: handleRequestDeleteNode,
-    onDuplicateNode: handleDuplicateNode,
-  }), [handleSelectNode, handleRequestDeleteNode, handleDuplicateNode]);
+  }), [handleSelectNode, handleRequestDeleteNode]);
 
   const handleDeleteBlock = useCallback((_stackIdOrNodeId, blockId) => {
     handleRequestDeleteNode(blockId);
@@ -2064,9 +2059,10 @@ export default function App() {
     return { ok: false, reason: 'unsupported' };
   }, [graph]);
 
-  const tryAttachLegacyUiToSelected = useCallback((type, props) => {
-    if (!selectedBlockId) return false;
-    const out = attachLegacyUiToNode(selectedBlockId, type, props);
+  const tryAttachLegacyUiToSelected = useCallback((type, props, anchorId) => {
+    const id = anchorId || selectedBlockId;
+    if (!id) return false;
+    const out = attachLegacyUiToNode(id, type, props);
     return out.ok;
   }, [selectedBlockId, attachLegacyUiToNode]);
 
@@ -2275,7 +2271,7 @@ export default function App() {
     }
     const type = entry.defaultNodeType || entry.id?.replace(/^node:/, '') || 'message';
     const props = graphMakePropsForNewBlock(graph, type, currentUser);
-    const conflict = graphGetUniqueConflictMessage(graph, type, props);
+    const conflict = graphGetUniqueConflictMessage(graph, type, props, uiLang);
     if (conflict) {
       showToast(conflict, 'info');
       endPaletteDrag();
@@ -2428,7 +2424,7 @@ export default function App() {
     const type = entry.defaultNodeType || entry.id?.replace(/^node:/, '') || 'message';
     const position = getCanvasCenterPosition();
     const props = graphMakePropsForNewBlock(graph, type, currentUser);
-    const conflict = graphGetUniqueConflictMessage(graph, type, props);
+    const conflict = graphGetUniqueConflictMessage(graph, type, props, uiLang);
     if (conflict) {
       showToast(conflict, 'info');
       return;
@@ -2469,25 +2465,37 @@ export default function App() {
   const addBlockFromContext = useCallback((type) => {
     const position = getCanvasCenterPosition();
     const props = graphMakePropsForNewBlock(graph, type, currentUser);
-    const conflict = graphGetUniqueConflictMessage(graph, type, props);
+    const anchorId = blockInfo?.nodeId || selectedBlockId;
+    const conflict = graphGetUniqueConflictMessage(graph, type, props, uiLang);
     if (conflict) {
       showToast(conflict, 'info');
       setBlockInfo(null);
       return;
     }
-    if (selectedBlockId && tryAttachLegacyUiToSelected(type, props)) {
+    if (anchorId && tryAttachLegacyUiToSelected(type, props, anchorId)) {
       showToast('Элемент добавлен к выбранному блоку', 'success');
-      focusMobileAddedBlock(selectedBlockId);
+      focusMobileAddedBlock(anchorId);
       setBlockInfo(null);
       return;
     }
     const nodeId = uid();
-    if (selectedBlockId) {
-      const inserted = insertNodeAfter(selectedBlockId, nodeId, type, props);
+    if (anchorId) {
+      const inserted = insertNodeAfter(anchorId, nodeId, type, props);
       if (!inserted?.ok) {
-        showToast(inserted?.error || 'Не удалось добавить узел', 'info');
+        showToast(inserted?.errorDetail?.fix || inserted?.error || 'Не удалось добавить узел', 'info');
         setBlockInfo(null);
         return;
+      }
+      if (inserted.effectiveParentId && inserted.effectiveParentId !== inserted.requestedParentId) {
+        const doc = graph.getGraphDocument();
+        const parentNode = doc.nodes[inserted.effectiveParentId];
+        const label = graphUniqueBlockLabel(graphResolveNodeType(parentNode), uiLang);
+        showToast(
+          uiLang === 'en'
+            ? `Block added after «${label}» (not under settings)`
+            : `Блок добавлен после «${label}»`,
+          'success',
+        );
       }
     } else {
       const result = graphAddNode(graph, { nodeId, type, position, data: props });
@@ -2507,8 +2515,10 @@ export default function App() {
     showToast,
     graph,
     selectedBlockId,
+    blockInfo?.nodeId,
     insertNodeAfter,
     tryAttachLegacyUiToSelected,
+    uiLang,
   ]);
 
   const mergeLibraryStacks = useCallback((prevStacks, incomingStacks) => {
@@ -4727,17 +4737,6 @@ export default function App() {
               onClick={() => setBotDebugOpen(v => !v)}
               style={botDebugOpen ? { outline: '1px solid rgba(250,204,21,0.45)', borderRadius: 8 } : undefined}
             >🧾</button>
-            <ValidationStatusBadge onClick={requestFullValidation} />
-            <button
-              className="tb-btn tb-btn-blue"
-              title={builderUi.graphCheckTitle || 'Полная проверка схемы'}
-              type="button"
-              disabled={fullValidationBusy}
-              onClick={requestFullValidation}
-              style={graphDiagOpen ? { outline: '1px solid rgba(96,165,250,0.55)', borderRadius: 8 } : undefined}
-            >
-              {fullValidationBusy ? '…' : (builderUi.graphCheckButton || 'Проверить')}
-            </button>
             <div className="tb-divider" />
             {isProjectMode && (
               <div
@@ -5211,23 +5210,6 @@ export default function App() {
                       Запущен аварийный режим (без AI логики)
                     </div>
                   )}
-                  {aiPartialResult.recoveryMode && (
-                    <div
-                      role="status"
-                      style={{
-                        padding: '10px 12px',
-                        borderRadius: 10,
-                        background: 'rgba(59,130,246,0.12)',
-                        border: '1px solid rgba(59,130,246,0.28)',
-                        color: '#93c5fd',
-                        fontSize: 12,
-                        fontWeight: 800,
-                        lineHeight: 1.45,
-                      }}
-                    >
-                      Оптимизирую сценарий для стабильного выполнения...
-                    </div>
-                  )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
                     <div>
                       <div style={{ fontSize: 13, color: '#fbbf24', fontWeight: 800 }}>
@@ -5239,98 +5221,109 @@ export default function App() {
                       </div>
                       <div style={{ marginTop: 3, fontSize: 11, color: 'var(--text3)', lineHeight: 1.45 }}>
                         {aiPartialResult.skeletonFallback
-                          ? 'Это fallback-only execution layer: сценарий можно запустить, но он не считается успешной AI-генерацией.'
+                          ? 'Упрощённая схема без сложной логики — можно применить и доработать вручную.'
                           : aiPartialResult.recoveryMode
-                            ? 'AI_RECOVERY упростил IR после неудачной primary-попытки, чтобы снизить риск аварийного fallback.'
-                          : 'Degraded compiler output: рабочие части можно применить только если `safeToRun` true.'}
+                            ? 'Первая попытка AI не собрала полную схему; применена упрощённая рабочая версия.'
+                          : aiPartialResult.canRunPartial
+                            ? 'Часть сценария готова — можно добавить на холст и проверить.'
+                            : 'Автоматически применить схему нельзя — попробуйте сгенерировать снова или упростите запрос.'}
                       </div>
                     </div>
-                    <span
-                      style={{
-                        flex: '0 0 auto',
-                        padding: '4px 8px',
-                        borderRadius: 999,
-                        fontFamily: 'var(--mono, ui-monospace, monospace)',
-                        fontSize: 10,
-                        color: aiPartialResult.safeToRun ? '#86efac' : '#fca5a5',
-                        background: aiPartialResult.safeToRun ? 'rgba(34,197,94,0.12)' : 'rgba(248,113,113,0.12)',
-                        border: aiPartialResult.safeToRun ? '1px solid rgba(34,197,94,0.22)' : '1px solid rgba(248,113,113,0.22)',
-                      }}
-                    >
-                      safeToRun: {aiPartialResult.safeToRun ? 'true' : 'false'}
-                    </span>
                   </div>
 
-                  {(aiPartialResult.executionMode || aiPartialResult.rootCause) && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      <span style={{
-                        padding: '3px 7px',
-                        borderRadius: 999,
-                        background: aiPartialResult.aiConfidenceLabel === 'HIGH'
-                          ? 'rgba(34,197,94,0.1)'
-                          : aiPartialResult.aiConfidenceLabel === 'MEDIUM'
-                            ? 'rgba(245,158,11,0.1)'
-                            : 'rgba(248,113,113,0.1)',
-                        color: aiPartialResult.aiConfidenceLabel === 'HIGH'
-                          ? '#86efac'
-                          : aiPartialResult.aiConfidenceLabel === 'MEDIUM'
-                            ? '#fbbf24'
-                            : '#fca5a5',
-                        border: '1px solid rgba(255,255,255,0.14)',
-                        fontFamily: 'var(--mono, ui-monospace, monospace)',
-                        fontSize: 10,
-                      }}>
-                        AI confidence: {aiPartialResult.aiConfidenceLabel}
-                      </span>
-                      {aiPartialResult.executionMode && (
-                        <span style={{ padding: '3px 7px', borderRadius: 999, background: 'rgba(245,158,11,0.1)', color: '#fbbf24', border: '1px solid rgba(245,158,11,0.18)', fontFamily: 'var(--mono, ui-monospace, monospace)', fontSize: 10 }}>
-                          executionMode: {aiPartialResult.executionMode}
-                        </span>
-                      )}
-                      {aiPartialResult.rootCause && (
-                        <span style={{ padding: '3px 7px', borderRadius: 999, background: 'rgba(248,113,113,0.1)', color: '#fca5a5', border: '1px solid rgba(248,113,113,0.18)', fontFamily: 'var(--mono, ui-monospace, monospace)', fontSize: 10 }}>
-                          rootCause: {aiPartialResult.rootCause}
-                        </span>
-                      )}
-                    </div>
+                  {!aiDiagnosticsOpen && aiPartialResult.sections.whatWorks.length > 0 && (
+                    <ul style={{ margin: 0, paddingLeft: 18, fontSize: 11, color: 'var(--text3)', lineHeight: 1.55 }}>
+                      {aiPartialResult.sections.whatWorks.slice(0, 4).map((item, index) => (
+                        <li key={`${item.code || 'work'}-${index}`}>{item.title}{item.detail ? ` — ${item.detail}` : ''}</li>
+                      ))}
+                    </ul>
                   )}
 
-                  {aiPartialResult.reasonCodes.length > 0 && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      {aiPartialResult.reasonCodes.map((code) => (
-                        <span
-                          key={code}
-                          style={{
+                  {aiDiagnosticsOpen && (
+                    <>
+                      {(aiPartialResult.executionMode || aiPartialResult.rootCause) && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                          <span style={{
                             padding: '3px 7px',
                             borderRadius: 999,
-                            background: 'rgba(59,130,246,0.1)',
-                            color: '#93c5fd',
-                            border: '1px solid rgba(59,130,246,0.18)',
+                            background: aiPartialResult.aiConfidenceLabel === 'HIGH'
+                              ? 'rgba(34,197,94,0.1)'
+                              : aiPartialResult.aiConfidenceLabel === 'MEDIUM'
+                                ? 'rgba(245,158,11,0.1)'
+                                : 'rgba(248,113,113,0.1)',
+                            color: aiPartialResult.aiConfidenceLabel === 'HIGH'
+                              ? '#86efac'
+                              : aiPartialResult.aiConfidenceLabel === 'MEDIUM'
+                                ? '#fbbf24'
+                                : '#fca5a5',
+                            border: '1px solid rgba(255,255,255,0.14)',
                             fontFamily: 'var(--mono, ui-monospace, monospace)',
                             fontSize: 10,
-                          }}
-                        >
-                          {code}
-                        </span>
-                      ))}
-                    </div>
-                  )}
+                          }}>
+                            уверенность: {aiPartialResult.aiConfidenceLabel}
+                          </span>
+                          {aiPartialResult.executionMode && (
+                            <span style={{ padding: '3px 7px', borderRadius: 999, background: 'rgba(245,158,11,0.1)', color: '#fbbf24', border: '1px solid rgba(245,158,11,0.18)', fontFamily: 'var(--mono, ui-monospace, monospace)', fontSize: 10 }}>
+                              режим: {aiPartialResult.executionMode}
+                            </span>
+                          )}
+                          {aiPartialResult.rootCause && (
+                            <span style={{ padding: '3px 7px', borderRadius: 999, background: 'rgba(248,113,113,0.1)', color: '#fca5a5', border: '1px solid rgba(248,113,113,0.18)', fontFamily: 'var(--mono, ui-monospace, monospace)', fontSize: 10 }}>
+                              причина: {aiPartialResult.rootCause}
+                            </span>
+                          )}
+                          <span style={{
+                            padding: '3px 7px',
+                            borderRadius: 999,
+                            fontFamily: 'var(--mono, ui-monospace, monospace)',
+                            fontSize: 10,
+                            color: aiPartialResult.safeToRun ? '#86efac' : '#fca5a5',
+                            background: aiPartialResult.safeToRun ? 'rgba(34,197,94,0.12)' : 'rgba(248,113,113,0.12)',
+                            border: aiPartialResult.safeToRun ? '1px solid rgba(34,197,94,0.22)' : '1px solid rgba(248,113,113,0.22)',
+                          }}>
+                            можно применить: {aiPartialResult.safeToRun ? 'да' : 'нет'}
+                          </span>
+                        </div>
+                      )}
 
-                  <AiDiagnosticSection
-                    title="What works"
-                    items={aiPartialResult.sections.whatWorks}
-                    emptyText="Запущена базовая версия сценария (без сложной логики)."
-                  />
-                  <AiDiagnosticSection
-                    title="What was fixed"
-                    items={aiPartialResult.sections.whatWasFixed}
-                    emptyText="Автоисправления не применялись."
-                  />
-                  <AiDiagnosticSection
-                    title="What failed"
-                    items={aiPartialResult.sections.whatFailed}
-                    emptyText="Оставшихся диагностик нет."
-                  />
+                      {aiPartialResult.reasonCodes.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                          {aiPartialResult.reasonCodes.map((code) => (
+                            <span
+                              key={code}
+                              style={{
+                                padding: '3px 7px',
+                                borderRadius: 999,
+                                background: 'rgba(59,130,246,0.1)',
+                                color: '#93c5fd',
+                                border: '1px solid rgba(59,130,246,0.18)',
+                                fontFamily: 'var(--mono, ui-monospace, monospace)',
+                                fontSize: 10,
+                              }}
+                            >
+                              {code}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <AiDiagnosticSection
+                        title="Что готово"
+                        items={aiPartialResult.sections.whatWorks}
+                        emptyText="Запущена базовая версия сценария (без сложной логики)."
+                      />
+                      <AiDiagnosticSection
+                        title="Что исправлено"
+                        items={aiPartialResult.sections.whatWasFixed}
+                        emptyText="Автоисправления не применялись."
+                      />
+                      <AiDiagnosticSection
+                        title="Что не удалось"
+                        items={aiPartialResult.sections.whatFailed}
+                        emptyText="Оставшихся диагностик нет."
+                      />
+                    </>
+                  )}
 
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <button
@@ -5353,10 +5346,10 @@ export default function App() {
                       }}
                     >
                       {aiPartialResult.skeletonFallback
-                        ? 'run emergency scenario'
+                        ? 'Применить аварийный сценарий'
                         : aiPartialResult.recoveryMode
-                          ? 'run optimized scenario'
-                          : 'run partial scenario'}
+                          ? 'Применить на холст'
+                          : 'Применить частично'}
                     </button>
                     {!aiPartialResult.skeletonFallback && (
                       <button
@@ -5374,7 +5367,7 @@ export default function App() {
                           fontWeight: 700,
                         }}
                       >
-                        regenerate
+                        Сгенерировать снова
                       </button>
                     )}
                     <button
@@ -5391,7 +5384,7 @@ export default function App() {
                         fontWeight: 700,
                       }}
                     >
-                      view diagnostics
+                      {aiDiagnosticsOpen ? 'Скрыть подробности' : 'Подробности'}
                     </button>
                   </div>
 

@@ -4,6 +4,7 @@ import { createGraphDocument } from './graph_document.js';
 import {
   hasUserVisibleCanvasNodes,
   shouldShowCanvasOnboardingOverlay,
+  isGraphSettingsOnlyShell,
   pickPrimaryCanvasNodeId,
   isGraphEffectivelyEmpty,
 } from './graph_canvas_state.js';
@@ -44,12 +45,13 @@ test('onboarding hidden after inline keyboard node', () => {
   assert.equal(shouldShowCanvasOnboardingOverlay(doc), false);
 });
 
-test('onboarding hidden settings-only graph', () => {
+test('onboarding hidden when only settings nodes (version/bot)', () => {
   const doc = createGraphDocument({
     nodes: { b: { id: 'b', type: 'bot', position: { x: 0, y: 0 }, data: {} } },
     edges: {},
   });
-  assert.equal(shouldShowCanvasOnboardingOverlay(doc), true);
+  assert.equal(shouldShowCanvasOnboardingOverlay(doc), false);
+  assert.equal(isGraphSettingsOnlyShell(doc), true);
 });
 
 test('pickPrimaryCanvasNodeId prefers start', () => {

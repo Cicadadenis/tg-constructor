@@ -79,6 +79,7 @@ import { PROJECT_ID_RE } from './services/projectId.mjs';
 import { generateBotPyFromStacks } from './services/pythonCodegen.mjs';
 import { stripThinkingFromAiRaw } from './core/ai/llmOutput.js';
 import {
+  AI_TARGET_CORE_EXACT,
   canonicalIrToEditorStacks,
   extractAiCanonicalIrFromRaw,
   normalizeAiCanonicalIr,
@@ -388,9 +389,8 @@ app.use('/esphome', express.static(path.resolve('public/esphome'), {
 }));
 registerCleanUrlRouting(app);
 registerDevErrorsPage(app);
-registerDevIdePage(app);
 
-// Legacy /satana → /admin. Do not match /debug — that is the dev AI IDE (registerDevIdePage).
+// Legacy /satana → /admin. Debug IDE page is registered after admin auth wiring (see below).
 app.all(/^\/satana(?:\/|\.|$)/, authAdminPage, (req, res) => {
   res.redirect(302, '/admin');
 });
@@ -1256,6 +1256,7 @@ setDevErrorsAdminAccessChecker(applyAdminAuth);
 // После cookieParser (см. ~строку 346): иначе req.cookies пустой и Debug IDE всегда 403.
 registerDevLogRoutes(app);
 registerDevErrorsRoutes(app);
+registerDevIdePage(app);
 registerDevIdeRoutes(app);
 
 function isAdminPublicApiRoute(req) {
@@ -6408,15 +6409,23 @@ async function callGroq(messages, options = {}) {
 
 // Статический разбор AI IR: structural validator + strict semantic gate + deterministic repair.
 
-const AI_SYSTEM_PROMPT = `Ты — проектировщик runtime graph для Telegram-ботов Cicada Studio.
-Верни ТОЛЬКО валидный JSON-объект Canonical AI IR. Первый символ {, последний }. Никакого текста до или после.
+const AI_SYSTEM_PROMPT = `Ты — проектировщик runtime-graph для Telegram-ботов Cicada Studio.
+Целевое ядро: cicada-studio ${AI_TARGET_CORE_EXACT} (runtime aiogram 3). Верни ТОЛЬКО валидный JSON Canonical AI IR: первый символ {, последний }. Без markdown и без текста до/после.
+
+═══ ЦЕПОЧКА КОМПИЛЯЦИИ (ты отвечаешь только за IR) ═══
+Твой JSON → сервер (normalize → semantic gate → repair) → граф блоков в редакторе → Python bot.py.
+Ты НЕ пишешь: DSL/.ccd, Python, массив editor stacks, координаты x/y, блок bot/token.
+
+═══ ЗАПРЕЩЁННЫЙ УСТАРЕВШИЙ ФОРМАТ ═══
+Никогда не возвращай массив stacks вида [{"id":"s0","x":40,"blocks":[{"type":"bot","props":{...}}]}].
+Это legacy-формат редактора; сервер ожидает один объект Canonical AI IR.
 
 ═══ БРЕНДИНГ ИИ ═══
 Если в тексте сообщений бота нужно назвать ИИ, используй только название "Cicada 3301".
 Никогда не используй названия моделей/вендоров вроде "Meta Llama 3", "Llama", "Qwen", "OpenAI", "Groq".
 
 ═══ CANONICAL AI IR (единственный выходной контракт) ═══
-ИИ НЕ пишет DSL и НЕ пишет editor stacks. ИИ строит runtime graph:
+ИИ строит runtime graph (handlers, scenarios, uiStates), а не визуальные stacks:
 {
   "irVersion": 1,
   "targetCore": "0.0.1",
@@ -6430,8 +6439,8 @@ const AI_SYSTEM_PROMPT = `Ты — проектировщик runtime graph дл
   "uiStates": []
 }
 
-Сервер сам выполнит: Canonical IR → IR Normalize → IR Semantic Gate → deterministic IR Repair → Graph → Python (aiogram bot.py).
-Не генерируй текст DSL/.ccd, не генерируй массив stacks, не придумывай синтаксис.
+Поля action — на верхнем уровне объекта (text, rows, key, varname, file, target), без обёртки props.
+Сервер сам выполнит: Canonical IR → normalize → semantic gate → repair → граф блоков → Python (aiogram 3).
 
 Разрешены ТОЛЬКО следующие handler.type:
   start, command, callback, text
@@ -6440,8 +6449,8 @@ const AI_SYSTEM_PROMPT = `Ты — проектировщик runtime graph дл
   message, buttons, inline_db, ask, remember, get, save, save_global, condition,
   run_scenario, goto_command, goto_block, goto_scenario, goto, use_block, stop, send_file, ui_state
 
-Запрещено придумывать type вне списка (legacy callbacks, inline, http, pause, document, photo, media_received, append, insert и т.д.).
-Если нужна другая возможность — только эквивалент из whitelist.
+Запрещено придумывать type вне списка (legacy callbacks, inline, http, pause, document, photo, media_received, append, insert, bot, start/message как отдельные блоки stacks и т.д.).
+Если нужна другая возможность — только эквивалент из whitelist ядра 0.0.1.
 
 Для записи в KV используй только save/save_global. Не придумывай append/insert/update_many: если нужно изменить список, сначала собери новое значение в remember, затем save/save_global.
 
@@ -6513,9 +6522,9 @@ action examples:
 ═══ ПЕРЕМЕННЫЕ ═══
 
 Объявление: ask (varname), get (varname), remember (varname).
-Системные без объявления: пользователь, текст, callback_data.
+Системные без объявления: пользователь, текст, callback_data, chat_id, user_id (и другие из registry в контексте).
 
-ЗАПРЕЩЕНО ссылаться на {переменная} в message/condition/send_file.props.file, если она не объявлена выше в этом стеке и не системная.
+ЗАПРЕЩЕНО ссылаться на {переменная} в message/condition/send_file.file, если она не объявлена выше в этом handler/scenario/step и не системная.
 
 ═══ ФАЙЛ ОТ ПОЛЬЗОВАТЕЛЯ (без медиа-триггеров) ═══
 
@@ -6525,30 +6534,12 @@ action examples:
 
 ВЫДАТЬ ФАЙЛ ОБРАТНО (хранилище, «скачать», по введённому File ID):
 - После ask, где пользователь вставил или прислал идентификатор, в переменной лежит строка file_id.
-- Обязателен блок send_file с тем же именем: {"type":"send_file","props":{"file":"{имя_переменной_из_ask}"}}
+- Обязателен action send_file: {"type":"send_file","file":"{имя_переменной_из_ask}"}
 - Можно краткий message перед send_file (например «📥 Ваш файл:»), затем send_file — пользователь получит вложение-документ, а не текст с id.
 - ЗАПРЕЩЕНО выдавать file_id только через message — это не отправит файл в Telegram.
 `;
 
-// Few-shot примеры — показывают правильные паттерны
-const FEW_SHOT_USER = `бот принимает заказы: главное меню с 2 кнопками, при нажатии "Оформить заказ" спрашивает имя и телефон`;
-const FEW_SHOT_ASSISTANT = `[{"id":"s0","x":40,"y":40,"blocks":[{"id":"b0","type":"bot","props":{"token":"YOUR_BOT_TOKEN"}}]},{"id":"s1","x":400,"y":40,"blocks":[{"id":"b1","type":"start","props":{}},{"id":"b2","type":"message","props":{"text":"Добро пожаловать! 🛒 Выберите действие:"}},{"id":"b3","type":"buttons","props":{"rows":"Оформить заказ, ℹ️ О нас"}},{"id":"b4","type":"stop","props":{}}]},{"id":"s2","x":760,"y":40,"blocks":[{"id":"b5","type":"callback","props":{"label":"Оформить заказ"}},{"id":"b6","type":"message","props":{"text":"Отлично! Заполним данные для заказа."}},{"id":"b7","type":"run","props":{"name":"оформление"}}]},{"id":"s3","x":1120,"y":40,"blocks":[{"id":"b9","type":"callback","props":{"label":"ℹ️ О нас"}},{"id":"b10","type":"message","props":{"text":"Мы — лучший магазин! 🌟"}},{"id":"b11","type":"stop","props":{}}]},{"id":"s4","x":400,"y":380,"blocks":[{"id":"b12","type":"scenario","props":{"name":"оформление"}},{"id":"b13","type":"step","props":{"name":"шаг_имя"}},{"id":"b14","type":"ask","props":{"question":"Введите ваше имя:","varname":"имя"}},{"id":"b16","type":"step","props":{"name":"шаг_телефон"}},{"id":"b17","type":"ask","props":{"question":"Введите ваш телефон:","varname":"телефон"}},{"id":"b18","type":"message","props":{"text":"✅ Заказ принят! Имя: {имя}, Телефон: {телефон}"}},{"id":"b19","type":"stop","props":{}}]}]`;
-
-const FEW_SHOT_USER_2 = `бот с условием: спрашивает возраст, если >= 18 показывает контент для взрослых, иначе отказывает`;
-const FEW_SHOT_ASSISTANT_2 = `[{"id":"s0","x":40,"y":40,"blocks":[{"id":"b0","type":"bot","props":{"token":"YOUR_BOT_TOKEN"}}]},{"id":"s1","x":400,"y":40,"blocks":[{"id":"b1","type":"start","props":{}},{"id":"b2","type":"message","props":{"text":"Привет! Нужно проверить ваш возраст."}},{"id":"b3","type":"run","props":{"name":"проверка_возраста"}}]},{"id":"s2","x":760,"y":40,"blocks":[{"id":"b5","type":"scenario","props":{"name":"проверка_возраста"}},{"id":"b6","type":"step","props":{"name":"ввод_возраста"}},{"id":"b7","type":"ask","props":{"question":"Сколько вам лет?","varname":"возраст"}},{"id":"b8","type":"condition","props":{"cond":"возраст >= 18"}},{"id":"b9","type":"message","props":{"text":"✅ Добро пожаловать! Контент доступен."}},{"id":"b10","type":"else","props":{}},{"id":"b11","type":"message","props":{"text":"❌ Доступ разрешён только с 18 лет."}},{"id":"b12","type":"stop","props":{}}]}]`;
-
-const FEW_SHOT_USER_3 = `бот генерирует QR-код по тексту пользователя, с кнопкой "Создать ещё" и "Главная"`;
-const FEW_SHOT_ASSISTANT_3 = `[{"id":"s0","x":40,"y":40,"blocks":[{"id":"b0","type":"bot","props":{"token":"YOUR_BOT_TOKEN"}}]},{"id":"s1","x":400,"y":40,"blocks":[{"id":"b1","type":"start","props":{}},{"id":"b2","type":"message","props":{"text":"Привет! 👋 Я создаю QR-коды для любого текста или ссылки."}},{"id":"b3","type":"buttons","props":{"rows":"📷 Создать QR-код"}},{"id":"b4","type":"stop","props":{}}]},{"id":"s2","x":760,"y":40,"blocks":[{"id":"b5","type":"callback","props":{"label":"📷 Создать QR-код"}},{"id":"b6","type":"run","props":{"name":"qr_сценарий"}}]},{"id":"s3","x":400,"y":380,"blocks":[{"id":"b8","type":"scenario","props":{"name":"qr_сценарий"}},{"id":"b9","type":"step","props":{"name":"ввод_текста"}},{"id":"b10","type":"ask","props":{"question":"Введите текст или ссылку для QR-кода:","varname":"qr_текст"}},{"id":"b11","type":"message","props":{"text":"📷 Ваш QR-код готов!\nhttps://api.qrserver.com/v1/create-qr-code/?size=300x300&data={кодировать_url(qr_текст)}"}},{"id":"b12","type":"buttons","props":{"rows":"🔄 Создать ещё, 🏠 Главная"}},{"id":"b13","type":"stop","props":{}}]},{"id":"s4","x":760,"y":380,"blocks":[{"id":"b14","type":"callback","props":{"label":"🔄 Создать ещё"}},{"id":"b15","type":"run","props":{"name":"qr_сценарий"}}]},{"id":"s5","x":1120,"y":380,"blocks":[{"id":"b17","type":"callback","props":{"label":"🏠 Главная"}},{"id":"b18","type":"message","props":{"text":"Главное меню 🏠"}},{"id":"b19","type":"buttons","props":{"rows":"📷 Создать QR-код"}},{"id":"b20","type":"stop","props":{}}]}]`;
-
-const FEW_SHOT_USER_4 = `бот с авторизацией: при старте кнопка Авторизация, после нажатия спросить логин и пароль, если admin и 12345 — успех, иначе ошибка`;
-const FEW_SHOT_ASSISTANT_4 = `[{"id":"s0","x":40,"y":40,"blocks":[{"id":"b0","type":"bot","props":{"token":"YOUR_BOT_TOKEN"}}]},{"id":"s1","x":400,"y":40,"blocks":[{"id":"b1","type":"start","props":{}},{"id":"b2","type":"message","props":{"text":"Добро пожаловать! Пожалуйста, авторизируйтесь."}},{"id":"b3","type":"buttons","props":{"rows":"Авторизация"}},{"id":"b4","type":"stop","props":{}}]},{"id":"s2","x":760,"y":40,"blocks":[{"id":"b5","type":"callback","props":{"label":"Авторизация"}},{"id":"b6","type":"run","props":{"name":"авторизация"}}]},{"id":"s3","x":1120,"y":40,"blocks":[{"id":"b7","type":"scenario","props":{"name":"авторизация"}},{"id":"b8","type":"step","props":{"name":"логин"}},{"id":"b9","type":"ask","props":{"question":"Введите ваш логин:","varname":"логин"}},{"id":"b10","type":"step","props":{"name":"пароль"}},{"id":"b11","type":"ask","props":{"question":"Введите ваш пароль:","varname":"пароль"}},{"id":"b12","type":"condition","props":{"cond":"логин == \"admin\" && пароль == \"12345\""}},{"id":"b13","type":"message","props":{"text":"Авторизация успешна! 🚀"}},{"id":"b14","type":"stop","props":{}},{"id":"b15","type":"else","props":{}},{"id":"b16","type":"message","props":{"text":"Неправильный логин или пароль. 😔"}},{"id":"b17","type":"stop","props":{}}]}]`;
-
-const FEW_SHOT_USER_5 = `бот-хранилище файлов: меню «Загрузить» и «Получить»; загрузка через сценарий принимает файл и пишет в сообщении File ID; получение спрашивает File ID текстом и отправляет сам документ через send_file (не только текст с id)`;
-const FEW_SHOT_ASSISTANT_5 = `[{"id":"s0","x":40,"y":40,"blocks":[{"id":"b0","type":"bot","props":{"token":"YOUR_BOT_TOKEN"}}]},{"id":"s1","x":400,"y":40,"blocks":[{"id":"b1","type":"start","props":{}},{"id":"b2","type":"message","props":{"text":"Привет! 📁 Принимаю файл и отдам по File ID."}},{"id":"b3","type":"buttons","props":{"rows":"📤 Загрузить, 📥 Получить"}},{"id":"b4","type":"stop","props":{}}]},{"id":"s2","x":760,"y":40,"blocks":[{"id":"b5","type":"callback","props":{"label":"📤 Загрузить"}},{"id":"b6","type":"run","props":{"name":"загрузка"}}]},{"id":"s3","x":1120,"y":40,"blocks":[{"id":"b7","type":"callback","props":{"label":"📥 Получить"}},{"id":"b8","type":"run","props":{"name":"выдача"}}]},{"id":"s4","x":40,"y":380,"blocks":[{"id":"b9","type":"scenario","props":{"name":"загрузка"}},{"id":"b10","type":"step","props":{"name":"ждём_файл"}},{"id":"b11","type":"ask","props":{"question":"Пришлите файл:","varname":"файл"}},{"id":"b12","type":"message","props":{"text":"✅ Сохранено. File ID:\\n{файл}"}},{"id":"b13","type":"buttons","props":{"rows":"📥 Получить, 🏠 Главная"}},{"id":"b14","type":"stop","props":{}}]},{"id":"s5","x":400,"y":380,"blocks":[{"id":"b15","type":"scenario","props":{"name":"выдача"}},{"id":"b16","type":"step","props":{"name":"запрос_id"}},{"id":"b17","type":"ask","props":{"question":"Введите File ID:","varname":"сохранённый_файл"}},{"id":"b18","type":"message","props":{"text":"📥 Ваш файл:"}},{"id":"b19","type":"send_file","props":{"file":"{сохранённый_файл}"}},{"id":"b20","type":"buttons","props":{"rows":"📤 Загрузить, 🏠 Главная"}},{"id":"b21","type":"stop","props":{}}]},{"id":"s6","x":760,"y":380,"blocks":[{"id":"b22","type":"callback","props":{"label":"🏠 Главная"}},{"id":"b23","type":"message","props":{"text":"Главное меню 🏠"}},{"id":"b24","type":"buttons","props":{"rows":"📤 Загрузить, 📥 Получить"}},{"id":"b25","type":"stop","props":{}}]}]`;
-
-const FEW_SHOT_USER_6 = `бот по кнопке «Город» спрашивает название города, remember кладёт в переменную город_label строку «Город: {город}», затем message с {город_label}`;
-const FEW_SHOT_ASSISTANT_6 = `[{"id":"s0","x":40,"y":40,"blocks":[{"id":"b0","type":"bot","props":{"token":"YOUR_BOT_TOKEN"}}]},{"id":"s1","x":400,"y":40,"blocks":[{"id":"b1","type":"start","props":{}},{"id":"b2","type":"message","props":{"text":"Выберите действие"}},{"id":"b3","type":"buttons","props":{"rows":"🌍 Указать город"}},{"id":"b4","type":"stop","props":{}}]},{"id":"s2","x":760,"y":40,"blocks":[{"id":"b5","type":"callback","props":{"label":"🌍 Указать город"}},{"id":"b6","type":"run","props":{"name":"город_fsm"}}]},{"id":"s3","x":1120,"y":40,"blocks":[{"id":"b7","type":"scenario","props":{"name":"город_fsm"}},{"id":"b8","type":"step","props":{"name":"ввод"}},{"id":"b9","type":"ask","props":{"question":"В каком вы городе?","varname":"город"}},{"id":"b10","type":"remember","props":{"varname":"город_label","value":"Город: {город}"}},{"id":"b11","type":"message","props":{"text":"Запомнил: {город_label}"}},{"id":"b12","type":"stop","props":{}}]}]`;
-
+// Few-shot — только Canonical AI IR (ядро 0.0.1)
 const IR_FEW_SHOT_USER = `бот принимает заказы: главное меню с кнопкой "Оформить заказ", сценарий спрашивает имя и телефон`;
 const IR_FEW_SHOT_ASSISTANT = `{"irVersion":1,"targetCore":"0.0.1","compatibilityMode":"0.0.1 exact","intent":{"primary":"order_form"},"state":{"globals":[]},"uiStates":[{"id":"ui_start","message":"Добро пожаловать! Выберите действие:","buttons":"Оформить заказ, ℹ️ О нас"}],"handlers":[{"id":"h_start","type":"start","trigger":"","actions":[{"type":"ui_state","uiStateId":"ui_start"},{"type":"stop"}]},{"id":"h_order","type":"callback","trigger":"Оформить заказ","actions":[{"type":"message","text":"Отлично! Заполним данные для заказа."},{"type":"run_scenario","target":"оформление"}]},{"id":"h_about","type":"callback","trigger":"ℹ️ О нас","actions":[{"type":"message","text":"Мы — магазин на Cicada Studio."},{"type":"stop"}]}],"blocks":[],"scenarios":[{"id":"sc_order","name":"оформление","steps":[{"id":"step_name","name":"имя","actions":[{"type":"ask","question":"Введите ваше имя:","varname":"имя"}]},{"id":"step_phone","name":"телефон","actions":[{"type":"ask","question":"Введите ваш телефон:","varname":"телефон"},{"type":"message","text":"✅ Заказ принят! Имя: {имя}, телефон: {телефон}"},{"type":"stop"}]}]}],"transitions":[{"from":"h_order","to":"sc_order","type":"run_scenario"}]}`;
 
@@ -6557,6 +6548,15 @@ const IR_FEW_SHOT_ASSISTANT_2 = `{"irVersion":1,"targetCore":"0.0.1","compatibil
 
 const IR_FEW_SHOT_USER_3 = `создай бот телеграм прием заявок с бд и статусом`;
 const IR_FEW_SHOT_ASSISTANT_3 = `{"irVersion":1,"targetCore":"0.0.1","compatibilityMode":"0.0.1 exact","intent":{"primary":"request_intake_with_status"},"state":{"globals":[]},"uiStates":[{"id":"ui_start","message":"👋 Добро пожаловать! Здесь вы можете оставить заявку и проверить её статус.","buttons":"📝 Оставить заявку, 📊 Статус заявки"}],"handlers":[{"id":"h_start","type":"start","trigger":"","actions":[{"type":"ui_state","uiStateId":"ui_start"},{"type":"stop"}]},{"id":"h_new_request","type":"callback","trigger":"📝 Оставить заявку","actions":[{"type":"message","text":"Заполните заявку — я сохраню её в базе."},{"type":"run_scenario","target":"прием_заявки"}]},{"id":"h_status","type":"callback","trigger":"📊 Статус заявки","actions":[{"type":"get","key":"заявка_{user_id}","varname":"заявка"},{"type":"message","text":"📌 Статус вашей последней заявки:\n{заявка}\n\nЕсли данных нет — сначала оставьте заявку."},{"type":"stop"}]}],"blocks":[],"scenarios":[{"id":"sc_request","name":"прием_заявки","steps":[{"id":"step_name","name":"имя","actions":[{"type":"ask","question":"Как вас зовут?","varname":"имя"}]},{"id":"step_contact","name":"контакт","actions":[{"type":"ask","question":"Оставьте телефон или @username:","varname":"контакт"}]},{"id":"step_text","name":"описание","actions":[{"type":"ask","question":"Опишите заявку:","varname":"описание"},{"type":"remember","varname":"статус","value":"новая"},{"type":"save_global","key":"заявка_{user_id}","value":"№ {user_id} | Имя: {имя} | Контакт: {контакт} | Заявка: {описание} | Статус: {статус}"},{"type":"message","text":"✅ Заявка сохранена в базе.\nНомер: {user_id}\nСтатус: {статус}.\nПроверить позже можно кнопкой «📊 Статус заявки»."},{"type":"stop"}]}]}],"transitions":[{"from":"h_new_request","to":"sc_request","type":"run_scenario"},{"from":"h_status","to":"заявка_{user_id}","type":"get_status"}]}`;
+
+const IR_FEW_SHOT_USER_4 = `бот с условием: спрашивает возраст, если >= 18 пускает, иначе отказывает`;
+const IR_FEW_SHOT_ASSISTANT_4 = `{"irVersion":1,"targetCore":"0.0.1","compatibilityMode":"0.0.1 exact","intent":{"primary":"age_gate"},"state":{"globals":[]},"uiStates":[],"handlers":[{"id":"h_start","type":"start","trigger":"","actions":[{"type":"message","text":"Привет! Нужно проверить ваш возраст."},{"type":"run_scenario","target":"проверка_возраста"}]}],"blocks":[],"scenarios":[{"id":"sc_age","name":"проверка_возраста","steps":[{"id":"step_ask","name":"ввод","actions":[{"type":"ask","question":"Сколько вам лет?","varname":"возраст"},{"type":"condition","cond":"возраст >= 18","then":[{"type":"message","text":"✅ Добро пожаловать! Контент доступен."},{"type":"stop"}],"else":[{"type":"message","text":"❌ Доступ разрешён только с 18 лет."},{"type":"stop"}]}]}]}],"transitions":[{"from":"h_start","to":"sc_age","type":"run_scenario"}]}`;
+
+const IR_FEW_SHOT_USER_5 = `бот-хранилище: загрузить файл и выдать по File ID через send_file`;
+const IR_FEW_SHOT_ASSISTANT_5 = `{"irVersion":1,"targetCore":"0.0.1","compatibilityMode":"0.0.1 exact","intent":{"primary":"file_storage"},"state":{"globals":[]},"uiStates":[{"id":"ui_menu","message":"📁 Принимаю файл и отдам по File ID.","buttons":"📤 Загрузить, 📥 Получить"}],"handlers":[{"id":"h_start","type":"start","trigger":"","actions":[{"type":"ui_state","uiStateId":"ui_menu"},{"type":"stop"}]},{"id":"h_upload","type":"callback","trigger":"📤 Загрузить","actions":[{"type":"run_scenario","target":"загрузка"}]},{"id":"h_download","type":"callback","trigger":"📥 Получить","actions":[{"type":"run_scenario","target":"выдача"}]}],"blocks":[],"scenarios":[{"id":"sc_upload","name":"загрузка","steps":[{"id":"step_file","name":"файл","actions":[{"type":"ask","question":"Пришлите файл:","varname":"файл"},{"type":"message","text":"✅ Сохранено. File ID:\\n{файл}"},{"type":"stop"}]}]},{"id":"sc_download","name":"выдача","steps":[{"id":"step_id","name":"запрос","actions":[{"type":"ask","question":"Введите File ID:","varname":"сохранённый_файл"},{"type":"message","text":"📥 Ваш файл:"},{"type":"send_file","file":"{сохранённый_файл}"},{"type":"stop"}]}]}],"transitions":[{"from":"h_upload","to":"sc_upload","type":"run_scenario"},{"from":"h_download","to":"sc_download","type":"run_scenario"}]}`;
+
+const IR_FEW_SHOT_USER_6 = `кнопка «Город»: спросить город, remember город_label = «Город: {город}», ответить {город_label}`;
+const IR_FEW_SHOT_ASSISTANT_6 = `{"irVersion":1,"targetCore":"0.0.1","compatibilityMode":"0.0.1 exact","intent":{"primary":"city_remember"},"state":{"globals":[]},"uiStates":[{"id":"ui_start","message":"Выберите действие","buttons":"🌍 Указать город"}],"handlers":[{"id":"h_start","type":"start","trigger":"","actions":[{"type":"ui_state","uiStateId":"ui_start"},{"type":"stop"}]},{"id":"h_city","type":"callback","trigger":"🌍 Указать город","actions":[{"type":"run_scenario","target":"город_fsm"}]}],"blocks":[],"scenarios":[{"id":"sc_city","name":"город_fsm","steps":[{"id":"step_input","name":"ввод","actions":[{"type":"ask","question":"В каком вы городе?","varname":"город"},{"type":"remember","varname":"город_label","value":"Город: {город}"},{"type":"message","text":"Запомнил: {город_label}"},{"type":"stop"}]}]}],"transitions":[{"from":"h_city","to":"sc_city","type":"run_scenario"}]}`;
 
 function serverAiAstPolicyAppendix(astMode, allowedMemoryKeys) {
   const lines = [
@@ -6595,17 +6595,18 @@ function buildAiCoreContextAppendix() {
   const featureMatrix = readTextFileSafe(path.resolve('docs/dsl-feature-matrix.md'), 5000);
   return [
     '',
-    '═══ CORE-AWARE GENERATOR CONTEXT (source of truth) ═══',
-    'Use these manifests as constraints. If user asks for unsupported behavior, model it with supported constructs or omit it.',
+    '═══ КОНТЕКСТ ЯДРА cicada-studio 0.0.1 (источник истины) ═══',
+    'Сверяйся с манифестами. Если пользователь просит неподдерживаемое — смоделируй через whitelist или опусти.',
+    'AI выдаёт только Canonical IR; runtime — aiogram 3 через compileCore.',
     '',
     'api-manifest.json:',
-    apiManifest || '(missing)',
+    apiManifest || '(отсутствует)',
     '',
     'parser-capabilities.default.json:',
-    parserCapabilities || '(missing)',
+    parserCapabilities || '(отсутствует)',
     '',
     'dsl-feature-matrix.md:',
-    featureMatrix || '(missing)',
+    featureMatrix || '(отсутствует)',
   ].join('\n');
 }
 
@@ -6876,7 +6877,7 @@ function describeAiRepairAction(action) {
   if (/skeleton fallback|SKELETON_IR|базовая версия/i.test(detail)) {
     return aiSectionItem(
       AI_PARTIAL_REASON_CODES.IR_FALLBACK_SKELETON_USED,
-      'Skeleton IR fallback generated',
+      'Базовая версия сценария',
       detail,
       'info',
     );
@@ -6884,7 +6885,7 @@ function describeAiRepairAction(action) {
   if (/UNKNOWN_SYMBOL|invented symbol aliases/i.test(detail)) {
     return aiSectionItem(
       AI_PARTIAL_REASON_CODES.UNKNOWN_SYMBOLS_REPLACED,
-      'Unknown symbols replaced',
+      'Исправлены неизвестные переменные',
       detail,
       'warning',
     );
@@ -6892,12 +6893,12 @@ function describeAiRepairAction(action) {
   if (/EMPTY_BRANCH|non-empty executable bodies/i.test(detail)) {
     return aiSectionItem(
       AI_PARTIAL_REASON_CODES.EMPTY_BRANCH_REMOVED,
-      'Empty branch removed',
+      'Удалена пустая ветка',
       detail,
       'warning',
     );
   }
-  return aiSectionItem('IR_AUTO_REPAIR', 'Automatic IR repair', detail, 'info');
+  return aiSectionItem('IR_AUTO_REPAIR', 'Автоисправление схемы', detail, 'info');
 }
 
 function summarizeAiValidIrParts(canonicalIr, classification) {
@@ -6905,7 +6906,7 @@ function summarizeAiValidIrParts(canonicalIr, classification) {
     return [
       aiSectionItem(
         AI_PARTIAL_REASON_CODES.IR_FALLBACK_SKELETON_USED,
-        'Skeleton IR fallback generated',
+        'Базовая версия сценария',
         'Запущена базовая версия сценария (без сложной логики).',
         'info',
       ),
@@ -6919,31 +6920,31 @@ function summarizeAiValidIrParts(canonicalIr, classification) {
   if (canonicalIr.intent?.primary === 'skeleton_fallback' || classification.irState === AI_IR_STATE.SKELETON) {
     works.push(aiSectionItem(
       AI_PARTIAL_REASON_CODES.IR_FALLBACK_SKELETON_USED,
-      'Skeleton IR fallback is executable',
+      'Базовая версия готова к запуску',
       'Запущена базовая версия сценария (без сложной логики).',
       'info',
     ));
   }
   if (classification.hasEntryPoint) {
-    works.push(aiSectionItem('ENTRY_POINT_VALID', 'Entry point found', 'The IR contains a /start or start handler.'));
+    works.push(aiSectionItem('ENTRY_POINT_VALID', 'Точка входа', 'Есть обработчик /start или start.'));
   } else {
-    works.push(aiSectionItem('ENTRY_POINT_MISSING', 'Entry point missing', 'No /start or start handler was found.', 'error'));
+    works.push(aiSectionItem('ENTRY_POINT_MISSING', 'Нет точки входа', 'Не найден обработчик /start или start.', 'error'));
   }
   if (handlers.length > 0) {
-    works.push(aiSectionItem('HANDLERS_COMPILED', 'Handlers compiled', `${handlers.length} trigger handler(s) are present in the IR.`));
+    works.push(aiSectionItem('HANDLERS_COMPILED', 'Обработчики', `${handlers.length} обработчик(ов) кнопок и команд.`));
   }
   if (scenarios.length > 0) {
-    works.push(aiSectionItem('SCENARIOS_COMPILED', 'Scenarios compiled', `${scenarios.length} scenario(s) are present in the IR.`));
+    works.push(aiSectionItem('SCENARIOS_COMPILED', 'Сценарии', `${scenarios.length} сценарий(ев) с шагами.`));
   }
   if (uiStates.length > 0) {
-    works.push(aiSectionItem('UI_STATES_COMPILED', 'UI states compiled', `${uiStates.length} UI state(s) are available for transitions.`));
+    works.push(aiSectionItem('UI_STATES_COMPILED', 'Экраны меню', `${uiStates.length} экран(ов) с кнопками.`));
   }
   if (blocks.length > 0) {
-    works.push(aiSectionItem('REUSABLE_BLOCKS_COMPILED', 'Reusable blocks compiled', `${blocks.length} block(s) are available.`));
+    works.push(aiSectionItem('REUSABLE_BLOCKS_COMPILED', 'Переиспользуемые блоки', `${blocks.length} блок(ов).`));
   }
   return works.length > 0
     ? works
-    : [aiSectionItem('IR_PRESENT', 'IR object recovered', 'A Canonical IR object was recovered, but it has no executable handlers yet.', 'warning')];
+    : [aiSectionItem('IR_PRESENT', 'Схема восстановлена', 'Объект IR получен, но исполняемых обработчиков пока нет.', 'warning')];
 }
 
 function buildAiDiagnosticSections({ canonicalIr, classification, warnings, repairActions, reason, reasonCodes }) {
@@ -6967,8 +6968,8 @@ function buildAiDiagnosticSections({ canonicalIr, classification, warnings, repa
   if (whatFailed.length === 0 && reason && !isSkeletonFallback) {
     whatFailed.push(aiSectionItem(
       reason,
-      'Generation stopped before final IR',
-      `Reason: ${reasonCodes.length ? reasonCodes.join(', ') : reason}`,
+      'Генерация не завершена',
+      `Причина: ${reasonCodes.length ? reasonCodes.join(', ') : reason}`,
       'warning',
     ));
   }
@@ -8468,6 +8469,12 @@ app.post('/api/ai-generate', requireUserAuth, aiGenerateRateLimit, async (req, r
       { role: 'assistant', content: IR_FEW_SHOT_ASSISTANT_2 },
       { role: 'user', content: IR_FEW_SHOT_USER_3 },
       { role: 'assistant', content: IR_FEW_SHOT_ASSISTANT_3 },
+      { role: 'user', content: IR_FEW_SHOT_USER_4 },
+      { role: 'assistant', content: IR_FEW_SHOT_ASSISTANT_4 },
+      { role: 'user', content: IR_FEW_SHOT_USER_5 },
+      { role: 'assistant', content: IR_FEW_SHOT_ASSISTANT_5 },
+      { role: 'user', content: IR_FEW_SHOT_USER_6 },
+      { role: 'assistant', content: IR_FEW_SHOT_ASSISTANT_6 },
       { role: 'user', content: buildIntentPlannedUserPrompt(promptText, intentPlan) },
     ];
 

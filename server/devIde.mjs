@@ -5,7 +5,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import rateLimit from 'express-rate-limit';
-import { isDevIdeAdminGated, isDevIdeEnabled, readEnv } from '../core/env.mjs';
+import { isDevIdeEnabled, isProduction, readEnv } from '../core/env.mjs';
 import { atomicWriteFile, readFileUtf8 } from '../services/secureFs.mjs';
 import { sendHtmlWithCspNonce } from '../services/sendHtmlWithCspNonce.mjs';
 import {
@@ -64,13 +64,18 @@ export function setDevIdeAdminAccessChecker(fn) {
   devIdeAdminAccessChecker = fn;
 }
 
+function adminGateHtml() {
+  return `<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>Debug IDE</title></head><body style="font-family:system-ui;background:#0d0d12;color:#e8e8f0;padding:2rem;max-width:36rem;line-height:1.5"><h1>Нужен вход администратора</h1><p>Debug IDE доступна только после входа в <a href="/admin" style="color:#7eb8ff">админ-панель</a> (ADMIN_KEY или учётная запись admin в Studio).</p><p><a href="/" style="color:#7eb8ff">← Вернуться в Studio</a></p></body></html>`;
+}
+
 async function assertDevIdeAccess(req, res, { json = true } = {}) {
   if (!isDevIdeEnabled()) {
     if (json) res.status(404).json({ error: 'Not found' });
     else res.status(404).send('Not found');
     return false;
   }
-  if (!isDevIdeAdminGated()) return true;
+  // Production: always require admin when DEV_IDE_ADMIN=1 (do not rely on isDevIdeAdminGated alone).
+  if (!isProduction()) return true;
   if (!devIdeAdminAccessChecker) {
     if (json) res.status(503).json({ error: 'Debug IDE admin auth not configured' });
     else res.status(503).send('Debug IDE admin auth not configured');
@@ -85,7 +90,7 @@ async function assertDevIdeAccess(req, res, { json = true } = {}) {
         hint: 'Sign in at /admin (ADMIN_KEY or admin account), then reload this page.',
       });
     } else {
-      res.status(403).type('html').send(`<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>Debug IDE</title></head><body style="font-family:system-ui;background:#0d0d12;color:#e8e8f0;padding:2rem"><h1>Нужен вход администратора</h1><p>Войдите в <a href="/admin" style="color:#7eb8ff">админ-панель</a> и обновите эту страницу.</p></body></html>`);
+      res.status(403).type('html').send(adminGateHtml());
     }
     return false;
   } catch {
@@ -782,6 +787,6 @@ export function registerDevIdePage(app) {
 export function logDevIdeStartupBanner() {
   if (!isDevIdeEnabled()) return;
   const port = readEnv('API_PORT') || '3001';
-  const mode = isDevIdeAdminGated() ? 'admin-only (DEV_IDE_ADMIN=1)' : 'development';
+  const mode = isProduction() ? 'admin-only (DEV_IDE_ADMIN=1)' : 'development';
   console.warn(`[dev-ide] AI Debug IDE [${mode}] → http://127.0.0.1:${port}/debug.html`);
 }

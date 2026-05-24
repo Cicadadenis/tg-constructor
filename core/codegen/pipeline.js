@@ -19,11 +19,16 @@ import { validatePythonSyntax as validatePythonSyntaxStub } from './validatePyth
 import {
   flowToStacks,
   buildPythonModule,
+  buildMetadataBootstrapModule,
   extractPythonHandlers,
   PYTHON_EXPORT_MODES,
 } from './compileCore.js';
 import { stacksToFlow } from './stacksFlow.js';
-import { isFlowEmptyForCodegen } from './emptyGraph.js';
+import {
+  isFlowEmptyForCodegen,
+  isFlowMetadataOnlyForCodegen,
+  shouldEmitPreviewBootstrap,
+} from './emptyGraph.js';
 import { isGraphEffectivelyEmpty } from '../../src/constructor/graph_document/graph_canvas_state.js';
 import { strictCompileValidation } from '../../src/constructor/graph_document/graph_validation_pipeline.js';
 import {
@@ -39,7 +44,8 @@ import {
  * @returns {{ code: string, compileWarnings: string[], transpileTrace: object[], compileErrors: object[], ast: object[], empty?: boolean }}
  */
 export function compileGraphToPython(flow, options = {}) {
-  if (isFlowEmptyForCodegen(flow)) {
+  const metadataOnly = isFlowMetadataOnlyForCodegen(flow);
+  if (isFlowEmptyForCodegen(flow) && !metadataOnly) {
     return {
       code: '',
       compileWarnings: [],
@@ -50,7 +56,7 @@ export function compileGraphToPython(flow, options = {}) {
     };
   }
 
-  if (options.graphDocument && isGraphEffectivelyEmpty(options.graphDocument)) {
+  if (options.graphDocument && isGraphEffectivelyEmpty(options.graphDocument) && !metadataOnly) {
     return {
       code: '',
       compileWarnings: [],
@@ -58,6 +64,22 @@ export function compileGraphToPython(flow, options = {}) {
       compileErrors: [],
       ast: [],
       empty: true,
+    };
+  }
+
+  if (metadataOnly) {
+    const bootstrapStacks = flowToStacks(flow);
+    const code = buildMetadataBootstrapModule(bootstrapStacks);
+    return {
+      code,
+      compileWarnings: [
+        'На холсте только настройки — добавьте Command, Text, Callback или Start для обработчиков.',
+      ],
+      transpileTrace: [],
+      compileErrors: [],
+      ast: [],
+      empty: false,
+      aborted: false,
     };
   }
 
@@ -220,6 +242,12 @@ export function compileGraphToPython(flow, options = {}) {
   let code = '';
   try {
     code = buildPythonModule(stacks, { ...codegenCtx, compileWarnings });
+    if (shouldEmitPreviewBootstrap(workingFlow, code)) {
+      code = buildMetadataBootstrapModule(stacks);
+      compileWarnings.push(
+        'Обработчики без действий — добавьте «Ответ» и соедините блоки стрелкой.',
+      );
+    }
   } catch (e) {
     const err = e instanceof CodegenError ? e : new CodegenError(String(e?.message || e));
     compileErrors.push({

@@ -1,5 +1,15 @@
 /** Локализация конструктора (палитра блоков, панели, тулбар) — ru / en / uk */
 
+import { PALETTE_NODE_CATEGORIES } from './constructor/graph_document/palette_core.js';
+
+const FLOW_SECTION_GROUP_IDS = new Set(PALETTE_NODE_CATEGORIES);
+
+function resolveLocalizedGroupId(block) {
+  const flowId = String(block?.groupId || '').trim();
+  if (FLOW_SECTION_GROUP_IDS.has(flowId)) return flowId;
+  return RU_GROUP_TO_ID[block?.group] || block?.group || 'main';
+}
+
 export const RU_GROUP_TO_ID = {
   Настройки: 'settings',
   Основные: 'main',
@@ -190,13 +200,13 @@ export function localizeBlockTypes(BLOCK_TYPES, lang) {
   if (lc === 'ru') {
     return BLOCK_TYPES.map((b) => ({
       ...b,
-      groupId: RU_GROUP_TO_ID[b.group] || b.group,
+      groupId: resolveLocalizedGroupId(b),
     }));
   }
   const gl = GROUP_LABELS[lc] || GROUP_LABELS.en;
   const bl = BLOCK_LABELS[lc] || BLOCK_LABELS.en;
   return BLOCK_TYPES.map((b) => {
-    const groupId = RU_GROUP_TO_ID[b.group] || b.group;
+    const groupId = resolveLocalizedGroupId(b);
     return {
       ...b,
       groupId,
@@ -512,6 +522,14 @@ export const CONSTRUCTOR_I18N = {
     pythonPreviewTitle: 'Python Preview',
     pythonPreviewEmptyTitle: 'Перетащите блоки на холст',
     pythonPreviewEmptyHint: 'Preview появится после добавления обработчиков и действий на схему.',
+    pythonPreviewSettingsOnlyTitle: 'Пока только настройки',
+    pythonPreviewSettingsOnlyHint:
+      'Добавьте обработчик: «Команда», «Текст», «Callback» или «Старт» — bot.py не обязан начинаться с /start.',
+    pythonPreviewNoEdgesTitle: 'Соедините блоки',
+    pythonPreviewNoEdgesHint: 'Соедините обработчик (команда, текст, старт) с действиями на схеме.',
+    pythonPreviewNoHandlersTitle: 'Добавьте обработчики',
+    pythonPreviewNoHandlersHint:
+      'Перетащите «Команда», «Текст», «Ответ», «Callback» или «Старт» и свяжите блоки стрелками.',
     pythonCompileFailed: 'Ошибка компиляции Python',
     graphErrorsTitle: 'Проблемы в сценарии',
     clearedCorruptedAutosave:
@@ -581,6 +599,7 @@ export const CONSTRUCTOR_I18N = {
     codeLockedBody2: 'в платной версии',
     compatibleNoBelow: 'Нельзя добавить блоки снизу',
     compatibleCanAddBelow: 'Можно добавить снизу',
+    compatibleFrequentBelow: 'Часто используются',
     compatibleAddBlock: (name) => `Добавить блок «${name}»`,
     dropAttach: 'Отпусти — прикрепить сюда',
     dropReject: 'Сюда нельзя',
@@ -780,6 +799,13 @@ export const CONSTRUCTOR_I18N = {
     pythonPreviewTitle: 'Python Preview',
     pythonPreviewEmptyTitle: 'Drag blocks onto the canvas',
     pythonPreviewEmptyHint: 'Preview appears after you add handlers and actions to the graph.',
+    pythonPreviewSettingsOnlyTitle: 'Settings only so far',
+    pythonPreviewSettingsOnlyHint:
+      'Add a handler: Command, Text, Callback, or Start — /start is not required.',
+    pythonPreviewNoEdgesTitle: 'Connect the blocks',
+    pythonPreviewNoEdgesHint: 'Draw an edge from Start to your actions on the canvas.',
+    pythonPreviewNoHandlersTitle: 'Add handlers',
+    pythonPreviewNoHandlersHint: 'Place Start, Reply, or buttons and link them on the graph.',
     pythonCompileFailed: 'Python compilation error',
     graphErrorsTitle: 'Scenario issues',
     pythonErrorHighlightHint: 'Click to highlight the block on the canvas',
@@ -843,6 +869,7 @@ export const CONSTRUCTOR_I18N = {
     codeLockedBody2: 'in the paid plan',
     compatibleNoBelow: 'Cannot add blocks below',
     compatibleCanAddBelow: 'You can add below',
+    compatibleFrequentBelow: 'Frequently used',
     compatibleAddBlock: (name) => `Add block «${name}»`,
     dropAttach: 'Release to attach here',
     dropReject: 'Not allowed here',
@@ -1040,6 +1067,13 @@ export const CONSTRUCTOR_I18N = {
     pythonPreviewTitle: 'Python Preview',
     pythonPreviewEmptyTitle: 'Перетащите блоки на холст',
     pythonPreviewEmptyHint: 'Preview появится после добавления обработчиков и действий на схему.',
+    pythonPreviewSettingsOnlyTitle: 'Потрібні блоки сценарію',
+    pythonPreviewSettingsOnlyHint:
+      'Зараз лише налаштування (версія, бот). Додайте «Старт» і «Відповідь» та з’єднайте їх — тут з’явиться bot.py.',
+    pythonPreviewNoEdgesTitle: 'З’єднайте блоки',
+    pythonPreviewNoEdgesHint: 'Проведіть стрілку від «Старт» до дій на схемі.',
+    pythonPreviewNoHandlersTitle: 'Додайте обробники',
+    pythonPreviewNoHandlersHint: 'Перетягніть «Старт», «Відповідь» або кнопки та зв’яжіть їх на схемі.',
     pythonCompileFailed: 'Ошибка компиляции Python',
     pythonErrorHighlightHint: 'Нажмите, чтобы подсветить блок на холсте',
     canvasErrorsShowAll: 'Показати всі блоки',
@@ -1100,6 +1134,7 @@ export const CONSTRUCTOR_I18N = {
     codeLockedBody2: 'у платній версії',
     compatibleNoBelow: 'Не можна додати блоки знизу',
     compatibleCanAddBelow: 'Можна додати знизу',
+    compatibleFrequentBelow: 'Часто використовуються',
     compatibleAddBlock: (name) => `Додати блок «${name}»`,
     dropAttach: 'Відпусти — прикріпити сюди',
     dropReject: 'Сюди не можна',

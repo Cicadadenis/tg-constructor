@@ -69,6 +69,20 @@ function blockTypeFromFlowNode(node) {
 }
 
 /**
+ * Only metadata blocks (version, bot, commands, …) — still emit bootstrap bot.py in preview.
+ * @param {{ nodes?: unknown[], edges?: unknown[] }} flow
+ */
+export function isFlowMetadataOnlyForCodegen(flow) {
+  const nodes = flow?.nodes || [];
+  if (nodes.length === 0) return false;
+  for (const node of nodes) {
+    const type = blockTypeFromFlowNode(node);
+    if (!type || !METADATA_ONLY_TYPES.has(type)) return false;
+  }
+  return true;
+}
+
+/**
  * @param {{ nodes?: unknown[], edges?: unknown[] }} flow
  */
 export function isFlowEmptyForCodegen(flow) {
@@ -87,6 +101,38 @@ export function isFlowEmptyForCodegen(flow) {
 /**
  * @param {unknown[]} stacks — legacy editor stacks (optional path)
  */
+/** Canvas content that warrants a bootstrap bot.py in preview when full codegen is empty. */
+const PREVIEW_BOOTSTRAP_TRIGGER_TYPES = new Set([
+  ...METADATA_ONLY_TYPES,
+  'start',
+  'command',
+  'callback',
+  'else',
+  'on_text',
+  'on_photo',
+  'on_voice',
+  'on_document',
+  'on_sticker',
+  'on_location',
+  'on_contact',
+]);
+
+/**
+ * Preview/codegen produced no module but the canvas has settings or entry points
+ * (e.g. Version + Start without Bot or without edges yet).
+ * @param {{ nodes?: unknown[] }} flow
+ * @param {string} [code]
+ */
+export function shouldEmitPreviewBootstrap(flow, code = '') {
+  if (String(code || '').trim()) return false;
+  const nodes = flow?.nodes || [];
+  if (!nodes.length) return false;
+  return nodes.some((node) => {
+    const t = blockTypeFromFlowNode(node);
+    return PREVIEW_BOOTSTRAP_TRIGGER_TYPES.has(t) || isEventHandlerType(t);
+  });
+}
+
 export function isStacksEmptyForCodegen(stacks) {
   const nodes = [];
   for (const stack of stacks || []) {

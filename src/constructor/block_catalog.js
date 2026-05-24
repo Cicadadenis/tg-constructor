@@ -9,6 +9,7 @@ import {
   getBlockDefaultProps,
   getPaletteBlockTypes,
   getCompatibleBlockTypes,
+  QUICK_ADD_FREQUENT_BLOCK_TYPES,
 } from '../../core/blockRegistry.js';
 import { localizeBlockTypes, RU_GROUP_TO_ID } from '../builderI18n.js';
 import { getPaletteEntryDisplay } from './graph_document/palette_core.js';
@@ -18,6 +19,7 @@ export {
   canStackBlockBelow,
   getCompatibleBlockTypes,
   getPaletteBlockTypes,
+  QUICK_ADD_FREQUENT_BLOCK_TYPES,
 };
 
 /** @deprecated use BLOCK_STACK_COMPATIBILITY */

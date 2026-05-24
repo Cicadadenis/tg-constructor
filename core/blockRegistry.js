@@ -411,6 +411,11 @@ export const blockRegistry = Object.freeze(
 const TERMINAL_CHILDREN = Object.freeze([]);
 export const UI_ATTACHMENT_LEGACY_BLOCK_TYPES = Object.freeze(['buttons', 'inline']);
 
+/** Quick-add row in block modal — most-used types first (filtered by parent compatibility). */
+export const QUICK_ADD_FREQUENT_BLOCK_TYPES = Object.freeze([
+  'message', 'photo', 'buttons', 'inline', 'typing', 'delay', 'ask',
+]);
+
 const FLOW_CHILDREN = Object.freeze([
   'message', 'typing', 'delay', 'condition', 'condition_not', 'else', 'ask', 'remember',
   'get', 'save', 'loop', 'log', 'photo', 'photo_var', 'video', 'audio', 'document',

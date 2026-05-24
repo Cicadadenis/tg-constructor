@@ -5,6 +5,9 @@ import { sendHtmlWithCspNonce } from './sendHtmlWithCspNonce.mjs';
 /** Paths that must never be rewritten or stripped of `.html`. */
 const REDIRECT_EXCLUDE_PREFIXES = ['/api/', '/firmware/'];
 
+/** Served only by Node with admin gate (server/devIde.mjs) — not from public/*.html. */
+const CLEAN_URL_SKIP_PREFIXES = ['/debug', '/dev/'];
+
 /**
  * @param {string} pathname — req.path (no query)
  * @returns {string|null} canonical path for 301, or null to skip
@@ -72,6 +75,7 @@ export function registerCleanUrlRouting(app, { distRoot = 'dist', publicRoot = '
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();
     const p = req.path;
     if (p.startsWith('/api') || p.startsWith('/firmware')) return next();
+    if (CLEAN_URL_SKIP_PREFIXES.some((prefix) => p === prefix || p.startsWith(prefix))) return next();
     const base = path.basename(p);
     if (base.includes('.') && base !== '') return next();
     const rel = p.replace(/^\//, '');

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:full": "node scripts/dev-full.mjs",
-    "build": "npm run core:guard && vite build",
+    "build": "npm run core:guard && vite build && rm -f dist/debug.html dist/debug-ide-app.js",
     "start": "cross-env NODE_ENV=production node --import tsx server.mjs",
     "server": "node --import tsx server.mjs",
     "server:dev": "cross-env NODE_ENV=development node --import tsx server.mjs",

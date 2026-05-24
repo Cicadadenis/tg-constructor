@@ -6,7 +6,7 @@ import { graphDocumentToProjectGraph } from '../constructor/graph_document/graph
 
 import { projectGraphToFlow } from '../../core/graph/model.js';
 
-import { compileFlowToPython } from '../../core/mappers/compileFlowGraph.mjs';
+import { compileGraphToPython } from '../../core/codegen/pipeline.js';
 
 import { inspectGraph } from '../debug/graphInspector.js';
 
@@ -15,8 +15,6 @@ import { inspectRuntime } from '../debug/runtimeInspector.js';
 import { reactFlowToGraph } from '../../core/mappers/reactFlowToGraph.ts';
 
 import { groupGraphErrorsForDisplay } from './graph_error_messages.js';
-
-import { isFlowEmptyForCodegen } from '../../core/codegen/emptyGraph.js';
 
 import { isGraphInEditMode } from '../constructor/graph_document/graph_edit_session.js';
 
@@ -48,7 +46,11 @@ import {
 
 } from '../constructor/graph_document/validation_stages.js';
 
-import { isGraphEffectivelyEmpty } from '../constructor/graph_document/graph_canvas_state.js';
+import {
+  isGraphEffectivelyEmpty,
+  isGraphSettingsOnlyShell,
+  hasUserVisibleCanvasNodes,
+} from '../constructor/graph_document/graph_canvas_state.js';
 
 const EMPTY_COMPILE_ERRORS = [];
 
@@ -129,7 +131,7 @@ export function useGraphPythonCompile(getGraphDocument, graphRevision, lang = 'r
 
   const pythonMeta = React.useMemo(() => {
     try {
-      if (!graphDocument || isGraphEffectivelyEmpty(graphDocument)) {
+      if (!graphDocument || Object.keys(graphDocument.nodes || {}).length === 0) {
         return {
           code: '',
           python: '',
@@ -143,46 +145,34 @@ export function useGraphPythonCompile(getGraphDocument, graphRevision, lang = 'r
 
       const flow = projectGraphToFlow(graphDocumentToProjectGraph(graphDocument));
 
-      const hasFlowEdges = (flow?.edges || []).length > 0;
-      if (!hasFlowEdges && validationMode !== VALIDATION_MODE.STRICT) {
-        return {
-          code: '',
-          python: '',
-          compileErrors: [],
-          compileWarnings: [],
-          transpileTrace: [],
-          empty: true,
-          success: false,
-        };
-      }
-
-      if (isFlowEmptyForCodegen(flow)) {
-        return {
-          code: '',
-          python: '',
-          compileErrors: [],
-          compileWarnings: [],
-          transpileTrace: [],
-          empty: true,
-          success: false,
-        };
-      }
-
-      const meta = compileFlowToPython(flow, {
+      const meta = compileGraphToPython(flow, {
         graphDocument,
+        exportMode: PYTHON_EXPORT_MODES.FULL_MODULE,
+        validationStage: codegenStage,
         strict: validationMode === VALIDATION_MODE.STRICT,
+        skipGraphGate: skipGraphGate,
+        validatePython: false,
       });
 
-      if (import.meta.env?.DEV && meta.success && meta.python) {
+      const code = meta.code || '';
+      const empty = !code.trim() && (meta.empty !== false);
+      const normalized = {
+        ...meta,
+        code,
+        python: code,
+        empty,
+        success: !empty && !meta.aborted,
+      };
+
+      if (import.meta.env?.DEV && normalized.success && code) {
         try {
           inspectGraph(reactFlowToGraph(flow.nodes, flow.edges));
-          if (meta.runtime) inspectRuntime(meta.runtime);
         } catch (inspectErr) {
           console.warn('[compile preview inspect]', inspectErr);
         }
       }
 
-      return meta;
+      return normalized;
     } catch (err) {
       if (import.meta.env?.DEV) {
         console.warn('[compile preview]', err);
@@ -204,19 +194,11 @@ export function useGraphPythonCompile(getGraphDocument, graphRevision, lang = 'r
 
   }, [graphDocument, exportMode, codegenStage, compileTick, skipGraphGate, validationMode]);
 
-  const flowEmpty = isFlowEmptyForCodegen(
-
-    projectGraphToFlow(graphDocumentToProjectGraph(graphDocument)),
-
-  );
-
   const hasNodes = graphHasCanvasNodes(graphDocument);
 
-  const effectivelyEmpty = isGraphEffectivelyEmpty(graphDocument);
+  const generatedPython = pythonMeta.code || '';
 
-  const isEmpty = Boolean(pythonMeta.empty) || !hasNodes || flowEmpty || effectivelyEmpty;
-
-  const generatedPython = isEmpty ? '' : (pythonMeta.code || '');
+  const isEmpty = !hasNodes || !generatedPython.trim();
 
   const rawCompileErrors = isEmpty ? EMPTY_COMPILE_ERRORS : (pythonMeta.compileErrors ?? EMPTY_COMPILE_ERRORS);
 
@@ -274,11 +256,28 @@ export function useGraphPythonCompile(getGraphDocument, graphRevision, lang = 'r
 
   );
 
+  const emptyPreviewReason = React.useMemo(() => {
+    if (!graphHasCanvasNodes(graphDocument)) return 'no_nodes';
+    if (generatedPython.trim()) return null;
+    if (isGraphSettingsOnlyShell(graphDocument)) return 'settings_only';
+    try {
+      const flow = projectGraphToFlow(graphDocumentToProjectGraph(graphDocument));
+      const hasFlowEdges = (flow?.edges || []).length > 0;
+      if (!hasFlowEdges && hasUserVisibleCanvasNodes(graphDocument)) return 'no_edges';
+    } catch {
+      // fall through
+    }
+    if (isGraphEffectivelyEmpty(graphDocument)) return 'no_handlers';
+    return 'no_handlers';
+  }, [graphDocument, generatedPython]);
+
   return {
 
     pythonMeta,
 
     isEmpty,
+
+    emptyPreviewReason,
 
     generatedPython,
 
