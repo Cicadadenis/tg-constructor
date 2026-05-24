@@ -14,6 +14,9 @@ __pycache__/
 .venv-*/
 
 # Secrets & local deploy
+env_original
+push.sh
+.env
 .env
 .env.*
 env_cicada
