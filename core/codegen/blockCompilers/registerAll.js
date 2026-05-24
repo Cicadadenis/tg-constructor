@@ -25,7 +25,10 @@ import {
   compileSetGlobal,
   compileAsk,
 } from './state.js';
+import { compileSetVariable, compileGetVariable } from './variables.js';
+import { compileRequireRole } from './permissions.js';
 import { compileGoto, compileStop, compileLoop, compileDelay, compileTyping, compileLog } from './loops.js';
+import { compileForeach } from './foreach.js';
 import { compileCondition, compileConditionNot } from './conditions.js';
 import {
   compilePhoto,
@@ -46,6 +49,13 @@ import {
   compileGlobalDecl,
   compileCommandsDecl,
 } from './bot.js';
+import {
+  compileDbGet,
+  compileDbSet,
+  compileDbQuery,
+  compileDbInsert,
+  compileDbUpdate,
+} from './db.js';
 
 /** Register every aiogram 3 visual block type → Python compiler. */
 export function registerAllBlockCompilers() {
@@ -75,6 +85,8 @@ export function registerAllBlockCompilers() {
     ['callback', compileCallbackEvent],
     ['else', compileElseEvent],
     ['remember', compileRemember],
+    ['set_variable', compileSetVariable],
+    ['get_variable', compileGetVariable],
     ['get', compileGet],
     ['save', compileSave],
     ['set_global', compileSetGlobal],
@@ -83,6 +95,8 @@ export function registerAllBlockCompilers() {
     ['goto', compileGoto],
     ['stop', compileStop],
     ['loop', compileLoop],
+    ['foreach', compileForeach],
+    ['require_role', compileRequireRole],
     ['delay', compileDelay],
     ['pause', compileDelay],
     ['typing', compileTyping],
@@ -104,6 +118,11 @@ export function registerAllBlockCompilers() {
     ['send_file', compileSendFile],
     ['photo_var', compilePhotoVar],
     ['document_var', compileDocumentVar],
+    ['db.get', compileDbGet],
+    ['db.set', compileDbSet],
+    ['db.query', compileDbQuery],
+    ['db.insert', compileDbInsert],
+    ['db.update', compileDbUpdate],
   ];
   for (const [type, fn] of pairs) registerCompiler(type, fn);
 }

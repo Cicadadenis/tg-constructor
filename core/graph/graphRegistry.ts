@@ -18,6 +18,21 @@ export const GRAPH_NODE_REGISTRY = {
     color: "#ec4899",
     category: "state",
   },
+
+  "fsm.state": {
+    color: "#ec4899",
+    category: "state",
+  },
+
+  "fsm.input": {
+    color: "#f472b6",
+    category: "state",
+  },
+
+  "fsm.transition": {
+    color: "#db2777",
+    category: "state",
+  },
 };
 
 const graphs = new Map<string, unknown>();

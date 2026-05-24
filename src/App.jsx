@@ -936,6 +936,7 @@ import {
   resolveFlowInsertAnchorId,
   graphUniqueBlockLabel,
 } from './app/graph/graphHelpers.js';
+import { UnknownBlockTypeError } from './constructor/graph_document/graph_node_payload.js';
 import { isPlaceholderBotToken } from '../core/botTokenPlaceholders.mjs';
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────
@@ -1645,12 +1646,16 @@ export default function App() {
     showToast(
       options.skeletonFallback
         ? 'Запущена базовая версия сценария (без сложной логики).'
+        : options.templateMode
+        ? `Шаблон «${options.templateLabel || 'бот'}» добавлен на холст.`
         : options.recoveryMode
         ? 'Сценарий оптимизирован для стабильного выполнения.'
         : options.partial
         ? 'Частичный сценарий добавлен на холст. Проверьте диагностику перед запуском.'
         : `✨ AI сгенерировал схему бота!${options.aiConfidenceLabel ? ` AI confidence: ${options.aiConfidenceLabel}` : ''}`,
-      options.partial || options.skeletonFallback || options.recoveryMode ? 'info' : 'success',
+      options.partial || options.skeletonFallback || options.recoveryMode
+        ? 'info'
+        : 'success',
     );
   }, [currentUser, graph, showToast, focusCanvasAfterContent]);
 
@@ -1702,7 +1707,12 @@ export default function App() {
         throw new Error(data.error || `AI generation failed: ${data.reason || 'NO_DIAGNOSTIC_CONTEXT'}`);
       }
       if (data.error) throw new Error(data.error);
-      applyAiGeneratedStacks(data.stacks, { aiConfidenceLabel: data.aiConfidenceLabel });
+      const templateMode = data.executionMode === 'SEMANTIC_TEMPLATE' || Boolean(data.meta?.deterministicTemplate);
+      applyAiGeneratedStacks(data.stacks, {
+        aiConfidenceLabel: data.aiConfidenceLabel,
+        templateMode,
+        templateLabel: data.meta?.semanticTemplate === 'calculator' ? 'Калькулятор' : data.meta?.semanticTemplate,
+      });
     } catch (e) {
       setAiError(e.message || 'Что-то пошло не так');
     } finally {
@@ -1714,15 +1724,8 @@ export default function App() {
     if (!selectedBlockId) return null;
     const node = graph.getGraphDocument().nodes[selectedBlockId];
     if (!node) return null;
-    const data = node.data || {};
-    const type = node.type === 'cicada' || node.type === 'unknown'
-      ? String(data.type || data.blockType || 'message')
-      : node.type;
-    const props = data.props && typeof data.props === 'object'
-      ? { ...data.props }
-      : { ...data };
-    if (props.type) delete props.type;
-    if (props.blockType) delete props.blockType;
+    const type = graphResolveNodeType(node);
+    const props = { ...(node.data || {}) };
     const doc = graph.getGraphDocument();
     const directActions = ['buttons', 'inline', 'keyboard', 'media'].filter(
       (kind) => {
@@ -1779,12 +1782,7 @@ export default function App() {
     const node = doc.nodes[nodeId];
     if (!node) return;
     const resolvedType = graphResolveNodeType(node);
-    const data = node.data || {};
-    const props = data.props && typeof data.props === 'object'
-      ? { ...data.props }
-      : { ...data };
-    if (props.type) delete props.type;
-    if (props.blockType) delete props.blockType;
+    const props = { ...(node.data || {}) };
     setBlockInfo({ type: resolvedType, props, nodeId });
     if (isMobileView) setMobileTab('props');
   }, [graph, isMobileView]);
@@ -2463,6 +2461,7 @@ export default function App() {
   ]);
 
   const addBlockFromContext = useCallback((type) => {
+    try {
     const position = getCanvasCenterPosition();
     const props = graphMakePropsForNewBlock(graph, type, currentUser);
     const anchorId = blockInfo?.nodeId || selectedBlockId;
@@ -2508,12 +2507,20 @@ export default function App() {
     setSelectedBlockId(nodeId);
     focusMobileAddedBlock(nodeId);
     setBlockInfo(null);
+    } catch (err) {
+      const msg = err instanceof UnknownBlockTypeError
+        ? (uiLang === 'en' ? `Unknown block type: ${err.type || type}` : `Неизвестный тип блока: ${err.type || type}`)
+        : (err?.message || 'Не удалось добавить блок');
+      showToast(msg, 'info');
+      setBlockInfo(null);
+    }
   }, [
     focusMobileAddedBlock,
     getCanvasCenterPosition,
     currentUser,
     showToast,
     graph,
+    uiLang,
     selectedBlockId,
     blockInfo?.nodeId,
     insertNodeAfter,
@@ -5084,15 +5091,19 @@ export default function App() {
           position: 'fixed', inset: 0, zIndex: 9999,
           background: 'rgba(0,0,0,0.85)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 'max(12px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) max(12px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px))',
+          boxSizing: 'border-box',
           backdropFilter: 'blur(4px)',
         }} onClick={() => !aiLoading && setShowAIModal(false)}>
           <div style={{
             width: '90%', maxWidth: 520,
+            maxHeight: 'min(90dvh, calc(100% - 24px))',
             background: 'var(--bg2)', borderRadius: 16,
             border: '1px solid rgba(251,191,36,0.25)',
             boxShadow: '0 0 60px rgba(251,191,36,0.08), 0 24px 60px rgba(0,0,0,0.7)',
             display: 'flex', flexDirection: 'column',
             overflow: 'hidden',
+            minHeight: 0,
           }} onClick={e => e.stopPropagation()}>
 
             {/* Header */}
@@ -5100,6 +5111,7 @@ export default function App() {
               padding: '18px 20px', borderBottom: '1px solid rgba(255,255,255,0.07)',
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               background: 'linear-gradient(135deg, rgba(251,191,36,0.06) 0%, transparent 100%)',
+              flexShrink: 0,
             }}>
               <div>
                 <div style={{ fontSize: 16, fontWeight: 700, color: '#fbbf24', fontFamily: 'Syne, system-ui', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -5116,8 +5128,18 @@ export default function App() {
               >×</button>
             </div>
 
-            {/* Body */}
-            <div style={{ padding: '20px' }}>
+            {/* Body — scrollable when diagnostics / long errors overflow viewport */}
+            <div
+              style={{
+                padding: '20px',
+                flex: 1,
+                minHeight: 0,
+                overflowY: 'auto',
+                overflowX: 'hidden',
+                WebkitOverflowScrolling: 'touch',
+                overscrollBehavior: 'contain',
+              }}
+            >
               {/* Примеры подсказки */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12, alignItems: 'center' }}>
                 {[
@@ -5215,13 +5237,17 @@ export default function App() {
                       <div style={{ fontSize: 13, color: '#fbbf24', fontWeight: 800 }}>
                         {aiPartialResult.skeletonFallback
                           ? 'Аварийный сценарий готов'
-                          : aiPartialResult.recoveryMode
+                          : aiPartialResult.templateMode
+                            ? 'Готовый шаблон собран'
+                            : aiPartialResult.recoveryMode
                             ? 'Сценарий оптимизирован для стабильного выполнения'
                             : 'Сценарий сгенерирован частично'}
                       </div>
                       <div style={{ marginTop: 3, fontSize: 11, color: 'var(--text3)', lineHeight: 1.45 }}>
                         {aiPartialResult.skeletonFallback
                           ? 'Упрощённая схема без сложной логики — можно применить и доработать вручную.'
+                          : aiPartialResult.templateMode
+                            ? 'Использован проверенный шаблон — можно сразу применить на холст и доработать.'
                           : aiPartialResult.recoveryMode
                             ? 'Первая попытка AI не собрала полную схему; применена упрощённая рабочая версия.'
                           : aiPartialResult.canRunPartial
@@ -5332,6 +5358,10 @@ export default function App() {
                       onClick={() => applyAiGeneratedStacks(aiPartialResult.raw.stacks, {
                         partial: true,
                         skeletonFallback: aiPartialResult.skeletonFallback,
+                        templateMode: aiPartialResult.templateMode,
+                        templateLabel: aiPartialResult.raw?.meta?.semanticTemplate === 'calculator'
+                          ? 'Калькулятор'
+                          : aiPartialResult.raw?.meta?.semanticTemplate,
                         recoveryMode: aiPartialResult.recoveryMode,
                       })}
                       style={{
@@ -5347,7 +5377,7 @@ export default function App() {
                     >
                       {aiPartialResult.skeletonFallback
                         ? 'Применить аварийный сценарий'
-                        : aiPartialResult.recoveryMode
+                        : aiPartialResult.templateMode || aiPartialResult.recoveryMode
                           ? 'Применить на холст'
                           : 'Применить частично'}
                     </button>
@@ -5424,7 +5454,7 @@ export default function App() {
             </div>
 
             {/* Footer */}
-            <div style={{ padding: '0 20px 20px', display: 'flex', gap: 10 }}>
+            <div style={{ padding: '0 20px 20px', display: 'flex', gap: 10, flexShrink: 0 }}>
               <button
                 onClick={() => setShowAIModal(false)}
                 disabled={aiLoading}

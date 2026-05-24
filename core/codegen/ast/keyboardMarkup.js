@@ -11,6 +11,7 @@ import {
 } from '../keyboards.js';
 import { normalizeCallbackData } from '../callbackDataNormalize.js';
 import { pyIndent, pyQuote } from '../utils.js';
+import { emitForeachInlineKeyboard } from '../foreachCodegen.js';
 
 /** @param {object} ctx */
 export function getAnswerTarget(ctx) {
@@ -49,6 +50,9 @@ function emitKeyboardAssignment(kb, ctx) {
     trackInlineCallbackData(kb, ctx);
     const rows = parseInlineRows(kb.props?.buttons || '');
     return emitInlineKeyboard(rows, varName);
+  }
+  if (kb.type === 'foreach') {
+    return emitForeachInlineKeyboard(kb.props || {}, varName);
   }
   if (kb.type === 'inline_db') {
     const p = kb.props || {};

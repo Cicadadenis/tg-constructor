@@ -6,6 +6,7 @@
  */
 
 import { validateFlow } from '../graph/flowValidate.js';
+import { resolveFlowNodeType, resolveFlowNodeProps } from '../ir/resolveFlowNodeType.js';
 
 /**
  * @param {{ nodes?: unknown[], edges?: unknown[] }} flow
@@ -21,24 +22,24 @@ export function semanticValidateFlow(flow) {
   const nodes = flow?.nodes || [];
   for (const n of nodes) {
     const id = typeof n?.id === 'string' ? n.id : undefined;
-    const data = /** @type {{ type?: string, props?: Record<string, unknown> }} */ (n?.data || {});
-    const t = data.type || /** @type {{ type?: string }} */ (n)?.type;
+    const t = resolveFlowNodeType(n);
+    const props = resolveFlowNodeProps(n);
 
     if (t === 'poll') {
-      const q = String(data.props?.question || '').trim();
-      const opt = String(data.props?.options || '').trim();
+      const q = String(props.question || '').trim();
+      const opt = String(props.options || '').trim();
       if (!q) errors.push({ type: 'SemanticError', message: 'Опрос: пустой вопрос', nodeId: id });
       if (!opt) errors.push({ type: 'SemanticError', message: 'Опрос: нет вариантов ответа', nodeId: id });
     }
 
     if (t === 'random') {
-      const v = String(data.props?.variants || '').trim();
+      const v = String(props.variants || '').trim();
       if (!v) errors.push({ type: 'SemanticError', message: 'Рандом: нет вариантов', nodeId: id });
     }
 
     if (t === 'message') {
-      const text = String(data.props?.text || '').trim();
-      if (!text && !data.props?.media) {
+      const text = String(props.text || '').trim();
+      if (!text && !props.media) {
         errors.push({ type: 'SemanticError', message: 'Ответ: пустой текст', nodeId: id });
       }
     }

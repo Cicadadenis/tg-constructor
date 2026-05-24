@@ -3,6 +3,7 @@
  */
 
 import { MissingCompilerError } from './errors.js';
+import { compileBlockViaCapability } from './capabilityPythonRegistry.js';
 
 /** @type {Map<string, (block: object, ctx: object) => string>} */
 const compilers = new Map();
@@ -39,7 +40,13 @@ export function getCompilerRegistrySnapshot() {
  * @param {object} context
  */
 export function compileBlock(block, context = {}) {
-  const type = block?.type || 'message';
+  const type = String(block?.type ?? '').trim();
+  if (!type) {
+    throw new MissingCompilerError('(missing)', block?.id ?? block?.props?.nodeId);
+  }
+  if (context?.emitHandlerDecorator) {
+    return compileBlockViaCapability(block, context);
+  }
   const fn = getCompiler(type);
   if (!fn) {
     throw new MissingCompilerError(type, block?.id ?? block?.props?.nodeId);

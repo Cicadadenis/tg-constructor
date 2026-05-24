@@ -12,6 +12,7 @@ import {
   canConnect,
   validateConnection,
   getOperationContract,
+  hasOperationContract,
   validateNodeProps,
   PORT_KINDS,
 } from './operation_registry.js';
@@ -301,7 +302,7 @@ export function validateNodeCompatibility(document) {
     const contract = getOperationContract(type);
     const flowPort = FLOW_PORTS[type];
 
-    if (contract.type === 'unknown') {
+    if (!hasOperationContract(type)) {
       issues.push({
         code: 'unknown_node_type',
         severity: 'error',

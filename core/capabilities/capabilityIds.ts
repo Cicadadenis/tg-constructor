@@ -1,0 +1,73 @@
+/**
+ * Canonical capability identifiers (actions + transport triggers).
+ * Compilers and runtime dispatch by capability id — never by node.type switch.
+ */
+
+export const CAPABILITY_ACTIONS = Object.freeze({
+  NOOP: "noop",
+  ROUTE: "route",
+  SEND_MESSAGE: "send_message",
+  SEND_MEDIA: "send_media",
+  SEND_PHOTO: "send_photo",
+  SEND_VIDEO: "send_video",
+  SEND_AUDIO: "send_audio",
+  SEND_DOCUMENT: "send_document",
+  SEND_STICKER: "send_sticker",
+  SEND_CONTACT: "send_contact",
+  SEND_LOCATION: "send_location",
+  SEND_POLL: "send_poll",
+  ATTACH_INLINE_KEYBOARD: "attach_inline_keyboard",
+  ATTACH_REPLY_KEYBOARD: "attach_reply_keyboard",
+  BRANCH: "branch",
+  BRANCH_FALLBACK: "branch_fallback",
+  PROMPT: "prompt",
+  STORE_INPUT: "store_input",
+  STORE_SESSION: "store_session",
+  CTX_SET_VAR: "ctx_set_var",
+  CTX_GET_VAR: "ctx_get_var",
+  LOAD_STORAGE: "load_storage",
+  SAVE_STORAGE: "save_storage",
+  JUMP: "jump",
+  LOOP: "loop",
+  FOREACH: "foreach",
+  INLINE_FROM_LIST: "inline_from_list",
+  SLEEP: "sleep",
+  CHAT_ACTION: "chat_action",
+  HALT: "halt",
+  LOG: "log",
+  SET_GLOBAL: "set_global",
+  FSM_STATE: "fsm_state",
+  FSM_INPUT: "fsm_input",
+  FSM_TRANSITION: "fsm_transition",
+  DB_READ: "db_read",
+  DB_WRITE: "db_write",
+  DB_QUERY: "db_query",
+  DB_INSERT: "db_insert",
+  DB_UPDATE: "db_update",
+  REQUIRE_ROLE: "require_role",
+  DECLARE_VERSION: "declare_version",
+  DECLARE_BOT: "declare_bot",
+  DECLARE_COMMANDS: "declare_commands",
+  DECLARE_GLOBAL: "declare_global",
+} as const);
+
+export const CAPABILITY_TRIGGERS = Object.freeze({
+  TELEGRAM_COMMAND_START: "telegram.command.start",
+  TELEGRAM_COMMAND: "telegram.command",
+  TELEGRAM_CALLBACK_QUERY: "telegram.callback_query",
+  TELEGRAM_MESSAGE_TEXT: "telegram.message.text",
+  TELEGRAM_MESSAGE_PHOTO: "telegram.message.photo",
+  TELEGRAM_MESSAGE_VOICE: "telegram.message.voice",
+  TELEGRAM_MESSAGE_DOCUMENT: "telegram.message.document",
+  TELEGRAM_MESSAGE_STICKER: "telegram.message.sticker",
+  TELEGRAM_MESSAGE_LOCATION: "telegram.message.location",
+  TELEGRAM_MESSAGE_CONTACT: "telegram.message.contact",
+} as const);
+
+export type CapabilityActionId =
+  (typeof CAPABILITY_ACTIONS)[keyof typeof CAPABILITY_ACTIONS];
+
+export type CapabilityTriggerId =
+  (typeof CAPABILITY_TRIGGERS)[keyof typeof CAPABILITY_TRIGGERS];
+
+export type CapabilityId = CapabilityActionId | CapabilityTriggerId | string;

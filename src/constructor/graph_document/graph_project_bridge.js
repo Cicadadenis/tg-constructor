@@ -4,25 +4,35 @@
  */
 
 import { createGraphDocument } from './graph_document.js';
+import {
+  resolveCanonicalNodeType,
+  stripTypeFieldsFromData,
+} from './graph_node_payload.js';
 
-/** React Flow / legacy nodes may use type «cicada» with block type in data. */
+/** Canonical type from GraphDocument node (node.type). */
 export function resolveCanvasBlockType(node) {
-  const raw = String(node?.type || '').trim();
-  const data = node?.data && typeof node.data === 'object' ? node.data : {};
-  if (raw && raw !== 'cicada' && raw !== 'unknown') return raw;
-  return String(data.type || data.blockType || raw || 'message').trim() || 'message';
+  return resolveCanonicalNodeType(node);
 }
 
+const DATA_TYPE_MIRROR_KEYS = new Set(['type', 'blockType', 'canvasBlockType', 'props']);
+
+/**
+ * Props payload for project bridge — merges nested `data.props` with other data fields
+ * (e.g. semanticId) without re-introducing type mirrors.
+ */
 export function resolveCanvasBlockProps(node) {
-  const data = node?.data && typeof node.data === 'object' ? { ...node.data } : {};
-  if (data.props && typeof data.props === 'object' && !Array.isArray(data.props)) {
-    return { ...data.props };
+  const data = node?.data && typeof node.data === 'object' ? node.data : {};
+  const props = stripTypeFieldsFromData(
+    data.props && typeof data.props === 'object' && !Array.isArray(data.props)
+      ? data.props
+      : data,
+  );
+  const extras = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (DATA_TYPE_MIRROR_KEYS.has(key)) continue;
+    extras[key] = value;
   }
-  const copy = { ...data };
-  delete copy.type;
-  delete copy.blockType;
-  delete copy.props;
-  return copy;
+  return { ...extras, ...props };
 }
 
 export function projectGraphToGraphDocument(projectGraph) {

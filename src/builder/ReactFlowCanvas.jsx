@@ -13,6 +13,7 @@
  */
 
 import { useCallback, useEffect, useRef } from 'react';
+import { mergeProjectionEdges, mergeProjectionNodes } from './projectionSync.js';
 import {
   ReactFlow,
   Background,
@@ -122,6 +123,16 @@ function applyEdgeDefaults(edges, document, highlight = {}) {
 /**
  * Inner canvas — must be inside a ReactFlowProvider to access useReactFlow.
  */
+function logCanvasLifecycle(scope, err) {
+  try {
+    if (typeof globalThis !== 'undefined' && globalThis.__CICADA_DEBUG_CANVAS__ === true) {
+      console.debug('[ReactFlowCanvas]', scope, err ?? '');
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 function GraphFlowInner({
   graph,
   projection,
@@ -165,8 +176,8 @@ function GraphFlowInner({
         if (!wasZero) return;
         try {
           fitView({ padding: 0.2, duration: 200, maxZoom: 1.2 });
-        } catch {
-          /* flow not ready */
+        } catch (err) {
+          logCanvasLifecycle('fitView:resize', err);
         }
       });
     };
@@ -190,28 +201,19 @@ function GraphFlowInner({
     lastRevRef.current = syncKey;
 
     const pulseIds = new Set(repairHighlightNodeIds || []);
-    setNodes(
-      projection.nodes.map((n) => ({
-        ...n,
-        selected: n.id === selectedBlockId,
-        style: pulseIds.has(n.id)
-          ? {
-            ...(n.style || {}),
-            boxShadow: '0 0 0 2px rgba(62,207,142,0.85), 0 0 24px rgba(62,207,142,0.45)',
-            borderRadius: 12,
-          }
-          : n.style,
-        data: {
-          ...n.data,
-          previewEpoch: rev,
-          repairPulse: pulseIds.has(n.id),
-        },
-      })),
-    );
     const doc = graph.getGraphDocument();
-    setEdges(applyEdgeDefaults(projection.edges, doc, {
+    const nextEdges = applyEdgeDefaults(projection.edges, doc, {
       repairedEdgeIds: repairHighlightEdgeIds,
-    }));
+    });
+
+    setNodes((current) => mergeProjectionNodes(
+      current,
+      projection.nodes,
+      selectedBlockId,
+      pulseIds,
+      rev,
+    ));
+    setEdges((current) => mergeProjectionEdges(current, nextEdges));
 
     const vp = projection.viewport;
     const last = lastViewportRef.current;
@@ -223,12 +225,13 @@ function GraphFlowInner({
 
     if (viewportChanged) {
       setViewport(vp, { duration: 300 });
+      lastViewportRef.current = { x: vp.x, y: vp.y, zoom: vp.zoom };
     } else if (nodeCount > 0 && lastNodeCountRef.current === 0) {
       requestAnimationFrame(() => {
         try {
           fitView({ padding: 0.2, duration: 200, maxZoom: 1.2 });
-        } catch {
-          /* ignore if flow not mounted */
+        } catch (err) {
+          logCanvasLifecycle('fitView:initial', err);
         }
       });
     }

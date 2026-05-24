@@ -53,11 +53,11 @@ export const ROLE_MEDIA = Object.freeze(new Set([
 ]));
 
 export const ROLE_FSM = Object.freeze(new Set([
-  'ask', 'remember', 'get', 'save', 'save_global', 'set_global', 'goto', 'stop',
+  'ask', 'remember', 'set_variable', 'get_variable', 'get', 'save', 'save_global', 'set_global', 'goto', 'stop',
 ]));
 
 export const ROLE_CONTROL = Object.freeze(new Set([
-  'condition', 'condition_not', 'else', 'loop', 'delay', 'typing',
+  'condition', 'condition_not', 'else', 'loop', 'foreach', 'require_role', 'delay', 'typing',
 ]));
 
 export const ROLE_OBSERVABILITY = Object.freeze(new Set(['log', 'analytics']));
@@ -69,7 +69,7 @@ export const ROLE_DATA = Object.freeze(new Set([
 ]));
 
 export const ROLE_SECURITY = Object.freeze(new Set([
-  'check_sub', 'member_role', 'role',
+  'check_sub', 'member_role', 'role', 'require_role',
 ]));
 
 /** Blocks that may follow output/media (keyboard bind, state, observability). */
@@ -77,7 +77,7 @@ export const ROLE_AFTER_OUTPUT = Object.freeze(new Set([
   ...ROLE_KEYBOARD,
   ...ROLE_OBSERVABILITY,
   ...ROLE_FSM,
-  'remember', 'save', 'get', 'set_global',
+  'remember', 'set_variable', 'get_variable', 'save', 'get', 'set_global',
   'delay', 'typing', 'stop', 'goto',
 ]));
 

@@ -101,6 +101,13 @@ import {
   buildIntentPlanPromptContext,
   intentPlanner,
 } from './core/ai/intentPlanner.mjs';
+import {
+  SEMANTIC_TEMPLATE_APPLIED_REASON,
+  canRecoverWithSemanticTemplate,
+  filterTemplateRecoveryDiagnostics,
+  semanticTemplateReadyMessage,
+  shouldUseDeterministicSemanticTemplate,
+} from './core/ai/deterministicSemanticTemplate.mjs';
 import { repairIntentSatisfaction } from './core/ai/intentSatisfactionValidator.mjs';
 import {
   AI_RECOVERY_INVALID_INPUT,
@@ -6670,6 +6677,7 @@ const AI_EXECUTION_MODE = Object.freeze({
   AI_RECOVERY: 'AI_RECOVERY',
   AI_PARTIAL: 'AI_PARTIAL',
   FALLBACK_SKELETON: 'FALLBACK_SKELETON',
+  SEMANTIC_TEMPLATE: 'SEMANTIC_TEMPLATE',
 });
 const AI_RETRY_BUDGET = Object.freeze({
   [AI_EXECUTION_MODE.AI_PRIMARY]: 2,
@@ -6826,8 +6834,11 @@ function deriveAiRepairReasonCodes(repairActions = []) {
 }
 
 function deriveAiReasonCodes({ reason, diagnostics = [], repairActions = [], meta = {} }) {
-  const codes = new Set(deriveAiRepairReasonCodes(repairActions));
   const normalizedReason = String(reason || '');
+  if (normalizedReason === SEMANTIC_TEMPLATE_APPLIED_REASON || meta?.deterministicTemplate) {
+    return [SEMANTIC_TEMPLATE_APPLIED_REASON];
+  }
+  const codes = new Set(deriveAiRepairReasonCodes(repairActions));
   if (normalizedReason === 'IR_REPAIR_FAILED') {
     codes.add(AI_PARTIAL_REASON_CODES.IR_REPAIR_LIMIT_REACHED);
   }
@@ -6965,7 +6976,12 @@ function buildAiDiagnosticSections({ canonicalIr, classification, warnings, repa
     diagnostic.path ? `${diagnostic.path}: ${diagnostic.message}` : diagnostic.message,
     diagnostic.severity || 'error',
   ));
-  if (whatFailed.length === 0 && reason && !isSkeletonFallback) {
+  if (
+    whatFailed.length === 0 &&
+    reason &&
+    !isSkeletonFallback &&
+    reason !== SEMANTIC_TEMPLATE_APPLIED_REASON
+  ) {
     whatFailed.push(aiSectionItem(
       reason,
       'Генерация не завершена',
@@ -7045,6 +7061,9 @@ function inferAiRootCause({ rootCause, reason, meta = {} }) {
   ) {
     return AI_ROOT_CAUSE.IR_REPAIR_FAILURE;
   }
+  if (normalizedReason === SEMANTIC_TEMPLATE_APPLIED_REASON || meta?.deterministicTemplate) {
+    return null;
+  }
   if (
     normalizedReason === IR_FALLBACK_REASON ||
     meta?.fallbackKind === AI_IR_STATE.SKELETON ||
@@ -7080,7 +7099,7 @@ function aiConfidenceLabel(score) {
 }
 
 function aiConfidenceLabelForExecutionMode(mode) {
-  if (mode === AI_EXECUTION_MODE.AI_PRIMARY) return 'HIGH';
+  if (mode === AI_EXECUTION_MODE.AI_PRIMARY || mode === AI_EXECUTION_MODE.SEMANTIC_TEMPLATE) return 'HIGH';
   if (mode === AI_EXECUTION_MODE.FALLBACK_SKELETON) return 'LOW';
   return 'MEDIUM';
 }
@@ -7161,7 +7180,9 @@ function statusForExecutionMode(mode, requestedStatus) {
   if (requestedStatus === AI_GENERATE_STATUS.FAILED && mode !== AI_EXECUTION_MODE.FALLBACK_SKELETON) {
     return AI_GENERATE_STATUS.FAILED;
   }
-  if (mode === AI_EXECUTION_MODE.AI_PRIMARY) return AI_GENERATE_STATUS.SUCCESS;
+  if (mode === AI_EXECUTION_MODE.AI_PRIMARY || mode === AI_EXECUTION_MODE.SEMANTIC_TEMPLATE) {
+    return AI_GENERATE_STATUS.SUCCESS;
+  }
   if (mode === AI_EXECUTION_MODE.FALLBACK_SKELETON) return AI_GENERATE_STATUS.FALLBACK_SKELETON;
   return AI_GENERATE_STATUS.PARTIAL_SUCCESS;
 }
@@ -7593,7 +7614,10 @@ function buildAiGenerationResult({
     aiConfidence: responseDecisionScore.inputs.aiConfidence,
     aiConfidenceLabel: responseConfidenceLabel,
     rootCause: responseRootCause,
-    isDegraded: responseExecutionMode !== AI_EXECUTION_MODE.AI_PRIMARY,
+    isDegraded: (
+      responseExecutionMode !== AI_EXECUTION_MODE.AI_PRIMARY &&
+      responseExecutionMode !== AI_EXECUTION_MODE.SEMANTIC_TEMPLATE
+    ),
     isAIGenerated: responseExecutionMode !== AI_EXECUTION_MODE.FALLBACK_SKELETON,
     warnings,
     diagnostics: warnings,
@@ -7621,7 +7645,10 @@ function buildAiGenerationResult({
       aiConfidence: responseDecisionScore.inputs.aiConfidence,
       aiConfidenceLabel: responseConfidenceLabel,
       rootCause: responseRootCause,
-      isDegraded: responseExecutionMode !== AI_EXECUTION_MODE.AI_PRIMARY,
+      isDegraded: (
+        responseExecutionMode !== AI_EXECUTION_MODE.AI_PRIMARY &&
+        responseExecutionMode !== AI_EXECUTION_MODE.SEMANTIC_TEMPLATE
+      ),
       isAIGenerated: !isFallbackSkeleton,
     },
     ...(responseStacks ? { stacks: responseStacks } : {}),
@@ -8054,6 +8081,79 @@ async function tryAiRecoveryGeneration({
   }
 }
 
+function buildDeterministicSemanticTemplateResponse({
+  intentPlan,
+  prompt,
+  astMode,
+  allowedMemoryKeys,
+  responseMeta,
+  meta = {},
+  extraMeta = {},
+  sourceDiagnostics = [],
+  sourceRepairActions = [],
+  isRecovery = false,
+}) {
+  const budgetedTemplateIr = applyIntentBudgetToIr(
+    buildSemanticTemplateIr(intentPlan, { prompt }),
+    intentPlan,
+  ).ir;
+  const templateResolution = resolveFeatureDependencies(budgetedTemplateIr, {
+    intentPlan,
+    astMode,
+    allowedMemoryKeys,
+  });
+  const templateIr = templateResolution.ir;
+  const templateStacks = canonicalIrToEditorStacks(templateIr);
+  const templateId = intentPlan.knownCapabilityTemplate;
+  const filteredSourceDiagnostics = filterTemplateRecoveryDiagnostics(sourceDiagnostics);
+  const diagnostics = [
+    ...filteredSourceDiagnostics,
+    ...filterTemplateRecoveryDiagnostics(templateResolution.diagnostics),
+    {
+      code: 'SEMANTIC_TEMPLATE_READY',
+      severity: 'info',
+      message: semanticTemplateReadyMessage(templateId, { recovery: isRecovery }),
+    },
+  ].slice(0, AI_PARTIAL_DIAGNOSTIC_LIMIT);
+  const repairActions = [
+    ...aiArray(sourceRepairActions).filter((action) => (
+      !/PRUNER:|no source IR artifact/i.test(String(action || ''))
+    )),
+    ...templateResolution.repairActions.map((action) => `FDR: ${action}`),
+    `Шаблон: ${templateId}`,
+  ].slice(0, AI_PARTIAL_DIAGNOSTIC_LIMIT);
+  return buildAiGenerationResult({
+    status: AI_GENERATE_STATUS.SUCCESS,
+    reason: SEMANTIC_TEMPLATE_APPLIED_REASON,
+    canonicalIr: templateIr,
+    diagnostics,
+    repairActions,
+    meta: responseMeta({
+      ...(meta || {}),
+      ...extraMeta,
+      deterministicTemplate: true,
+      intentTemplateRecovery: true,
+      semanticTemplate: templateId,
+      aiSkipped: !isRecovery,
+      ...(isRecovery
+        ? { aiRecoveryAttempted: true, aiRecoverySucceeded: true }
+        : {}),
+      executionMode: AI_EXECUTION_MODE.SEMANTIC_TEMPLATE,
+    }),
+    final: true,
+    safeToRun: true,
+    stacks: templateStacks,
+    executionMode: AI_EXECUTION_MODE.SEMANTIC_TEMPLATE,
+    rootCause: null,
+    executionDecisionScore: buildExecutionDecisionScore({
+      canonicalIr: templateIr,
+      diagnostics,
+      repairActions,
+      meta: { aiConfidence: 0.95 },
+    }),
+  });
+}
+
 async function buildAiRecoveryOrFallbackResponse({
   errorCode,
   canonicalIr,
@@ -8070,58 +8170,41 @@ async function buildAiRecoveryOrFallbackResponse({
   intentPlan,
 }) {
   const recoveryIntentPlan = intentPlan || intentPlanner(prompt || '');
-  const canInjectSemanticTemplate = recoveryIntentPlan?.knownCapabilityTemplate === SEMANTIC_TEMPLATE_IDS.CALCULATOR;
-  const buildSemanticTemplateRecoveryResponse = (fallbackFrom, sourceDiagnostics = [], sourceRepairActions = [], extraMeta = {}) => {
-    const budgetedTemplateIr = applyIntentBudgetToIr(
-      buildSemanticTemplateIr(recoveryIntentPlan, { prompt }),
-      recoveryIntentPlan,
-    ).ir;
-    const templateResolution = resolveFeatureDependencies(budgetedTemplateIr, {
+  if (canRecoverWithSemanticTemplate(recoveryIntentPlan)) {
+    return buildDeterministicSemanticTemplateResponse({
       intentPlan: recoveryIntentPlan,
+      prompt,
       astMode,
       allowedMemoryKeys,
+      responseMeta,
+      meta,
+      sourceDiagnostics: diagnostics,
+      sourceRepairActions: repairActions,
+      isRecovery: true,
+      extraMeta: {
+        aiRecoverySkippedReason: errorCode || null,
+        recoveryInputSource: sourceStage,
+      },
     });
-    const templateIr = templateResolution.ir;
-    const templateStacks = canonicalIrToEditorStacks(templateIr);
-    return buildAiGenerationResult({
-      status: AI_GENERATE_STATUS.PARTIAL_SUCCESS,
-      reason: fallbackFrom,
-      canonicalIr: templateIr,
-      diagnostics: [
-        ...aiArray(sourceDiagnostics),
-        ...templateResolution.diagnostics,
-        {
-          code: 'INTENT_NOT_SATISFIED',
-          severity: 'warning',
-          message: 'Original IR could not satisfy calculator intent; deterministic calculator template was injected.',
-        },
-        {
-          code: 'MISSING_REQUIRED_CAPABILITY',
-          severity: 'warning',
-          message: 'Calculator intent requires arithmetic evaluation capability; generic text fallback is blocked.',
-        },
-      ].slice(0, AI_PARTIAL_DIAGNOSTIC_LIMIT),
-      repairActions: [
-        ...aiArray(sourceRepairActions),
-        ...templateResolution.repairActions.map((action) => `FDR: ${action}`),
-        'ISV: injected calculator semantic template during recovery',
-        'ISV: blocked generic text fallback for calculator intent',
-      ].slice(0, AI_PARTIAL_DIAGNOSTIC_LIMIT),
-      meta: responseMeta({
-        ...(meta || {}),
-        ...extraMeta,
-        aiRecoveryAttempted: true,
-        aiRecoverySucceeded: true,
-        intentTemplateRecovery: true,
-        semanticTemplate: recoveryIntentPlan.knownCapabilityTemplate,
-        executionMode: AI_EXECUTION_MODE.AI_RECOVERY,
-      }),
-      final: true,
-      safeToRun: true,
-      stacks: templateStacks,
-      executionMode: AI_EXECUTION_MODE.AI_RECOVERY,
-    });
-  };
+  }
+  const canInjectSemanticTemplate = canRecoverWithSemanticTemplate(recoveryIntentPlan);
+  const buildSemanticTemplateRecoveryResponse = (
+    _fallbackFrom,
+    sourceDiagnostics = [],
+    sourceRepairActions = [],
+    extraMeta = {},
+  ) => buildDeterministicSemanticTemplateResponse({
+    intentPlan: recoveryIntentPlan,
+    prompt,
+    astMode,
+    allowedMemoryKeys,
+    responseMeta,
+    meta,
+    extraMeta,
+    sourceDiagnostics,
+    sourceRepairActions,
+    isRecovery: true,
+  });
   const hasPartialRecoveryArtifact = Boolean(recoverySourceArtifact?.partial && recoverySourceArtifact?.ir);
   const sourceIrForRecovery = recoverySourceArtifact?.ir || canonicalIr;
   const prunedHandoff = buildIrPrunedArtifact({
@@ -8442,17 +8525,28 @@ app.post('/api/ai-generate', requireUserAuth, aiGenerateRateLimit, async (req, r
       [AI_EXECUTION_MODE.AI_RECOVERY]: AI_RECOVERY_TIMEOUT_MS,
       [AI_EXECUTION_MODE.AI_PARTIAL]: AI_PARTIAL_TIMEOUT_MS,
       [AI_EXECUTION_MODE.FALLBACK_SKELETON]: 0,
+      [AI_EXECUTION_MODE.SEMANTIC_TEMPLATE]: 0,
     },
     intentPlan: {
       botType: intentPlan.botType,
       requiredFeatures: intentPlan.requiredFeatures,
       complexityScore: intentPlan.complexityScore,
       budget: intentPlan.budget,
+      knownCapabilityTemplate: intentPlan.knownCapabilityTemplate,
     },
     minimalExecutionGraph: intentPlan.minimalExecutionGraph,
     ...(lastAiConfidence != null ? { aiConfidence: lastAiConfidence } : {}),
     ...extra,
   });
+  if (shouldUseDeterministicSemanticTemplate(intentPlan)) {
+    return res.json(buildDeterministicSemanticTemplateResponse({
+      intentPlan,
+      prompt: promptText,
+      astMode,
+      allowedMemoryKeys,
+      responseMeta,
+    }));
+  }
   const persistLatestPrimaryPartialIrArtifact = (artifact) => {
     if (!artifact?.ir || artifact.source !== AI_EXECUTION_MODE.AI_PRIMARY) return;
     latestPrimaryPartialIrArtifact = artifact;
@@ -8904,6 +8998,7 @@ app.post('/api/ai-generate', requireUserAuth, aiGenerateRateLimit, async (req, r
         errorCode: `AI_${kind}`,
         canonicalIr: lastValidIrSnapshot || lastIrSnapshot,
         prompt: prompt.trim(),
+        intentPlan,
         diagnostics: [{
           code: `AI_${kind}`,
           message:

@@ -4,6 +4,11 @@
 import { FLOW_PORTS } from './flowPorts.js';
 import { validateProjectIr } from '../ir/validateProjectIr.js';
 import { validateAiogram3Graph } from '../rules/aiogram3RuleEngine.js';
+import {
+  resolveFlowNodeType,
+  resolveFlowNodeProps,
+  resolveFlowNodeLabel,
+} from '../ir/resolveFlowNodeType.js';
 
 function portFor(blockType, dir) {
   const cfg = FLOW_PORTS[blockType] || { input: 'flow', output: 'flow' };
@@ -24,9 +29,9 @@ export function validateFlow(flow) {
   const nodes = flow?.nodes || [];
   const edges = flow?.edges || [];
   const idset = new Set(nodes.map((n) => n.id));
-  const blockType = (n) => n?.data?.type || n?.type;
-  const blockProps = (n) => n?.data?.props || n.props || {};
-  const blockLabel = (n) => n?.data?.label || n?.label || blockType(n);
+  const blockType = (n) => resolveFlowNodeType(n);
+  const blockProps = (n) => resolveFlowNodeProps(n);
+  const blockLabel = (n) => resolveFlowNodeLabel(n);
 
   for (const e of edges) {
     if (!idset.has(e.source) || !idset.has(e.target)) {

@@ -1,21 +1,8 @@
-export const NODE_CAPABILITIES = {
-  command: {
-    outputs: ["next"],
-    inputs: [],
-  },
-
-  message: {
-    outputs: ["next"],
-    inputs: ["input"],
-  },
-
-  callback: {
-    outputs: ["next"],
-    inputs: ["input"],
-  },
-
-  fsm: {
-    outputs: ["success", "fail"],
-    inputs: ["input"],
-  },
-};
+/**
+ * @deprecated Use `getBlockCapabilities` from `core/registry/blockCapabilities.js`.
+ * Kept for backward-compatible imports only.
+ */
+export {
+  getBlockCapabilities as getNodeCapabilitiesLegacy,
+  blockCapabilitiesByType as NODE_CAPABILITIES,
+} from "../registry/blockCapabilities.js";

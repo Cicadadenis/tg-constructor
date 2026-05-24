@@ -14,13 +14,11 @@ export function useGraphEditor(options = {}) {
   if (!storeRef.current) {
     storeRef.current = createGraphEditorStore(options.seed);
   }
-  const [revision, setRevision] = useState(0);
+
+  const [, setRevision] = useState(0);
   const refresh = useCallback(() => setRevision((n) => n + 1), []);
 
   const store = storeRef.current;
-
-  const getGraphDocument = useCallback(() => store.getGraphDocument(), [revision]);
-  const getCanvasProjection = useCallback(() => store.getCanvasProjection(), [revision]);
 
   const dispatch = useCallback(
     (operationOrType, payload, meta) => {
@@ -61,27 +59,34 @@ export function useGraphEditor(options = {}) {
     [store, refresh],
   );
 
-  // Stable object identity — App effects must not re-run on every graph revision.
+  const actionsRef = useRef({
+    dispatch,
+    undo,
+    redo,
+    setViewport,
+    resetGraphDocument,
+  });
+  actionsRef.current = {
+    dispatch,
+    undo,
+    redo,
+    setViewport,
+    resetGraphDocument,
+  };
+
   const apiRef = useRef(null);
   if (!apiRef.current) {
     apiRef.current = {
-      getGraphDocument,
-      getCanvasProjection,
-      dispatch,
-      undo,
-      redo,
-      setViewport,
-      resetGraphDocument,
+      getGraphDocument: () => storeRef.current.getGraphDocument(),
+      getCanvasProjection: () => storeRef.current.getCanvasProjection(),
+      dispatch: (...args) => actionsRef.current.dispatch(...args),
+      undo: () => actionsRef.current.undo(),
+      redo: () => actionsRef.current.redo(),
+      setViewport: (...args) => actionsRef.current.setViewport(...args),
+      resetGraphDocument: (...args) => actionsRef.current.resetGraphDocument(...args),
     };
-  } else {
-    apiRef.current.getGraphDocument = getGraphDocument;
-    apiRef.current.getCanvasProjection = getCanvasProjection;
-    apiRef.current.dispatch = dispatch;
-    apiRef.current.undo = undo;
-    apiRef.current.redo = redo;
-    apiRef.current.setViewport = setViewport;
-    apiRef.current.resetGraphDocument = resetGraphDocument;
   }
+
   return apiRef.current;
 }
 

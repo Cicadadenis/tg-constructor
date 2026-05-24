@@ -6,6 +6,7 @@ import { hasIncomingFlowEdge } from '../../builder/blockLayout.js';
 import { getCicadaNodeLayout } from '../../builder/graph_canvas_metrics.js';
 import { projectionNodesSignature } from './projection_signature.js';
 import { getBlockDef, getPaletteBlockTypes } from '../../constructor/block_catalog.js';
+import { graphResolveNodeType } from './graph_node_payload.js';
 import { createGraphDocument } from './graph_document.js';
 import { createOperation } from './graph_operations.js';
 import { countKeyboardButtons, findKeyboardNodeForOwner } from './graph_keyboard_nodes.js';
@@ -17,15 +18,16 @@ export function projectGraphDocumentToCanvas(document) {
   const doc = createGraphDocument(document);
   const nodes = Object.freeze(
     Object.values(doc.nodes).map((node) => {
-        const def = getBlockDef(node.type, getPaletteBlockTypes());
+        const resolvedType = graphResolveNodeType(node);
+        const def = getBlockDef(resolvedType, getPaletteBlockTypes());
         const isChainRoot = !hasIncomingFlowEdge(doc, node.id);
         const kbNode = findKeyboardNodeForOwner(doc, node.id);
         const keyboardButtonCount = kbNode ? countKeyboardButtons(kbNode.data) : 0;
-        const isKb = node.type === 'inline_keyboard' || node.type === 'reply_keyboard';
+        const isKb = resolvedType === 'inline_keyboard' || resolvedType === 'reply_keyboard';
         const kbExtraH = isKb && keyboardButtonCount > 2
           ? Math.max(0, Math.ceil(keyboardButtonCount / 2) - 1) * 14
           : 0;
-        const layout = getCicadaNodeLayout(node.type, isChainRoot, true, kbExtraH);
+        const layout = getCicadaNodeLayout(resolvedType, isChainRoot, true, kbExtraH);
         return {
           id: node.id,
           type: 'cicada',
@@ -37,14 +39,15 @@ export function projectGraphDocumentToCanvas(document) {
           focusable: true,
           dragHandle: '.cicada-node-hit',
           data: {
-            type: node.type,
+            /** Projection-only; mirrors GraphDocument.node.type — never persisted in node.data */
+            canvasBlockType: resolvedType,
             props: { ...node.data },
             meta: {
               ...node.meta,
               keyboardButtonCount,
               keyboardNodeId: kbNode?.id || null,
             },
-            label: def?.label || node.type,
+            label: def?.label || resolvedType,
             isChainRoot,
             graphDocumentNodeId: node.id,
           },

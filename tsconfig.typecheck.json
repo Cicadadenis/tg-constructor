@@ -15,6 +15,7 @@
     "src/**/*.jsx",
     "src/**/*.mjs",
     "core/**/*.js",
+    "core/**/*.ts",
     "core/**/*.mjs",
     "services/**/*.js",
     "services/**/*.mjs",

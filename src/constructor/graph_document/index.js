@@ -9,6 +9,26 @@ export {
 } from './graph_schema.js';
 
 export {
+  UnknownBlockTypeError,
+  assertRegisteredBlockType,
+  assertNodeTypeInRegistry,
+  coerceLegacyBlockType,
+  stripTypeFieldsFromData,
+  attachDeprecatedTypeCache,
+  graphResolveNodeType,
+  resolveCanonicalNodeType,
+  buildGraphNodeData,
+  normalizeGraphNodePayload,
+  blockToNodePayload,
+  buildGraphDocumentNodeRow,
+  resolveStackBlockType,
+  logBlockInsertion,
+  isBlockInsertionDebugEnabled,
+  DEPRECATED_DATA_TYPE_KEY,
+  DEPRECATED_DATA_BLOCK_TYPE_KEY,
+} from './graph_node_payload.js';
+
+export {
   createGraphDocument,
   cloneGraphDocument,
   isGraphDocument,
@@ -98,6 +118,13 @@ export {
   VALIDATION_STAGES,
 } from './graph_validation_pipeline.js';
 export {
+  validateGraph as validateGraphStrict,
+  validateBotIR,
+  validateCompile,
+  assertCompileReady,
+  StrictValidationError,
+} from '../../../core/validation/index.ts';
+export {
   repairDanglingEdges,
   listDanglingEdges,
   graphHasDanglingEdges,
@@ -179,6 +206,7 @@ export {
   replayBootstrapOperations,
 } from './graph_migration.js';
 export { importGraphFragment, importComposedGraph } from './graph_fragment_import.js';
+export { importPythonBot, importPythonBotIntoGraph } from './import_python_bot.js';
 export {
   beginNodeEdit,
   beginKeyboardInsertion,

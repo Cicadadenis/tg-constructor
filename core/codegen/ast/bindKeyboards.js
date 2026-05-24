@@ -6,6 +6,7 @@ import { normalizeUiAttachments } from '../../capabilityEngine.js';
 import { keyboardCodegenAlias, isGraphKeyboardNode } from '../../keyboard_topology.js';
 import { keyboardDataToCodegenProps } from '../../keyboard_codegen.js';
 import { ROLE_KEYBOARD, ROLE_OUTPUT_BIND_TARGET } from '../../rules/aiogram3BlockRoles.js';
+import { isForeachKeyboardOutput } from '../foreachCodegen.js';
 
 function uiAttachmentItemsToKeyboardProps(kind, items) {
   if (kind === 'buttons') {
@@ -110,7 +111,14 @@ export function applyKeyboardBinding(stacks) {
       const kb = blocks[i];
       const kbType = String(kb?.type || '').trim();
       const roleType = isGraphKeyboardNode(kbType) ? keyboardCodegenAlias(kbType) : kbType;
-      if (!ROLE_KEYBOARD.has(kbType) && !ROLE_KEYBOARD.has(roleType)) continue;
+      const isForeachKb = kbType === 'foreach' && isForeachKeyboardOutput(kb?.props);
+      if (
+        !isForeachKb
+        && !ROLE_KEYBOARD.has(kbType)
+        && !ROLE_KEYBOARD.has(roleType)
+      ) {
+        continue;
+      }
 
       const targetIdx = findBindTargetIndex(blocks, i);
       if (targetIdx < 0) {
@@ -142,7 +150,7 @@ export function applyKeyboardBinding(stacks) {
         : (kb.props || {});
       target.boundKeyboard = {
         id: kb.id,
-        type: roleType,
+        type: isForeachKb ? 'foreach' : roleType,
         props: { ...codegenProps },
       };
       remove.add(i);

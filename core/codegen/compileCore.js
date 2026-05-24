@@ -16,6 +16,7 @@ import {
 } from './constants.js';
 import { ROLE_FSM } from '../rules/aiogram3BlockRoles.js';
 import { compileBlock, getCompiler, BLOCK_TO_PYTHON_COMPILER } from './registry.js';
+import { compileBlockViaCapability } from './capabilityPythonRegistry.js';
 import { isStacksEmptyForCodegen } from './emptyGraph.js';
 import { bindStacksForCodegen } from './ast/bindKeyboards.js';
 import { boundKeyboardParts, getAnswerTarget } from './ast/keyboardMarkup.js';
@@ -28,6 +29,36 @@ import {
   emitInlineKeyboard,
 } from './keyboards.js';
 import { callbackKeysMatch, normalizeCallbackData } from './callbackDataNormalize.js';
+import { buildFsmGraphFromStacks, emitFsmPythonFromGraph } from './fsmCodegen.js';
+import {
+  stackHasVisualDb,
+  emitSqliteDbRuntime,
+  emitVisualDbManifest,
+} from '../db/dbCodegen.js';
+import { compileForeachBlock, isForeachKeyboardOutput } from './foreachCodegen.js';
+import {
+  emitRuntimeContextRuntime,
+  emitRuntimeContextDefaults,
+  emitHandlerContextPreamble,
+  emitCtxLocalAliases,
+} from './runtimeContextCodegen.js';
+import {
+  compileSetVariable,
+  compileGetVariable,
+  compileRememberCtx,
+  compileGetCtx,
+  compileSaveCtx,
+  compileSetGlobalCtx,
+  compileSaveGlobalCtx,
+} from './variableCompilers.js';
+import {
+  emitPermissionMiddlewareRuntime,
+  emitPermissionMiddlewareRegistration,
+  emitCtxRoleFromMiddleware,
+  compileRequireRole,
+  stackHasRequireRole,
+  collectRequireRoleIssues,
+} from './permissionCodegen.js';
 
 export { parseButtonRows, parseInlineRows, emitReplyKeyboard, emitInlineKeyboard } from './keyboards.js';
 
@@ -338,73 +369,22 @@ export function compileDeleteKey(block, ctx) {
   const key = block?.props?.key ?? block?.payload?.key ?? '';
   const storage = ctx.storage ?? 'fsm_pop';
   const ind = pyIndent(ctx.indent);
-  if (storage === 'fsm_update_data') {
-    return `${ind}await state.update_data(${escapePyKey(key)}=None)`;
-  }
   const k = pyQuote(String(key).trim());
   return [
-    `${ind}data = await state.get_data()`,
-    `${ind}data.pop(${k}, None)`,
-    `${ind}await state.set_data(data)`,
+    `${ind}_st = ctx["state"]`,
+    `${ind}if _st is not None:`,
+    `${ind}    _data = await _st.get_data()`,
+    `${ind}    _data.pop(${k}, None)`,
+    `${ind}    await _st.set_data(_data)`,
+    `${ind}ctx["vars"].pop(${k}, None)`,
   ].join('\n');
 }
 
 export function compileEventDecorator(type, props = {}, ctx = {}) {
-  switch (type) {
-    case 'on_voice':
-    case 'voice_received':
-      return '@router.message(F.voice)';
-    case 'on_sticker':
-    case 'sticker_received':
-      return '@router.message(F.sticker)';
-    case 'on_text':
-      return '@router.message(StateFilter(None), F.text)';
-    case 'on_photo':
-    case 'photo_received':
-      return '@router.message(F.photo)';
-    case 'on_document':
-    case 'document_received':
-      return '@router.message(F.document)';
-    case 'on_location':
-    case 'location_received':
-      return '@router.message(F.location)';
-    case 'on_contact':
-    case 'contact_received':
-      return '@router.message(F.contact)';
-    case 'start':
-      return '@router.message(CommandStart())';
-    case 'command': {
-      const cmd = String(props.cmd || 'start').replace(/^\//, '');
-      return `@router.message(Command(${pyQuote(cmd)}))`;
-    }
-    case 'callback': {
-      const data = normalizeCallbackData(props.data || props.callbackData || '');
-      const prefix = normalizeCallbackData(props.dataPrefix || props.callbackPrefix || '');
-      const label = normalizeCallbackData(props.label || '');
-      const inlineCallbacks = ctx.inlineCallbackData;
-      if (data) {
-        return `@router.callback_query(F.data == ${pyQuote(data)})`;
-      }
-      if (prefix) {
-        return `@router.callback_query(F.data.startswith(${pyQuote(prefix)}))`;
-      }
-      if (label && inlineCallbacks?.size) {
-        for (const cb of inlineCallbacks) {
-          if (callbackKeysMatch(cb, label)) {
-            return `@router.callback_query(F.data == ${pyQuote(cb)})`;
-          }
-        }
-      }
-      if (label) {
-        return `@router.message(F.text == ${pyQuote(label)})`;
-      }
-      return '@router.callback_query()';
-    }
-    case 'else':
-      return '@router.message()';
-    default:
-      return '@router.message()';
-  }
+  return compileBlockViaCapability(
+    { type, props, payload: props },
+    { ...ctx, emitHandlerDecorator: true },
+  );
 }
 
 export function compileVoiceEvent(block, ctx) {
@@ -442,42 +422,27 @@ export function compileElseEvent(block, ctx) {
 }
 
 export function compileRemember(block, ctx) {
-  const varname = escapePyKey(block?.props?.varname || 'var');
-  const value = dslRhsToPython(block?.props?.value);
-  return `${pyIndent(ctx.indent)}${varname} = ${value}`;
+  return compileRememberCtx(block, ctx);
 }
 
 export function compileGet(block, ctx) {
-  const key = block?.props?.key || '';
-  const varname = escapePyKey(block?.props?.varname || 'var');
-  const ind = pyIndent(ctx.indent);
-  const k = pyQuote(String(key).trim());
-  return [
-    `${ind}data = await state.get_data()`,
-    `${ind}${varname} = data.get(${k})`,
-  ].join('\n');
+  return compileGetCtx(block, ctx);
 }
 
 export function compileSave(block, ctx) {
-  const key = block?.props?.key || '';
-  const value = dslRhsToPython(block?.props?.value);
-  const ind = pyIndent(ctx.indent);
-  const k = escapePyKey(String(key).trim());
-  return `${ind}await state.update_data(${k}=${value})`;
+  return compileSaveCtx(block, ctx);
 }
 
 export function compileSaveGlobal(block, ctx) {
-  const key = block?.props?.key || '';
-  const value = dslRhsToPython(block?.props?.value);
-  const ind = pyIndent(ctx.indent);
-  return `${ind}GLOBAL_STORE[${pyQuote(String(key).trim())}] = ${value}`;
+  return compileSaveGlobalCtx(block, ctx);
 }
 
 export function compileSetGlobal(block, ctx) {
-  const varname = escapePyKey(block?.props?.varname || 'var');
-  const value = dslRhsToPython(block?.props?.value);
-  return `${pyIndent(ctx.indent)}${varname} = ${value}`;
+  return compileSetGlobalCtx(block, ctx);
 }
+
+export { compileSetVariable, compileGetVariable } from './variableCompilers.js';
+export { compileRequireRole } from './permissionCodegen.js';
 
 export function compileAsk(block, ctx) {
   const question = dslTextToPythonFString(block?.props?.question || '');
@@ -552,6 +517,12 @@ export function compileStop(block, ctx) {
   }
   return `${ind}return`;
 }
+
+export function compileForeach(block, ctx) {
+  return compileForeachBlock(block, ctx);
+}
+
+export { isForeachKeyboardOutput } from './foreachCodegen.js';
 
 export function compileLoop(block, ctx) {
   const p = block?.props || {};
@@ -768,8 +739,10 @@ export function compileAllKeys(block, ctx) {
   const vn = escapePyKey(block?.props?.varname || 'keys');
   const ind = pyIndent(ctx.indent);
   return [
-    `${ind}data = await state.get_data()`,
-    `${ind}${vn} = list(data.keys())`,
+    `${ind}_st = ctx["state"]`,
+    `${ind}_data = await _st.get_data() if _st is not None else {}`,
+    `${ind}${vn} = list(_data.keys())`,
+    `${ind}ctx_set_var(ctx, ${pyQuote(vn)}, ${vn})`,
   ].join('\n');
 }
 export function compileCallBlock(block, ctx) {
@@ -805,7 +778,9 @@ export function compileNodeToPython(node, context = {}) {
   if (stmt) lines.push(stmt);
 
   const childIndent =
-    isConditionLikeType(type) || type === 'else' || type === 'loop' ? ctx.indent + 1 : ctx.indent;
+    isConditionLikeType(type) || type === 'else' || type === 'loop' || type === 'foreach'
+      ? ctx.indent + 1
+      : ctx.indent;
 
   for (const child of node?.children || []) {
     lines.push(compileNodeToPython(child, { ...ctx, indent: childIndent }));
@@ -817,7 +792,12 @@ function compileStatementBlock(block, ctx) {
   if (isEventHandlerType(block.type) || block.type === 'else') {
     return compileHandlerFromRoot(block, [], { ...ctx, indent: ctx.indent });
   }
-  if (isConditionLikeType(block.type) || block.type === 'else' || block.type === 'loop') {
+  if (
+    isConditionLikeType(block.type)
+    || block.type === 'else'
+    || block.type === 'loop'
+    || block.type === 'foreach'
+  ) {
     return compileControlBlock(block, ctx);
   }
   return transpileBlockToPython(block, ctx);
@@ -878,10 +858,20 @@ function compileHandlerTree(rootBlock, bodyBlocks, ctx) {
   lines.push(`${pyIndent(indent)}async def ${handlerName}(${params}):`);
 
   const bodyIndent = indent + 1;
+  lines.push(emitHandlerContextPreamble(isCallback, bodyIndent));
+  if (ctx?.needsPermissionMiddleware) {
+    lines.push(emitCtxRoleFromMiddleware(bodyIndent));
+  }
+  const defaultVarNames = ctx?.ctxDefaultVarNames || [];
+  if (defaultVarNames.length) {
+    lines.push(emitCtxLocalAliases(defaultVarNames, bodyIndent));
+  }
+
   const bodyCtx = {
     ...ctx,
     indent: bodyIndent,
     inCallbackHandler: isCallback,
+    hasRuntimeCtx: true,
   };
 
   const { events, bodies, parentTail } = distributeEventChainBodies(bodyBlocks);
@@ -903,7 +893,12 @@ function compileHandlerTree(rootBlock, bodyBlocks, ctx) {
 
   for (let si = 0; si < statements.length; si += 1) {
     const block = statements[si];
-    if (isConditionLikeType(block.type) || block.type === 'else' || block.type === 'loop') {
+    if (
+      isConditionLikeType(block.type)
+      || block.type === 'else'
+      || block.type === 'loop'
+      || block.type === 'foreach'
+    ) {
       lines.push(compileConditionSequence(statements, si, bodyCtx));
       break;
     }
@@ -928,7 +923,12 @@ function compileConditionSequence(allBlocks, startIndex, ctx) {
   while (i < allBlocks.length) {
     const b = allBlocks[i];
     if (i > startIndex && (isEventHandlerType(b.type) || isRootChunkType(b.type))) break;
-    if (isConditionLikeType(b.type) || b.type === 'else' || b.type === 'loop') {
+    if (
+      isConditionLikeType(b.type)
+      || b.type === 'else'
+      || b.type === 'loop'
+      || b.type === 'foreach'
+    ) {
       lines.push(transpileBlockToPython(b, ctx));
       i += 1;
       const branchCtx = { ...ctx, indent: ctx.indent + 1 };
@@ -937,6 +937,7 @@ function compileConditionSequence(allBlocks, startIndex, ctx) {
         !isConditionLikeType(allBlocks[i].type) &&
         allBlocks[i].type !== 'else' &&
         allBlocks[i].type !== 'loop' &&
+        allBlocks[i].type !== 'foreach' &&
         !isEventHandlerType(allBlocks[i].type)
       ) {
         lines.push(compileStatement(allBlocks[i], branchCtx));
@@ -960,7 +961,7 @@ function compileStackBody(blocks, ctx) {
     const lines = [];
     const bodyCtx = { ...ctx };
     for (const b of blocks) {
-      if (isConditionLikeType(b.type) || b.type === 'loop') {
+      if (isConditionLikeType(b.type) || b.type === 'loop' || b.type === 'foreach') {
         lines.push(compileConditionSequence(blocks, blocks.indexOf(b), bodyCtx));
         break;
       }
@@ -1013,11 +1014,14 @@ function collectModuleMeta(stacks) {
     version: '1.0',
     botToken: 'YOUR_BOT_TOKEN',
     globals: [],
+    ctxDefaults: {},
     commands: [],
-    fsmStates: new Map(),
+    fsmGraph: null,
     blockFuncs: [],
     needsAiohttp: false,
     needsDb: false,
+    needsSqlite: false,
+    needsPermissionMiddleware: false,
   };
 
   for (const stack of stacks || []) {
@@ -1026,12 +1030,6 @@ function collectModuleMeta(stacks) {
     const root = blocks[0];
     if (root.type === 'version') meta.version = root.props?.version || meta.version;
     if (root.type === 'bot') meta.botToken = String(root.props?.token || meta.botToken).trim() || meta.botToken;
-    if (root.type === 'global' || root.type === 'set_global') {
-      meta.globals.push({
-        name: root.props?.varname || 'var',
-        value: dslRhsToPython(root.props?.value),
-      });
-    }
     if (root.type === 'commands') {
       meta.commands.push(...parseCommandLines(root.props?.commands));
     }
@@ -1039,56 +1037,18 @@ function collectModuleMeta(stacks) {
       meta.blockFuncs.push(compileBlockDefinition(root, blocks.slice(1), { indent: 0 }));
     }
     for (const b of blocks) {
-      if (b.type === 'ask') {
-        const field = toPyIdent(b.props?.varname || 'field');
-        if (!meta.fsmStates.has('Form')) meta.fsmStates.set('Form', new Set());
-        meta.fsmStates.get('Form').add(field);
+      if (b.type === 'global' || b.type === 'set_global') {
+        const name = String(b.props?.varname || 'var').trim();
+        meta.ctxDefaults[name] = dslRhsToPython(b.props?.value);
+        meta.globals.push({ name, value: meta.ctxDefaults[name] });
       }
       if (b.type === 'http') meta.needsAiohttp = true;
       if (b.type === 'inline_db') meta.needsDb = true;
-      if (b.type === 'scenario') {
-        const sc = toPascalCase(b.props?.name || 'Scenario');
-        if (!meta.fsmStates.has(sc)) meta.fsmStates.set(sc, new Set());
-      }
-      if (b.type === 'step') {
-        const sc = toPascalCase(b.props?.scenario || 'Scenario');
-        if (!meta.fsmStates.has(sc)) meta.fsmStates.set(sc, new Set());
-        meta.fsmStates.get(sc).add(toPyIdent(b.props?.name || 'step'));
-      }
-      // FIX: Track goto targets to automatically create FSM states
-      if (b.type === 'goto' || b.type === 'run') {
-        const target = b?.props?.target ?? b?.props?.label ?? b?.props?.name ?? b?.props?.scenario ?? 'main';
-        const parts = String(target).split(/[./]/).filter(Boolean);
-        const scenario = parts[0] || 'Scenario';
-        const step = parts[1] || parts[0] || 'step';
-        const sc = toPascalCase(scenario);
-        if (!meta.fsmStates.has(sc)) meta.fsmStates.set(sc, new Set());
-        if (parts.length > 1) {
-          meta.fsmStates.get(sc).add(toPyIdent(step));
-        } else {
-          // Single-part target like 'main' becomes a state in Scenario
-          const defaultScenario = toPascalCase('Scenario');
-          if (!meta.fsmStates.has(defaultScenario)) meta.fsmStates.set(defaultScenario, new Set());
-          meta.fsmStates.get(defaultScenario).add(toPyIdent(target));
-        }
-      }
+      if (b.type === 'require_role') meta.needsPermissionMiddleware = true;
     }
   }
-  return meta;
-}
 
-function emitFsmStates(fsmStates) {
-  const lines = [];
-  for (const [group, fields] of fsmStates.entries()) {
-    // Skip emitting empty State groups — avoid dead / unused FSM classes
-    if (!fields || fields.size === 0) continue;
-    lines.push(`class ${group}(StatesGroup):`);
-    for (const f of fields) {
-      lines.push(`    ${f} = State()`);
-    }
-    lines.push('');
-  }
-  return lines.join('\n');
+  return meta;
 }
 
 function emitSetCommands(commands) {
@@ -1157,6 +1117,17 @@ export function buildPythonModule(stacks, options = {}) {
     });
   }
   stacks = bind.stacks;
+  const meta = collectModuleMeta(stacks);
+
+  const permissionIssues = collectRequireRoleIssues(stacks);
+  if (permissionIssues.length) {
+    const first = permissionIssues[0];
+    throw new CodegenError(first.message, {
+      code: first.code || 'INVALID_REQUIRE_ROLE',
+      nodeId: first.nodeId,
+      blockType: 'require_role',
+    });
+  }
 
   assertCallbackResolution(stacks, options.flow || null);
 
@@ -1190,7 +1161,25 @@ export function buildPythonModule(stacks, options = {}) {
     const pb = HANDLER_EMIT_ORDER[tb] ?? (isEventHandlerType(tb) ? 20 : 100);
     return pa - pb;
   });
-  const meta = collectModuleMeta(stacks);
+  for (const stack of stacks) {
+    for (const b of stack?.blocks || []) {
+      if (b.type === 'http') meta.needsAiohttp = true;
+      if (b.type === 'inline_db') meta.needsDb = true;
+    }
+  }
+  meta.needsSqlite = stackHasVisualDb(stacks);
+  meta.needsPermissionMiddleware = meta.needsPermissionMiddleware || stackHasRequireRole(stacks);
+  meta.fsmGraph = buildFsmGraphFromStacks(stacks);
+  meta.fsmStates = new Map();
+  for (const state of meta.fsmGraph.states || []) {
+    if (!meta.fsmStates.has(state.group)) meta.fsmStates.set(state.group, new Set());
+    meta.fsmStates.get(state.group).add(state.name);
+  }
+  for (const input of meta.fsmGraph.inputs || []) {
+    if (!meta.fsmStates.has(input.group)) meta.fsmStates.set(input.group, new Set());
+    meta.fsmStates.get(input.group).add(input.field);
+  }
+
   const handlerBodies = [];
 
   const imports = [
@@ -1212,21 +1201,29 @@ export function buildPythonModule(stacks, options = {}) {
     ')',
   ];
   if (meta.needsAiohttp) imports.splice(4, 0, 'import aiohttp');
-  if (meta.needsDb) imports.push('', '# project DB adapter', 'db = {}  # replace with real db.get()');
+  if (meta.needsDb && !meta.needsSqlite) {
+    imports.push('', '# project DB adapter', 'db = {}  # replace with real db.get()');
+  }
 
   const parts = [
     imports.join('\n'),
     '',
-    `GLOBAL_STORE: dict = {}`,
+    emitRuntimeContextDefaults(meta.ctxDefaults),
+    emitRuntimeContextRuntime(),
     '',
   ];
 
-  for (const g of meta.globals) {
-    parts.push(`${escapePyKey(g.name)} = ${g.value}`);
+  if (meta.needsSqlite) {
+    parts.push(emitSqliteDbRuntime());
+    parts.push('');
   }
-  if (meta.globals.length) parts.push('');
 
-  const fsmCode = emitFsmStates(meta.fsmStates);
+  if (meta.needsPermissionMiddleware) {
+    parts.push(emitPermissionMiddlewareRuntime());
+    parts.push('');
+  }
+
+  const fsmCode = emitFsmPythonFromGraph(meta.fsmGraph);
   if (fsmCode.trim()) {
     // ensure State/StatesGroup import present when FSM states are emitted
     const stateImport = 'from aiogram.fsm.state import State, StatesGroup';
@@ -1251,6 +1248,11 @@ export function buildPythonModule(stacks, options = {}) {
   parts.push('router = Router()');
   parts.push('');
 
+  if (meta.needsPermissionMiddleware) {
+    parts.push(emitPermissionMiddlewareRegistration());
+    parts.push('');
+  }
+
   const setCmd = emitSetCommands(meta.commands);
   if (setCmd) parts.push(setCmd);
 
@@ -1270,6 +1272,8 @@ export function buildPythonModule(stacks, options = {}) {
         indent: 0,
         handlerNames,
         fsmStates: meta.fsmStates,
+        ctxDefaultVarNames: Object.keys(meta.ctxDefaults || {}),
+        needsPermissionMiddleware: meta.needsPermissionMiddleware,
         transpileTrace,
       });
       if (h?.trim()) {

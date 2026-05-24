@@ -4,6 +4,11 @@ import {
   isAiogram3PaletteBlockType,
 } from './aiogram3Runtime.js';
 import { sortCatalogByFlowOrder } from './aiogram3PaletteOrder.js';
+import {
+  attachCapabilitiesToDefinition,
+  getBlockCapabilities,
+  hasBlockCapabilities,
+} from './registry/blockCapabilities.js';
 
 const VALID_CATEGORIES = new Set([
   'render',
@@ -20,8 +25,9 @@ const VALID_UI_SCOPES = new Set(['render', 'none']);
 const RENDER_UI_CAPABILITIES = Object.freeze(['buttons', 'inline', 'media']);
 
 function freezeDefinition(definition) {
+  const withCapabilities = attachCapabilitiesToDefinition(definition);
   return Object.freeze({
-    ...definition,
+    ...withCapabilities,
     capabilities: Object.freeze([...(definition.capabilities || [])]),
     constraints: definition.constraints
       ? Object.freeze({
@@ -222,6 +228,12 @@ export const controlBlocks = Object.freeze([
   block('contact_received', 'control', 'Alias for the incoming contact entry point.', {
     constraints: hidden(),
   }),
+  block('require_role', 'control', 'Guard flow by bot role (admin / moderator / user).', {
+    constraints: withDefaults(
+      withFlow(palette('Требуется роль', '🛡', '#dc2626', 'Права', false, true), { maxOutputs: 1 }),
+      { role: 'user', roles: '', message: 'Недостаточно прав' },
+    ),
+  }),
   block('goto', 'control', 'Jump to another handler label.', {
     constraints: withDefaults(
       withFlow(palette('Переход', '→', '#a3a3a3', 'Действия', false, false), { maxOutputs: 0 }),
@@ -232,6 +244,41 @@ export const controlBlocks = Object.freeze([
     constraints: withDefaults(
       withFlow(palette('Цикл', '↻', '#f59e0b', 'Логика', false, true), { maxOutputs: 2, outputLabels: ['body', 'done'] }),
       { mode: 'count', count: '3' },
+    ),
+  }),
+  block('foreach', 'control', 'Iterate a list; item variable in body or inline keyboard from list.', {
+    constraints: withDefaults(
+      withFlow(palette('Для каждого', '∀', '#d97706', 'Логика', false, true), {
+        maxOutputs: 2,
+        outputLabels: ['body', 'done'],
+      }),
+      {
+        list: 'products',
+        var: 'product',
+        output: 'body',
+        labelField: 'name',
+        idField: 'id',
+        callbackPrefix: 'prod:',
+        columns: 2,
+      },
+    ),
+  }),
+  block('fsm.state', 'control', 'FSM state node (graph-based).', {
+    constraints: withDefaults(
+      withFlow(palette('FSM состояние', '◎', '#ec4899', 'FSM', false, true), { maxOutputs: 1 }),
+      { group: 'Form', name: 'step' },
+    ),
+  }),
+  block('fsm.input', 'control', 'FSM input step — prompt and store field.', {
+    constraints: withDefaults(
+      withFlow(palette('FSM ввод', '⌨', '#f472b6', 'FSM', false, true), { maxOutputs: 1 }),
+      { group: 'Form', field: 'field', prompt: 'Введите значение' },
+    ),
+  }),
+  block('fsm.transition', 'control', 'FSM transition between states.', {
+    constraints: withDefaults(
+      withFlow(palette('FSM переход', '⇢', '#db2777', 'FSM', false, true), { maxOutputs: 1 }),
+      { event: '', from: '', to: '' },
     ),
   }),
 ]);
@@ -257,6 +304,18 @@ export const logicBlocks = Object.freeze([
   }),
   block('remember', 'logic', 'Store a temporary session variable.', {
     constraints: palette('Запомнить', '♦', '#94a3b8', 'Логика', false, true),
+  }),
+  block('set_variable', 'logic', 'Set runtime ctx.vars entry.', {
+    constraints: withDefaults(
+      withFlow(palette('Задать переменную', '=', '#8b5cf6', 'Переменные', false, true), { maxOutputs: 1 }),
+      { name: 'var', value: '' },
+    ),
+  }),
+  block('get_variable', 'logic', 'Read runtime ctx.vars entry.', {
+    constraints: withDefaults(
+      withFlow(palette('Получить переменную', '≡', '#7c3aed', 'Переменные', false, true), { maxOutputs: 1 }),
+      { name: 'var', varname: 'var' },
+    ),
   }),
   block('get', 'logic', 'Read a value from persistent storage.', {
     constraints: palette('Получить', '📥', '#0ea5e9', 'Логика', false, true),
@@ -364,6 +423,36 @@ export const telegramBlocks = Object.freeze([]);
 export const dataBlocks = Object.freeze([
   block('set_global', 'data', 'Update a module-level global variable.', {
     constraints: palette('Обновить глобальную', '🌍', '#10b981', 'Данные', false, true),
+  }),
+  block('db.get', 'data', 'Read a value from sqlite kv store.', {
+    constraints: withDefaults(
+      withFlow(palette('DB получить', '📥', '#0891b2', 'База данных', false, true), { maxOutputs: 1 }),
+      { key: 'key', varname: 'value', table: 'kv_store' },
+    ),
+  }),
+  block('db.set', 'data', 'Write a value to sqlite kv store.', {
+    constraints: withDefaults(
+      withFlow(palette('DB записать', '💾', '#0e7490', 'База данных', false, true), { maxOutputs: 1 }),
+      { key: 'key', value: '', table: 'kv_store' },
+    ),
+  }),
+  block('db.query', 'data', 'Run a raw SQL query (sqlite).', {
+    constraints: withDefaults(
+      withFlow(palette('DB запрос', '⌗', '#155e75', 'База данных', false, true), { maxOutputs: 1 }),
+      { sql: 'SELECT 1', varname: 'rows' },
+    ),
+  }),
+  block('db.insert', 'data', 'Insert a row into a table.', {
+    constraints: withDefaults(
+      withFlow(palette('DB вставка', '➕', '#164e63', 'База данных', false, true), { maxOutputs: 1 }),
+      { table: 'records', values: {} },
+    ),
+  }),
+  block('db.update', 'data', 'Update rows in a table.', {
+    constraints: withDefaults(
+      withFlow(palette('DB обновить', '✎', '#083344', 'База данных', false, true), { maxOutputs: 1 }),
+      { table: 'records', where: 'id = ?', values: {} },
+    ),
   }),
 ]);
 
@@ -493,9 +582,13 @@ export const BLOCK_STACK_COMPATIBILITY = freezeCompatibilityMap({
   else: FLOW_CHILDREN,
   ask: ['message', 'remember', 'get', 'save', 'condition', 'condition_not', 'log', 'stop', 'goto'],
   remember: FLOW_NO_MEDIA,
+  set_variable: FLOW_NO_MEDIA,
+  get_variable: FLOW_NO_MEDIA,
   get: FLOW_NO_MEDIA,
   save: FLOW_NO_MEDIA,
   loop: FLOW_CHILDREN,
+  foreach: FLOW_CHILDREN,
+  require_role: FLOW_CHILDREN,
 
   delay: ['message', 'typing', 'condition', 'condition_not', 'ask', 'remember', 'get', 'save', 'log', 'stop', 'goto'],
   typing: ['message', 'photo', 'photo_var', 'video', 'audio', 'document', 'document_var', 'send_file', 'sticker', 'condition', 'condition_not', 'ask', 'delay', 'stop', 'goto'],
@@ -517,6 +610,17 @@ export const BLOCK_STACK_COMPATIBILITY = freezeCompatibilityMap({
   poll: MEDIA_STACK_CHILDREN,
 
   set_global: FLOW_NO_MEDIA,
+
+  'fsm.state': FLOW_CHILDREN,
+  'fsm.input': FLOW_CHILDREN,
+  'fsm.transition': FLOW_CHILDREN,
+  fsm: FLOW_CHILDREN,
+
+  'db.get': FLOW_NO_MEDIA,
+  'db.set': FLOW_NO_MEDIA,
+  'db.query': FLOW_NO_MEDIA,
+  'db.insert': FLOW_NO_MEDIA,
+  'db.update': FLOW_NO_MEDIA,
 });
 
 export function getCompatibleBlockTypes(parentType) {
@@ -529,6 +633,13 @@ export function canStackBlockBelow(parentType, childType) {
 
 export function getBlockDefinition(type) {
   return blockRegistry[String(type || '').trim()] || null;
+}
+
+export { getBlockCapabilities, hasBlockCapabilities } from './registry/blockCapabilities.js';
+
+export function getNodeCapabilities(type) {
+  const def = getBlockDefinition(type);
+  return def?.nodeCapabilities ?? getBlockCapabilities(type);
 }
 
 export function getBlockUiConstraints(type) {

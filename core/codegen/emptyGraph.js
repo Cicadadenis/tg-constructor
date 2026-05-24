@@ -26,6 +26,8 @@ const STATEMENT_TYPES = new Set([
   'inline_db',
   'ask',
   'remember',
+  'set_variable',
+  'get_variable',
   'get',
   'save',
   'save_global',
@@ -34,6 +36,8 @@ const STATEMENT_TYPES = new Set([
   'condition_not',
   'else',
   'loop',
+  'foreach',
+  'require_role',
   'delay',
   'typing',
   'photo',
@@ -137,7 +141,7 @@ export function isStacksEmptyForCodegen(stacks) {
   const nodes = [];
   for (const stack of stacks || []) {
     for (const block of stack?.blocks || []) {
-      nodes.push({ data: { type: block.type, props: block.props || {} } });
+      nodes.push({ type: block.type, data: block.props || {} });
     }
   }
   return isFlowEmptyForCodegen({ nodes, edges: [] });

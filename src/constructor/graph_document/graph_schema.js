@@ -2,6 +2,12 @@
  * GraphDocument schema — canonical constructor graph model (structural only).
  */
 
+import {
+  assertRegisteredBlockType,
+  coerceLegacyBlockType,
+  stripTypeFieldsFromData,
+} from './graph_node_payload.js';
+
 export const GRAPH_DOCUMENT_SCHEMA_VERSION = 2;
 
 /** Runtime editor operations (event-sourced; no snapshot replace). */
@@ -63,28 +69,23 @@ export function normalizeUiState(uiState) {
 export function normalizeGraphDocumentNode(node) {
   if (!node?.id) return null;
   const position = node.position || {};
-  const rawData = asRecord(node.data ?? node.props);
-  const rawType = String(node.type ?? 'unknown');
-  const blockType = (rawType === 'cicada' || rawType === 'unknown')
-    ? String(rawData.type || rawData.blockType || rawType).trim() || 'message'
-    : rawType;
-  let props = rawData;
-  if (rawData.props && typeof rawData.props === 'object' && !Array.isArray(rawData.props)) {
-    props = { ...rawData.props };
-  } else if (rawType === 'cicada' || rawData.type || rawData.blockType) {
-    props = { ...rawData };
-    delete props.type;
-    delete props.blockType;
-    delete props.props;
-  }
+  const nodeId = String(node.id);
+  const blockType = assertRegisteredBlockType(
+    coerceLegacyBlockType({
+      id: nodeId,
+      type: node.type,
+      data: asRecord(node.data ?? node.props),
+    }),
+    { nodeId },
+  );
   return {
-    id: String(node.id),
+    id: nodeId,
     type: blockType,
     position: {
       x: Number.isFinite(Number(position.x)) ? Number(position.x) : 0,
       y: Number.isFinite(Number(position.y)) ? Number(position.y) : 0,
     },
-    data: props,
+    data: stripTypeFieldsFromData(asRecord(node.data ?? node.props)),
     meta: asRecord(node.meta),
   };
 }
@@ -124,13 +125,19 @@ export function normalizeGraphDocumentEdge(edge, nodeIds = null) {
 
 export function normalizeMetadata(metadata) {
   const m = asRecord(metadata);
-  return {
+  const base = {
     name: String(m.name ?? 'untitled'),
     createdAt: m.createdAt ?? null,
     updatedAt: m.updatedAt ?? null,
     revision: Number.isFinite(Number(m.revision)) ? Number(m.revision) : 0,
     tags: Array.isArray(m.tags) ? m.tags.map(String) : [],
   };
+  const reserved = new Set(['name', 'createdAt', 'updatedAt', 'revision', 'tags']);
+  const extra = {};
+  for (const [key, value] of Object.entries(m)) {
+    if (!reserved.has(key)) extra[key] = value;
+  }
+  return { ...base, ...extra };
 }
 
 export function isGraphDocumentShape(value) {

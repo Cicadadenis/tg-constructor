@@ -8,7 +8,7 @@ import { ROOT_CHUNK_TYPES, EVENT_HANDLER_TYPES } from '../constants.js';
 
 function walk(nodes, errors, path = '') {
   for (const node of nodes || []) {
-    const type = node?.type || 'unknown';
+    const type = String(node?.type ?? '').trim();
     const id = node?.id || '?';
     const p = path ? `${path}/${id}:${type}` : `${id}:${type}`;
 
@@ -16,6 +16,10 @@ function walk(nodes, errors, path = '') {
       !ROOT_CHUNK_TYPES.has(type)
       || type === 'block';
 
+    if (!type) {
+      errors.push({ path: p, type: '(missing)', message: 'AST node is missing type' });
+      continue;
+    }
     if (needsCompiler && !getCompiler(type) && !EVENT_HANDLER_TYPES.has(type) && type !== 'else') {
       errors.push({ path: p, type, message: `Missing compiler for block type: ${type}` });
     }

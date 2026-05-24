@@ -1,0 +1,1350 @@
+diff --git a/core/blockRegistry.js b/core/blockRegistry.js
+index e489ede..0e4daaf 100644
+--- a/core/blockRegistry.js
++++ b/core/blockRegistry.js
+@@ -4,6 +4,11 @@ import {
+   isAiogram3PaletteBlockType,
+ } from './aiogram3Runtime.js';
+ import { sortCatalogByFlowOrder } from './aiogram3PaletteOrder.js';
++import {
++  attachCapabilitiesToDefinition,
++  getBlockCapabilities,
++  hasBlockCapabilities,
++} from './registry/blockCapabilities.js';
+ 
+ const VALID_CATEGORIES = new Set([
+   'render',
+@@ -20,8 +25,9 @@ const VALID_UI_SCOPES = new Set(['render', 'none']);
+ const RENDER_UI_CAPABILITIES = Object.freeze(['buttons', 'inline', 'media']);
+ 
+ function freezeDefinition(definition) {
++  const withCapabilities = attachCapabilitiesToDefinition(definition);
+   return Object.freeze({
+-    ...definition,
++    ...withCapabilities,
+     capabilities: Object.freeze([...(definition.capabilities || [])]),
+     constraints: definition.constraints
+       ? Object.freeze({
+@@ -234,6 +240,24 @@ export const controlBlocks = Object.freeze([
+       { mode: 'count', count: '3' },
+     ),
+   }),
++  block('fsm.state', 'control', 'FSM state node (graph-based).', {
++    constraints: withDefaults(
++      withFlow(palette('FSM состояние', '◎', '#ec4899', 'FSM', false, true), { maxOutputs: 1 }),
++      { group: 'Form', name: 'step' },
++    ),
++  }),
++  block('fsm.input', 'control', 'FSM input step — prompt and store field.', {
++    constraints: withDefaults(
++      withFlow(palette('FSM ввод', '⌨', '#f472b6', 'FSM', false, true), { maxOutputs: 1 }),
++      { group: 'Form', field: 'field', prompt: 'Введите значение' },
++    ),
++  }),
++  block('fsm.transition', 'control', 'FSM transition between states.', {
++    constraints: withDefaults(
++      withFlow(palette('FSM переход', '⇢', '#db2777', 'FSM', false, true), { maxOutputs: 1 }),
++      { event: '', from: '', to: '' },
++    ),
++  }),
+ ]);
+ 
+ export const logicBlocks = Object.freeze([
+@@ -365,6 +389,36 @@ export const dataBlocks = Object.freeze([
+   block('set_global', 'data', 'Update a module-level global variable.', {
+     constraints: palette('Обновить глобальную', '🌍', '#10b981', 'Данные', false, true),
+   }),
++  block('db.get', 'data', 'Read a value from sqlite kv store.', {
++    constraints: withDefaults(
++      withFlow(palette('DB получить', '📥', '#0891b2', 'База данных', false, true), { maxOutputs: 1 }),
++      { key: 'key', varname: 'value', table: 'kv_store' },
++    ),
++  }),
++  block('db.set', 'data', 'Write a value to sqlite kv store.', {
++    constraints: withDefaults(
++      withFlow(palette('DB записать', '💾', '#0e7490', 'База данных', false, true), { maxOutputs: 1 }),
++      { key: 'key', value: '', table: 'kv_store' },
++    ),
++  }),
++  block('db.query', 'data', 'Run a raw SQL query (sqlite).', {
++    constraints: withDefaults(
++      withFlow(palette('DB запрос', '⌗', '#155e75', 'База данных', false, true), { maxOutputs: 1 }),
++      { sql: 'SELECT 1', varname: 'rows' },
++    ),
++  }),
++  block('db.insert', 'data', 'Insert a row into a table.', {
++    constraints: withDefaults(
++      withFlow(palette('DB вставка', '➕', '#164e63', 'База данных', false, true), { maxOutputs: 1 }),
++      { table: 'records', values: {} },
++    ),
++  }),
++  block('db.update', 'data', 'Update rows in a table.', {
++    constraints: withDefaults(
++      withFlow(palette('DB обновить', '✎', '#083344', 'База данных', false, true), { maxOutputs: 1 }),
++      { table: 'records', where: 'id = ?', values: {} },
++    ),
++  }),
+ ]);
+ 
+ export const settingsBlocks = Object.freeze([
+@@ -517,6 +571,17 @@ export const BLOCK_STACK_COMPATIBILITY = freezeCompatibilityMap({
+   poll: MEDIA_STACK_CHILDREN,
+ 
+   set_global: FLOW_NO_MEDIA,
++
++  'fsm.state': FLOW_CHILDREN,
++  'fsm.input': FLOW_CHILDREN,
++  'fsm.transition': FLOW_CHILDREN,
++  fsm: FLOW_CHILDREN,
++
++  'db.get': FLOW_NO_MEDIA,
++  'db.set': FLOW_NO_MEDIA,
++  'db.query': FLOW_NO_MEDIA,
++  'db.insert': FLOW_NO_MEDIA,
++  'db.update': FLOW_NO_MEDIA,
+ });
+ 
+ export function getCompatibleBlockTypes(parentType) {
+@@ -531,6 +596,13 @@ export function getBlockDefinition(type) {
+   return blockRegistry[String(type || '').trim()] || null;
+ }
+ 
++export { getBlockCapabilities, hasBlockCapabilities } from './registry/blockCapabilities.js';
++
++export function getNodeCapabilities(type) {
++  const def = getBlockDefinition(type);
++  return def?.nodeCapabilities ?? getBlockCapabilities(type);
++}
++
+ export function getBlockUiConstraints(type) {
+   return getBlockDefinition(type)?.constraints?.ui || null;
+ }
+diff --git a/core/codegen/blockCompilers/db.js b/core/codegen/blockCompilers/db.js
+new file mode 100644
+index 0000000..ba3b858
+--- /dev/null
++++ b/core/codegen/blockCompilers/db.js
+@@ -0,0 +1,7 @@
++export {
++  compileDbGet,
++  compileDbSet,
++  compileDbQuery,
++  compileDbInsert,
++  compileDbUpdate,
++} from '../../db/dbCodegen.js';
+diff --git a/core/codegen/blockCompilers/registerAll.js b/core/codegen/blockCompilers/registerAll.js
+index 9ed1a24..749d7c0 100644
+--- a/core/codegen/blockCompilers/registerAll.js
++++ b/core/codegen/blockCompilers/registerAll.js
+@@ -46,6 +46,13 @@ import {
+   compileGlobalDecl,
+   compileCommandsDecl,
+ } from './bot.js';
++import {
++  compileDbGet,
++  compileDbSet,
++  compileDbQuery,
++  compileDbInsert,
++  compileDbUpdate,
++} from './db.js';
+ 
+ /** Register every aiogram 3 visual block type → Python compiler. */
+ export function registerAllBlockCompilers() {
+@@ -104,6 +111,11 @@ export function registerAllBlockCompilers() {
+     ['send_file', compileSendFile],
+     ['photo_var', compilePhotoVar],
+     ['document_var', compileDocumentVar],
++    ['db.get', compileDbGet],
++    ['db.set', compileDbSet],
++    ['db.query', compileDbQuery],
++    ['db.insert', compileDbInsert],
++    ['db.update', compileDbUpdate],
+   ];
+   for (const [type, fn] of pairs) registerCompiler(type, fn);
+ }
+diff --git a/core/codegen/compileCore.js b/core/codegen/compileCore.js
+index 19f8cba..050e850 100644
+--- a/core/codegen/compileCore.js
++++ b/core/codegen/compileCore.js
+@@ -28,6 +28,12 @@ import {
+   emitInlineKeyboard,
+ } from './keyboards.js';
+ import { callbackKeysMatch, normalizeCallbackData } from './callbackDataNormalize.js';
++import { buildFsmGraphFromStacks, emitFsmPythonFromGraph } from './fsmCodegen.js';
++import {
++  stackHasVisualDb,
++  emitSqliteDbRuntime,
++  emitVisualDbManifest,
++} from '../db/dbCodegen.js';
+ 
+ export { parseButtonRows, parseInlineRows, emitReplyKeyboard, emitInlineKeyboard } from './keyboards.js';
+ 
+@@ -1014,10 +1020,11 @@ function collectModuleMeta(stacks) {
+     botToken: 'YOUR_BOT_TOKEN',
+     globals: [],
+     commands: [],
+-    fsmStates: new Map(),
++    fsmGraph: null,
+     blockFuncs: [],
+     needsAiohttp: false,
+     needsDb: false,
++    needsSqlite: false,
+   };
+ 
+   for (const stack of stacks || []) {
+@@ -1039,56 +1046,26 @@ function collectModuleMeta(stacks) {
+       meta.blockFuncs.push(compileBlockDefinition(root, blocks.slice(1), { indent: 0 }));
+     }
+     for (const b of blocks) {
+-      if (b.type === 'ask') {
+-        const field = toPyIdent(b.props?.varname || 'field');
+-        if (!meta.fsmStates.has('Form')) meta.fsmStates.set('Form', new Set());
+-        meta.fsmStates.get('Form').add(field);
+-      }
+       if (b.type === 'http') meta.needsAiohttp = true;
+       if (b.type === 'inline_db') meta.needsDb = true;
+-      if (b.type === 'scenario') {
+-        const sc = toPascalCase(b.props?.name || 'Scenario');
+-        if (!meta.fsmStates.has(sc)) meta.fsmStates.set(sc, new Set());
+-      }
+-      if (b.type === 'step') {
+-        const sc = toPascalCase(b.props?.scenario || 'Scenario');
+-        if (!meta.fsmStates.has(sc)) meta.fsmStates.set(sc, new Set());
+-        meta.fsmStates.get(sc).add(toPyIdent(b.props?.name || 'step'));
+-      }
+-      // FIX: Track goto targets to automatically create FSM states
+-      if (b.type === 'goto' || b.type === 'run') {
+-        const target = b?.props?.target ?? b?.props?.label ?? b?.props?.name ?? b?.props?.scenario ?? 'main';
+-        const parts = String(target).split(/[./]/).filter(Boolean);
+-        const scenario = parts[0] || 'Scenario';
+-        const step = parts[1] || parts[0] || 'step';
+-        const sc = toPascalCase(scenario);
+-        if (!meta.fsmStates.has(sc)) meta.fsmStates.set(sc, new Set());
+-        if (parts.length > 1) {
+-          meta.fsmStates.get(sc).add(toPyIdent(step));
+-        } else {
+-          // Single-part target like 'main' becomes a state in Scenario
+-          const defaultScenario = toPascalCase('Scenario');
+-          if (!meta.fsmStates.has(defaultScenario)) meta.fsmStates.set(defaultScenario, new Set());
+-          meta.fsmStates.get(defaultScenario).add(toPyIdent(target));
+-        }
+-      }
+     }
+   }
+-  return meta;
+-}
+ 
+-function emitFsmStates(fsmStates) {
+-  const lines = [];
+-  for (const [group, fields] of fsmStates.entries()) {
+-    // Skip emitting empty State groups — avoid dead / unused FSM classes
+-    if (!fields || fields.size === 0) continue;
+-    lines.push(`class ${group}(StatesGroup):`);
+-    for (const f of fields) {
+-      lines.push(`    ${f} = State()`);
+-    }
+-    lines.push('');
++  meta.needsSqlite = stackHasVisualDb(stacks);
++  if (meta.needsSqlite) meta.needsDb = true;
++
++  meta.fsmGraph = buildFsmGraphFromStacks(stacks);
++  meta.fsmStates = new Map();
++  for (const state of meta.fsmGraph.states || []) {
++    if (!meta.fsmStates.has(state.group)) meta.fsmStates.set(state.group, new Set());
++    meta.fsmStates.get(state.group).add(state.name);
+   }
+-  return lines.join('\n');
++  for (const input of meta.fsmGraph.inputs || []) {
++    if (!meta.fsmStates.has(input.group)) meta.fsmStates.set(input.group, new Set());
++    meta.fsmStates.get(input.group).add(input.field);
++  }
++
++  return meta;
+ }
+ 
+ function emitSetCommands(commands) {
+@@ -1212,7 +1189,9 @@ export function buildPythonModule(stacks, options = {}) {
+     ')',
+   ];
+   if (meta.needsAiohttp) imports.splice(4, 0, 'import aiohttp');
+-  if (meta.needsDb) imports.push('', '# project DB adapter', 'db = {}  # replace with real db.get()');
++  if (meta.needsDb && !meta.needsSqlite) {
++    imports.push('', '# project DB adapter', 'db = {}  # replace with real db.get()');
++  }
+ 
+   const parts = [
+     imports.join('\n'),
+@@ -1221,12 +1200,17 @@ export function buildPythonModule(stacks, options = {}) {
+     '',
+   ];
+ 
++  if (meta.needsSqlite) {
++    parts.push(emitSqliteDbRuntime());
++    parts.push('');
++  }
++
+   for (const g of meta.globals) {
+     parts.push(`${escapePyKey(g.name)} = ${g.value}`);
+   }
+   if (meta.globals.length) parts.push('');
+ 
+-  const fsmCode = emitFsmStates(meta.fsmStates);
++  const fsmCode = emitFsmPythonFromGraph(meta.fsmGraph);
+   if (fsmCode.trim()) {
+     // ensure State/StatesGroup import present when FSM states are emitted
+     const stateImport = 'from aiogram.fsm.state import State, StatesGroup';
+diff --git a/core/compiler/codegen.ts b/core/compiler/codegen.ts
+index 74ae23e..ed4c81f 100644
+--- a/core/compiler/codegen.ts
++++ b/core/compiler/codegen.ts
+@@ -10,13 +10,27 @@ import {
+   type ExecutionPolicy,
+   type PreparedExecutionGraphResult,
+ } from "../execution/prepareExecutionGraph";
+-import { buildFSM } from "../execution/buildFSM";
++import { buildFSM, buildFsmGraph } from "../execution/buildFSM";
+ import { buildCallbackRoutes } from "../execution/buildCallbackRoutes";
+ import { generateAiogramBot } from "../../generators/python_aiogram/generateBot";
++import { buildVisualDbGraphFromBotNodes } from "../db/visual_db_ir";
+ import { logStep } from "../debug/compilerLogger";
+ import { CURRENT_VERSION } from "../execution/version";
+ import type { ExecutionGraph } from "../execution/executionContract";
+ 
++function visualDbFromExecution(execution: ExecutionGraph) {
++  return buildVisualDbGraphFromBotNodes(
++    execution.nodes.map((node) => ({
++      id: node.id,
++      type: node.type,
++      payload:
++        node.data && typeof node.data === "object"
++          ? { ...(node.data as Record<string, unknown>) }
++          : {},
++    })),
++  );
++}
++
+ export interface CompileGraphOptions {
+   /** Skip build/migrate/validate when middleware already prepared the graph. */
+   prepared?: PreparedExecutionGraphResult;
+@@ -68,7 +82,9 @@ function compileGraphImpl(graph: any, options: CompileGraphOptions = {}) {
+       runtime: {
+         execution: built,
+         fsm: {},
++        fsmGraph: buildFsmGraph(built),
+         callbacks: {},
++        visualDb: visualDbFromExecution(built),
+       },
+       empty: true,
+     };
+@@ -80,8 +96,10 @@ function compileGraphImpl(graph: any, options: CompileGraphOptions = {}) {
+   const { execution, compatibilityWarnings, migration } = prepared;
+   assertExecutionInvariants(execution);
+ 
++  const fsmGraph = buildFsmGraph(execution);
+   const fsm = buildFSM(execution);
+   const callbacks = buildCallbackRoutes(execution);
++  const visualDb = visualDbFromExecution(execution);
+ 
+   logStep("generate aiogram");
+ 
+@@ -97,7 +115,9 @@ function compileGraphImpl(graph: any, options: CompileGraphOptions = {}) {
+     runtime: {
+       execution,
+       fsm,
++      fsmGraph,
+       callbacks,
++      visualDb,
+     },
+   };
+ }
+diff --git a/core/db/dbCodegen.js b/core/db/dbCodegen.js
+new file mode 100644
+index 0000000..827c9de
+--- /dev/null
++++ b/core/db/dbCodegen.js
+@@ -0,0 +1,237 @@
++/**
++ * Visual DB nodes → sqlite + aiogram async snippets.
++ */
++
++const DB_NODE_TYPES = new Set([
++  'db.get',
++  'db.set',
++  'db.query',
++  'db.insert',
++  'db.update',
++]);
++
++/** @param {string} type */
++function isDbNodeType(type) {
++  return DB_NODE_TYPES.has(String(type || '').trim());
++}
++
++function pyQuote(s) {
++  return JSON.stringify(String(s ?? ''));
++}
++
++function pyIndent(n) {
++  return '    '.repeat(Math.max(0, n || 0));
++}
++
++function escapePyKey(key) {
++  const raw = String(key || 'var').trim();
++  return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(raw) ? raw : `_${raw.replace(/[^a-zA-Z0-9_]/g, '_')}`;
++}
++
++function normalizeBlockToVisualDb(block) {
++  const payload = block?.props && typeof block.props === 'object' ? block.props : {};
++  const type = String(block?.type || '').trim();
++  if (!isDbNodeType(type)) return null;
++
++  switch (type) {
++    case 'db.get':
++      return {
++        id: block.id,
++        type,
++        key: String(payload.key ?? payload.name ?? block.id),
++        varname: String(payload.varname ?? payload.var ?? 'value'),
++        table: String(payload.table || 'kv_store'),
++        payload,
++      };
++    case 'db.set':
++      return {
++        id: block.id,
++        type,
++        key: String(payload.key ?? payload.name ?? block.id),
++        table: String(payload.table || 'kv_store'),
++        values: payload.value !== undefined ? { value: payload.value } : { ...payload.values },
++        payload,
++      };
++    case 'db.query':
++      return {
++        id: block.id,
++        type,
++        sql: String(payload.sql ?? payload.query ?? ''),
++        varname: String(payload.varname ?? payload.var ?? 'rows'),
++        payload,
++      };
++    case 'db.insert':
++      return {
++        id: block.id,
++        type,
++        table: String(payload.table || 'records'),
++        values: { ...(payload.values || payload.row || {}) },
++        payload,
++      };
++    case 'db.update':
++      return {
++        id: block.id,
++        type,
++        table: String(payload.table || 'records'),
++        where: String(payload.where ?? payload.condition ?? '1=1'),
++        values: { ...(payload.values || payload.set || {}) },
++        payload,
++      };
++    default:
++      return null;
++  }
++}
++
++/**
++ * SQLite runtime helpers injected once per generated bot module.
++ */
++export function emitSqliteDbRuntime() {
++  return [
++    'import aiosqlite',
++    '',
++    'DB_PATH = "bot_data.sqlite"',
++    '',
++    'async def _db_connect():',
++    '    return await aiosqlite.connect(DB_PATH)',
++    '',
++    'async def db_get(key: str, default=None):',
++    '    async with await _db_connect() as db:',
++    '        await db.execute(',
++    '            "CREATE TABLE IF NOT EXISTS kv_store (key TEXT PRIMARY KEY, value TEXT)"',
++    '        )',
++    '        cur = await db.execute("SELECT value FROM kv_store WHERE key = ?", (key,))',
++    '        row = await cur.fetchone()',
++    '        await db.commit()',
++    '    return row[0] if row else default',
++    '',
++    'async def db_set(key: str, value):',
++    '    async with await _db_connect() as db:',
++    '        await db.execute(',
++    '            "CREATE TABLE IF NOT EXISTS kv_store (key TEXT PRIMARY KEY, value TEXT)"',
++    '        )',
++    '        await db.execute(',
++    '            "INSERT INTO kv_store(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",',
++    '            (key, str(value)),',
++    '        )',
++    '        await db.commit()',
++    '',
++    'async def db_query(sql: str, params=()):',
++    '    async with await _db_connect() as db:',
++    '        cur = await db.execute(sql, params)',
++    '        rows = await cur.fetchall()',
++    '        await db.commit()',
++    '    return rows',
++    '',
++    'async def db_insert(table: str, columns: list, values: list):',
++    '    cols = ", ".join(columns)',
++    '    placeholders = ", ".join("?" for _ in values)',
++    '    sql = f"INSERT INTO {table} ({cols}) VALUES ({placeholders})"',
++    '    async with await _db_connect() as db:',
++    '        await db.execute(sql, values)',
++    '        await db.commit()',
++    '',
++    'async def db_update(table: str, set_clause: str, where_clause: str, params=()):',
++    '    sql = f"UPDATE {table} SET {set_clause} WHERE {where_clause}"',
++    '    async with await _db_connect() as db:',
++    '        await db.execute(sql, params)',
++    '        await db.commit()',
++    '',
++  ].join('\n');
++}
++
++/**
++ * @param {import('./visual_db_ir.ts').VisualDbGraph} graph
++ */
++export function emitVisualDbManifest(graph) {
++  if (!graph?.nodes?.length) return '';
++  const lines = ['# --- Visual DB IR ---'];
++  for (const node of graph.nodes) {
++    lines.push(
++      `# DB ${node.type} ${node.id} table=${node.table ?? '-'} key=${node.key ?? '-'}`,
++    );
++  }
++  return `${lines.join('\n')}\n`;
++}
++
++/**
++ * @param {import('./visual_db_ir.ts').VisualDbNode} node
++ * @param {{ indent?: number }} [ctx]
++ */
++export function compileVisualDbNode(node, ctx = {}) {
++  const ind = pyIndent(ctx.indent ?? 0);
++  const payload = node.payload || {};
++
++  switch (node.type) {
++    case 'db.get': {
++      const varname = escapePyKey(node.varname || 'value');
++      const key = pyQuote(node.key || node.id);
++      return `${ind}${varname} = await db_get(${key})`;
++    }
++    case 'db.set': {
++      const key = pyQuote(node.key || node.id);
++      const value = payload.value !== undefined
++        ? payload.value
++        : (node.values?.value ?? '');
++      return `${ind}await db_set(${key}, ${pyQuote(String(value))})`;
++    }
++    case 'db.query': {
++      const varname = escapePyKey(node.varname || 'rows');
++      const sql = pyQuote(node.sql || 'SELECT 1');
++      return `${ind}${varname} = await db_query(${sql})`;
++    }
++    case 'db.insert': {
++      const table = pyQuote(node.table || 'records');
++      const values = node.values || {};
++      const cols = Object.keys(values);
++      const vals = cols.map((c) => pyQuote(values[c]));
++      return `${ind}await db_insert(${table}, ${pyQuote(cols)}, [${vals.join(', ')}])`;
++    }
++    case 'db.update': {
++      const table = pyQuote(node.table || 'records');
++      const values = node.values || {};
++      const setParts = Object.entries(values).map(
++        ([k, v]) => `${k} = ${pyQuote(String(v))}`,
++      );
++      const setClause = setParts.join(', ') || 'value = value';
++      const where = node.where || '1=1';
++      return `${ind}await db_update(${table}, ${pyQuote(setClause)}, ${pyQuote(where)})`;
++    }
++    default:
++      return `${ind}# unsupported db node ${node.type}`;
++  }
++}
++
++export function compileDbBlock(block, ctx = {}) {
++  const normalized = normalizeBlockToVisualDb({
++    id: block?.id || 'db',
++    type: block?.type,
++    props: block?.props,
++  });
++  if (!normalized) return '';
++  return compileVisualDbNode(normalized, ctx);
++}
++
++export function compileDbGet(block, ctx) {
++  return compileDbBlock({ ...block, type: 'db.get' }, ctx);
++}
++export function compileDbSet(block, ctx) {
++  return compileDbBlock({ ...block, type: 'db.set' }, ctx);
++}
++export function compileDbQuery(block, ctx) {
++  return compileDbBlock({ ...block, type: 'db.query' }, ctx);
++}
++export function compileDbInsert(block, ctx) {
++  return compileDbBlock({ ...block, type: 'db.insert' }, ctx);
++}
++export function compileDbUpdate(block, ctx) {
++  return compileDbBlock({ ...block, type: 'db.update' }, ctx);
++}
++
++export function stackHasVisualDb(stacks) {
++  for (const stack of stacks || []) {
++    for (const b of stack?.blocks || []) {
++      if (isDbNodeType(b?.type)) return true;
++    }
++  }
++  return false;
++}
+diff --git a/core/db/visual_db_ir.ts b/core/db/visual_db_ir.ts
+new file mode 100644
+index 0000000..cf7f7b7
+--- /dev/null
++++ b/core/db/visual_db_ir.ts
+@@ -0,0 +1,155 @@
++/**
++ * Visual DB IR — graph-based database operations (db.get / db.set / db.query / …).
++ * Extracted from Bot IR nodes; compiled to sqlite + aiogram handler snippets.
++ */
++
++/** Minimal node shape from Bot IR (avoids circular import with bot_ir.ts). */
++export interface VisualDbBotNodeSource {
++  id: string;
++  type: string;
++  payload: Record<string, unknown>;
++}
++
++export const VISUAL_DB_IR_VERSION = "1.0";
++
++export const DB_NODE_TYPES = [
++  "db.get",
++  "db.set",
++  "db.query",
++  "db.insert",
++  "db.update",
++] as const;
++
++export type VisualDbNodeType = (typeof DB_NODE_TYPES)[number];
++
++export interface VisualDbNode {
++  id: string;
++  type: VisualDbNodeType;
++  /** Target table (insert/update/query). */
++  table?: string;
++  /** Key column or kv key (get/set). */
++  key?: string;
++  /** Result / column binding variable name. */
++  varname?: string;
++  /** Raw SQL (query). */
++  sql?: string;
++  /** WHERE clause fragment (update). */
++  where?: string;
++  /** Row values (insert/update/set). */
++  values?: Record<string, unknown>;
++  /** Original block payload. */
++  payload: Record<string, unknown>;
++}
++
++export interface VisualDbGraph {
++  version: string;
++  nodes: VisualDbNode[];
++  nodeCount: number;
++}
++
++export function isDbNodeType(type: string): boolean {
++  return (DB_NODE_TYPES as readonly string[]).includes(String(type || "").trim());
++}
++
++function asRecord(value: unknown): Record<string, unknown> {
++  return value && typeof value === "object" && !Array.isArray(value)
++    ? (value as Record<string, unknown>)
++    : {};
++}
++
++function str(value: unknown, fallback = ""): string {
++  const s = String(value ?? "").trim();
++  return s || fallback;
++}
++
++/**
++ * Normalize a Bot IR / GraphDocument node into VisualDbNode.
++ */
++export function botIRNodeToVisualDb(node: VisualDbBotNodeSource): VisualDbNode | null {
++  if (!isDbNodeType(node.type)) return null;
++  const payload = asRecord(node.payload);
++  const type = node.type as VisualDbNodeType;
++
++  const base: VisualDbNode = {
++    id: node.id,
++    type,
++    payload: { ...payload },
++  };
++
++  switch (type) {
++    case "db.get":
++      return {
++        ...base,
++        key: str(payload.key ?? payload.name, node.id),
++        varname: str(payload.varname ?? payload.var ?? "value", "value"),
++        table: str(payload.table, "kv_store") || "kv_store",
++      };
++    case "db.set":
++      return {
++        ...base,
++        key: str(payload.key ?? payload.name, node.id),
++        table: str(payload.table, "kv_store") || "kv_store",
++        values:
++          payload.value !== undefined
++            ? { value: payload.value }
++            : asRecord(payload.values),
++      };
++    case "db.query":
++      return {
++        ...base,
++        sql: str(payload.sql ?? payload.query, ""),
++        varname: str(payload.varname ?? payload.var ?? "rows", "rows"),
++      };
++    case "db.insert":
++      return {
++        ...base,
++        table: str(payload.table, "records"),
++        values: asRecord(payload.values ?? payload.row ?? payload),
++      };
++    case "db.update":
++      return {
++        ...base,
++        table: str(payload.table, "records"),
++        where: str(payload.where ?? payload.condition, "1=1"),
++        values: asRecord(payload.values ?? payload.set ?? payload),
++      };
++    default:
++      return null;
++  }
++}
++
++/** Build Visual DB IR from Bot IR graph nodes. */
++export function extractVisualDbFromBotIR(botIr: {
++  nodes: VisualDbBotNodeSource[];
++}): VisualDbGraph {
++  const nodes = botIr.nodes
++    .map((n) => botIRNodeToVisualDb(n))
++    .filter((n): n is VisualDbNode => n != null)
++    .sort((a, b) => a.id.localeCompare(b.id));
++
++  return {
++    version: VISUAL_DB_IR_VERSION,
++    nodes,
++    nodeCount: nodes.length,
++  };
++}
++
++/** Build Visual DB IR directly from Bot IR node array. */
++export function buildVisualDbGraphFromBotNodes(
++  nodes: VisualDbBotNodeSource[],
++): VisualDbGraph {
++  const dbNodes = nodes
++    .map((n) => botIRNodeToVisualDb(n))
++    .filter((n): n is VisualDbNode => n != null)
++    .sort((a, b) => a.id.localeCompare(b.id));
++
++  return {
++    version: VISUAL_DB_IR_VERSION,
++    nodes: dbNodes,
++    nodeCount: dbNodes.length,
++  };
++}
++
++export function hasVisualDbNodes(nodes: Array<{ type?: string }>): boolean {
++  return nodes.some((n) => isDbNodeType(String(n?.type || "")));
++}
+diff --git a/core/graph/flowPorts.js b/core/graph/flowPorts.js
+index 5141756..22f233a 100644
+--- a/core/graph/flowPorts.js
++++ b/core/graph/flowPorts.js
+@@ -61,6 +61,15 @@ const PORT_BY_TYPE = Object.freeze({
+   photo_var: FLOW,
+   document_var: FLOW,
+   media: FLOW,
++  'fsm.state': FLOW,
++  'fsm.input': FLOW,
++  'fsm.transition': FLOW,
++  fsm: FLOW,
++  'db.get': FLOW,
++  'db.set': FLOW,
++  'db.query': FLOW,
++  'db.insert': FLOW,
++  'db.update': FLOW,
+ });
+ 
+ function buildFlowPorts() {
+diff --git a/core/ir/bot_ir.ts b/core/ir/bot_ir.ts
+new file mode 100644
+index 0000000..341ed36
+--- /dev/null
++++ b/core/ir/bot_ir.ts
+@@ -0,0 +1,213 @@
++/**
++ * Bot IR — intermediate representation between GraphDocument and compilers.
++ * Canonical node type is always `node.type` (resolved via graph_node_payload).
++ */
++
++import { createGraphDocument } from "../../src/constructor/graph_document/graph_document.js";
++import { graphResolveNodeType } from "../../src/constructor/graph_document/graph_node_payload.js";
++import { getNodePortDescriptors } from "../../src/constructor/graph_document/operation_registry.js";
++import { getNodeCapabilities } from "../blockRegistry.js";
++import {
++  buildVisualDbGraphFromBotNodes,
++  type VisualDbGraph,
++} from "../db/visual_db_ir.js";
++
++export const BOT_IR_VERSION = "1.0";
++
++/** Connection port on a Bot IR node (from operation registry). */
++export interface BotIRPort {
++  id: string;
++  kind?: string;
++  label?: string;
++  transport?: string;
++}
++
++/** Single node in Bot IR — canonical block type + ports + capabilities + props payload. */
++export interface BotIRNode {
++  id: string;
++  /** Canonical block type (GraphDocument `node.type`, registry-validated). */
++  type: string;
++  inputs: readonly BotIRPort[];
++  outputs: readonly BotIRPort[];
++  /** Node capability contract (triggers, actions, async, outputs). */
++  capabilities: Readonly<{
++    triggers?: readonly string[];
++    actions?: readonly string[];
++    async: boolean;
++    outputs: readonly string[];
++  }>;
++  /** Block props only (GraphDocument `node.data`, no type mirrors). */
++  payload: Record<string, unknown>;
++}
++
++/** Directed edge between Bot IR nodes. */
++export interface BotIREdge {
++  id: string;
++  source: string;
++  target: string;
++  sourcePort: string;
++  targetPort: string;
++  label?: string;
++  condition?: string;
++  invalid?: boolean;
++  invalidReason?: string;
++}
++
++/** Graph-level context carried alongside nodes and edges. */
++export interface BotIRContext {
++  schemaVersion: number;
++  viewport: { x: number; y: number; zoom: number };
++  metadata: Record<string, unknown>;
++  revision?: number;
++  nodeCount: number;
++  edgeCount: number;
++  dbNodeCount?: number;
++}
++
++/** Full Bot intermediate representation of a constructor graph. */
++export interface BotIRGraph {
++  version: string;
++  nodes: BotIRNode[];
++  edges: BotIREdge[];
++  context: BotIRContext;
++  /** Visual DB operations extracted from db.* nodes. */
++  visualDb: VisualDbGraph;
++}
++
++export type { VisualDbGraph } from "../db/visual_db_ir.js";
++
++/** Minimal GraphDocument shape accepted by {@link graphToBotIR}. */
++export interface GraphDocumentInput {
++  schema_version?: number;
++  nodes?:
++    | Record<string, GraphDocumentNodeInput>
++    | GraphDocumentNodeInput[];
++  edges?:
++    | Record<string, GraphDocumentEdgeInput>
++    | GraphDocumentEdgeInput[];
++  viewport?: { x?: number; y?: number; zoom?: number; scale?: number };
++  metadata?: Record<string, unknown>;
++  ui_state?: unknown;
++}
++
++export interface GraphDocumentNodeInput {
++  id: string;
++  type?: string;
++  position?: { x?: number; y?: number };
++  data?: Record<string, unknown>;
++  props?: Record<string, unknown>;
++  meta?: Record<string, unknown>;
++}
++
++export interface GraphDocumentEdgeInput {
++  id: string;
++  source?: string;
++  target?: string;
++  from?: string;
++  to?: string;
++  sourcePort?: string;
++  sourceHandle?: string;
++  targetPort?: string;
++  targetHandle?: string;
++  label?: string;
++  condition?: string;
++  invalid?: boolean;
++  invalidReason?: string;
++}
++
++type RegistryPort = {
++  id: string;
++  kind?: string;
++  label?: string;
++  transport?: string;
++};
++
++function mapPorts(ports: readonly RegistryPort[]): BotIRPort[] {
++  return ports.map((p) => ({
++    id: String(p.id),
++    ...(p.kind != null ? { kind: String(p.kind) } : {}),
++    ...(p.label != null ? { label: String(p.label) } : {}),
++    ...(p.transport != null ? { transport: String(p.transport) } : {}),
++  }));
++}
++
++function sortById<T extends { id: string }>(items: T[]): T[] {
++  return [...items].sort((a, b) => a.id.localeCompare(b.id));
++}
++
++function documentNodeToBotIRNode(node: {
++  id: string;
++  type?: string;
++  data?: Record<string, unknown>;
++}): BotIRNode {
++  const type = graphResolveNodeType(node);
++  const { inputs, outputs } = getNodePortDescriptors(type);
++  const data = node.data && typeof node.data === "object" ? node.data : {};
++  return {
++    id: String(node.id),
++    type,
++    inputs: Object.freeze(mapPorts(inputs as RegistryPort[])),
++    outputs: Object.freeze(mapPorts(outputs as RegistryPort[])),
++    capabilities: Object.freeze({ ...getNodeCapabilities(type) }),
++    payload: Object.freeze({ ...data }),
++  };
++}
++
++function documentEdgeToBotIREdge(edge: {
++  id: string;
++  source: string;
++  target: string;
++  sourcePort?: string;
++  targetPort?: string;
++  label?: string;
++  condition?: string;
++  invalid?: boolean;
++  invalidReason?: string;
++}): BotIREdge {
++  return {
++    id: String(edge.id),
++    source: String(edge.source),
++    target: String(edge.target),
++    sourcePort: String(edge.sourcePort ?? "flow"),
++    targetPort: String(edge.targetPort ?? "flow"),
++    ...(edge.label ? { label: String(edge.label) } : {}),
++    ...(edge.condition ? { condition: String(edge.condition) } : {}),
++    ...(edge.invalid ? { invalid: true } : {}),
++    ...(edge.invalidReason
++      ? { invalidReason: String(edge.invalidReason) }
++      : {}),
++  };
++}
++
++/**
++ * Lower GraphDocument → Bot IR (read-only; does not mutate the source document).
++ */
++export function graphToBotIR(graphDocument: GraphDocumentInput): BotIRGraph {
++  const doc = createGraphDocument(graphDocument);
++  const nodes = sortById(
++    Object.values(doc.nodes).map((node) => documentNodeToBotIRNode(node)),
++  );
++  const edges = sortById(
++    Object.values(doc.edges).map((edge) => documentEdgeToBotIREdge(edge)),
++  );
++  const meta = (doc.metadata || {}) as Record<string, unknown>;
++
++  const visualDb = buildVisualDbGraphFromBotNodes(nodes);
++
++  return {
++    version: BOT_IR_VERSION,
++    nodes,
++    edges,
++    visualDb,
++    context: {
++      schemaVersion: doc.schema_version,
++      viewport: { ...doc.viewport },
++      metadata: { ...meta },
++      revision:
++        typeof meta.revision === "number" ? meta.revision : undefined,
++      nodeCount: nodes.length,
++      edgeCount: edges.length,
++      dbNodeCount: visualDb.nodeCount,
++    },
++  };
++}
+diff --git a/core/mappers/reactFlowToGraph.ts b/core/mappers/reactFlowToGraph.ts
+index ce98367..b5c2ec0 100644
+--- a/core/mappers/reactFlowToGraph.ts
++++ b/core/mappers/reactFlowToGraph.ts
+@@ -1,19 +1,24 @@
+ import type { BotGraph, GraphNode } from "../../schemas/graph/graph.schema";
++import { normalizeFlowNode } from "../ir/normalizeFlowNode.js";
++import {
++  buildCanonicalFlowEdgeId,
++  sanitizeFlowPosition,
++  type FlowEdgeInput,
++  type FlowNodeInput,
++} from "./flowMapperUtils.ts";
+ 
+-function resolveBlockType(node: any): string {
+-  const raw = String(node?.type || "").trim();
+-  const data = node?.data && typeof node.data === "object" ? node.data : {};
+-  if (raw && raw !== "cicada" && raw !== "unknown") return raw;
+-  return String(data.type || data.blockType || "message").trim() || "message";
++function toCompilerNodeType(blockType: string): string {
++  if (blockType === "start") return "command";
++  if (blockType === "state") return "fsm.state";
++  if (blockType.startsWith("fsm.") || blockType.startsWith("db.")) return blockType;
++  return blockType;
+ }
+ 
+-function resolveBlockData(node: any, blockType: string): Record<string, any> {
+-  const data = node?.data && typeof node.data === "object" ? node.data : {};
+-  const props =
+-    data.props && typeof data.props === "object" && !Array.isArray(data.props)
+-      ? { ...data.props }
+-      : { ...data };
+-
++function resolveBlockData(
++  blockType: string,
++  props: Record<string, unknown>,
++  nodeId: string,
++): Record<string, unknown> {
+   if (blockType === "start" || blockType === "command") {
+     return {
+       command: props.cmd || props.command || "start",
+@@ -35,47 +40,107 @@ function resolveBlockData(node: any, blockType: string): Record<string, any> {
+     };
+   }
+ 
+-  if (blockType === "fsm" || blockType === "state") {
++  if (blockType === "fsm.state" || blockType === "fsm" || blockType === "state") {
+     return {
+-      state: props.state || props.name || node.id,
++      group: props.group || props.scenario || "Form",
++      name: props.name || props.state || props.step || nodeId,
+       ...props,
+     };
+   }
+ 
+-  return props;
+-}
++  if (blockType === "fsm.input") {
++    return {
++      group: props.group || props.scenario || "Form",
++      field: props.field || props.varname || "field",
++      prompt: props.prompt || props.question || props.text || "",
++      ...props,
++    };
++  }
+ 
+-function toCompilerNodeType(blockType: string): string {
+-  if (blockType === "start") return "command";
+-  if (blockType === "state") return "fsm";
+-  return blockType;
++  if (blockType === "fsm.transition") {
++    return {
++      from: props.from || props.source || "",
++      to: props.to || props.target || "",
++      event: props.event || props.label || "",
++      condition: props.condition || props.guard || "",
++      ...props,
++    };
++  }
++
++  if (blockType === "db.get") {
++    return {
++      key: props.key || props.name || nodeId,
++      varname: props.varname || props.var || "value",
++      table: props.table || "kv_store",
++      ...props,
++    };
++  }
++
++  if (blockType === "db.set") {
++    return {
++      key: props.key || props.name || nodeId,
++      value: props.value ?? "",
++      table: props.table || "kv_store",
++      ...props,
++    };
++  }
++
++  if (blockType === "db.query") {
++    return {
++      sql: props.sql || props.query || "SELECT 1",
++      varname: props.varname || props.var || "rows",
++      ...props,
++    };
++  }
++
++  if (blockType === "db.insert") {
++    return {
++      table: props.table || "records",
++      values: props.values || props.row || props,
++      ...props,
++    };
++  }
++
++  if (blockType === "db.update") {
++    return {
++      table: props.table || "records",
++      where: props.where || props.condition || "1=1",
++      values: props.values || props.set || props,
++      ...props,
++    };
++  }
++
++  return { ...props };
+ }
+ 
+-function mapFlowNode(node: any): GraphNode | null {
++function mapFlowNode(node: FlowNodeInput): GraphNode | null {
+   if (!node?.id) return null;
+-  const blockType = resolveBlockType(node);
+-  const compilerType = toCompilerNodeType(blockType);
++  const norm = normalizeFlowNode(node);
++  const compilerType = toCompilerNodeType(norm.type);
+ 
+   return {
+-    id: String(node.id),
++    id: norm.id,
+     type: compilerType,
+-    position: node.position,
+-    data: resolveBlockData(node, blockType),
++    position: sanitizeFlowPosition(node.position),
++    data: resolveBlockData(norm.type, norm.props, norm.id),
+   };
+ }
+ 
+-function mapFlowEdge(edge: any) {
++function mapFlowEdge(edge: FlowEdgeInput) {
+   if (!edge?.source || !edge?.target) return null;
+   return {
+-    id: edge.id || `${edge.source}->${edge.target}`,
+-    source: edge.source,
+-    target: edge.target,
+-    sourceHandle: edge.sourceHandle,
+-    targetHandle: edge.targetHandle,
++    id: buildCanonicalFlowEdgeId(edge),
++    source: String(edge.source),
++    target: String(edge.target),
++    sourceHandle: edge.sourceHandle ?? undefined,
++    targetHandle: edge.targetHandle ?? undefined,
+   };
+ }
+ 
+-export function reactFlowToGraph(nodes: any[], edges: any[]): BotGraph {
++export function reactFlowToGraph(
++  nodes: FlowNodeInput[],
++  edges: FlowEdgeInput[],
++): BotGraph {
+   const compilerNodes = (nodes || [])
+     .map(mapFlowNode)
+     .filter((node): node is GraphNode => node != null);
+diff --git a/generators/python_aiogram/generateBot.ts b/generators/python_aiogram/generateBot.ts
+index a3a0f44..1a55f99 100644
+--- a/generators/python_aiogram/generateBot.ts
++++ b/generators/python_aiogram/generateBot.ts
+@@ -4,6 +4,24 @@ import {
+   type ExecutionPolicy,
+ } from "../../core/execution/executionPolicy";
+ import { sortEdges } from "../../core/execution/executionContract";
++import { buildFsmGraph } from "../../core/execution/fsmGraph";
++import { buildVisualDbGraphFromBotNodes } from "../../core/db/visual_db_ir";
++import {
++  emitSqliteDbRuntime,
++  emitVisualDbManifest,
++} from "../../core/db/dbCodegen.js";
++import { generateFsmPython } from "./generateFSM";
++
++function executionNodesToDbSources(execution: ExecutionGraph) {
++  return execution.nodes.map((node) => ({
++    id: node.id,
++    type: node.type,
++    payload:
++      node.data && typeof node.data === "object"
++        ? { ...(node.data as Record<string, unknown>) }
++        : {},
++  }));
++}
+ 
+ function formatEdgeLine(edge: {
+   from: string;
+@@ -19,8 +37,8 @@ function formatEdgeLine(edge: {
+ }
+ 
+ /**
+- * Generate aiogram scaffold from prepared ExecutionGraph edges only.
+- * Expects graph that already passed prepareExecutionGraph.
++ * Generate aiogram scaffold from prepared ExecutionGraph.
++ * FSM is graph-based (fsm.state / fsm.input / transition edges).
+  */
+ export function generateAiogramBot(
+   execution: ExecutionGraph,
+@@ -30,13 +48,27 @@ export function generateAiogramBot(
+     .map(formatEdgeLine)
+     .join("\n");
+ 
++  const fsmGraph = buildFsmGraph(execution);
++  const fsmSection = generateFsmPython(fsmGraph);
++  const visualDb = buildVisualDbGraphFromBotNodes(
++    executionNodesToDbSources(execution),
++  );
++  const dbManifest = emitVisualDbManifest(visualDb);
++  const dbRuntime =
++    visualDb.nodeCount > 0 ? `\n${emitSqliteDbRuntime()}\n` : "";
++
++  const fsmImports =
++    fsmSection.includes("StatesGroup") || fsmSection.includes("State()")
++      ? "from aiogram.fsm.state import State, StatesGroup\n"
++      : "";
++
+   return `# EXECUTION GRAPH VERSION: ${execution.version}
+ 
+ from aiogram import Router
+-
++${fsmImports}
+ router = Router()
+ 
+ # --- execution graph (source of truth) ---
+ ${edgeManifest || "# (no edges)"}
+-`;
++${dbManifest}${dbRuntime}${fsmSection ? `\n${fsmSection}` : ""}`;
+ }
+diff --git a/package.json b/package.json
+index fe4edf7..cd5d37a 100644
+--- a/package.json
++++ b/package.json
+@@ -18,6 +18,10 @@
+     "lint": "eslint src core/tests services scripts server.mjs",
+     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
+     "test:compiler": "tsx tests/compiler/compiler.test.ts",
++    "test:bot-ir": "tsx tests/compiler/bot_ir.test.ts",
++    "test:block-capabilities": "node --test core/tests/block-capabilities.test.mjs",
++    "test:fsm-graph": "tsx tests/compiler/fsmGraph.test.ts",
++    "test:visual-db": "tsx tests/compiler/visual_db.test.ts",
+     "test:runtime": "tsx tests/compiler/runtime.test.ts",
+     "parser-core-blocks": "node scripts/core-blocks-check.mjs",
+     "jammer:publish": "node scripts/publish-jammer-firmware.mjs",
+diff --git a/tests/compiler/visual_db.test.ts b/tests/compiler/visual_db.test.ts
+new file mode 100644
+index 0000000..1e6a273
+--- /dev/null
++++ b/tests/compiler/visual_db.test.ts
+@@ -0,0 +1,87 @@
++import assert from "node:assert/strict";
++
++import {
++  botIRNodeToVisualDb,
++  buildVisualDbGraphFromBotNodes,
++  isDbNodeType,
++} from "../../core/db/visual_db_ir";
++import { graphToBotIR } from "../../core/ir/bot_ir";
++import { buildExecutionGraph } from "../../core/execution/buildExecutionGraph";
++import { generateAiogramBot } from "../../generators/python_aiogram/generateBot";
++import { buildPythonModule } from "../../core/codegen/compileCore.js";
++import "../../core/codegen/index.js";
++
++assert.ok(isDbNodeType("db.get"));
++assert.equal(isDbNodeType("message"), false);
++
++const visual = botIRNodeToVisualDb({
++  id: "db1",
++  type: "db.get",
++  payload: { key: "username", varname: "uname" },
++});
++assert.ok(visual);
++assert.equal(visual!.key, "username");
++assert.equal(visual!.varname, "uname");
++
++const graph = buildVisualDbGraphFromBotNodes([
++  { id: "db1", type: "db.set", payload: { key: "k", value: "v" } },
++  { id: "msg", type: "message", payload: { text: "hi" } },
++]);
++assert.equal(graph.nodeCount, 1);
++assert.equal(graph.nodes[0]!.type, "db.set");
++
++const botIr = graphToBotIR({
++  nodes: [
++    {
++      id: "start_1",
++      type: "start",
++      position: { x: 0, y: 0 },
++      data: { cmd: "start" },
++    },
++    {
++      id: "db_1",
++      type: "db.get",
++      position: { x: 0, y: 120 },
++      data: { key: "score", varname: "score" },
++    },
++  ],
++  edges: [
++    {
++      id: "e1",
++      source: "start_1",
++      target: "db_1",
++      sourcePort: "flow",
++      targetPort: "flow",
++    },
++  ],
++});
++assert.equal(botIr.visualDb.nodeCount, 1);
++assert.equal(botIr.context.dbNodeCount, 1);
++
++const execution = buildExecutionGraph(
++  [
++    { id: "s1", type: "start", data: { cmd: "start" } },
++    { id: "db1", type: "db.get", data: { key: "x", varname: "x" } },
++  ],
++  [{ source: "s1", target: "db1", sourceHandle: "flow", targetHandle: "flow" }],
++);
++
++const scaffold = generateAiogramBot(execution);
++assert.match(scaffold, /# --- Visual DB IR ---/);
++assert.match(scaffold, /async def db_get/);
++assert.match(scaffold, /import aiosqlite/);
++
++const stacks = [
++  {
++    blocks: [
++      { id: "start1", type: "start", props: { cmd: "start" } },
++      { id: "db1", type: "db.get", props: { key: "user", varname: "user" } },
++      { id: "msg1", type: "message", props: { text: "ok" } },
++    ],
++  },
++];
++const python = buildPythonModule(stacks);
++assert.match(python, /aiosqlite/);
++assert.match(python, /await db_get/);
++
++console.log("visual_db test OK");

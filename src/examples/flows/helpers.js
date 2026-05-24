@@ -13,9 +13,9 @@ const HANDLER_START_Y = 120;
 export function node(id, blockType, x, y, props = {}) {
   return {
     id,
-    type: 'cicada',
+    type: blockType,
     position: { x, y },
-    data: { type: blockType, props: { ...props } },
+    data: { ...props },
   };
 }
 

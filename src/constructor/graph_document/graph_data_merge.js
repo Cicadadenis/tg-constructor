@@ -2,6 +2,8 @@
  * Immutable merge helpers for GraphDocument node.data patches.
  */
 
+import { stripTypeFieldsFromData } from './graph_node_payload.js';
+
 function isPlainObject(value) {
   return value != null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -35,10 +37,10 @@ export function deepMergePlainObjects(target, patch) {
  */
 export function mergeNodeDataUpdate(existingData, { patch, data } = {}) {
   if (data != null && isPlainObject(data)) {
-    return { ...data };
+    return stripTypeFieldsFromData(data);
   }
   if (!isPlainObject(patch) || Object.keys(patch).length === 0) {
-    return { ...(existingData || {}) };
+    return stripTypeFieldsFromData(existingData || {});
   }
-  return deepMergePlainObjects(existingData || {}, patch);
+  return stripTypeFieldsFromData(deepMergePlainObjects(existingData || {}, patch));
 }

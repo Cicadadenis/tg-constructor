@@ -1,26 +1,42 @@
 /**
- * Нормализует узел React Flow к IR-узлу { id, type, props [, semanticId] }.
- * Используется генератором DSL, хэшами графа и IR-валидацией.
- *
+ * Normalizes React Flow / GraphDocument nodes to IR shape { id, type, props [, semanticId] }.
+ * Block type is always resolved via canonical `node.type` (RF: `data.canvasBlockType`).
+ */
+
+import {
+  resolveCanonicalNodeType,
+  stripTypeFieldsFromData,
+  UnknownBlockTypeError,
+} from '../../src/constructor/graph_document/graph_node_payload.js';
+
+/**
  * @param {unknown} node
  * @returns {{ id: string, type: string, props: Record<string, unknown>, semanticId?: string }}
  */
 export function normalizeFlowNode(node) {
-  if (!node) return { id: 'unknown', type: 'message', props: {} };
-  const id = node.id || 'n';
-  const data = node.data || {};
-  if (data.type) {
-    return {
-      id,
-      type: data.type,
-      props: { ...(data.props || {}) },
-      semanticId: data.semanticId || data.id || id,
-    };
+  if (!node || typeof node !== 'object') {
+    throw new UnknownBlockTypeError('normalizeFlowNode: node is required');
   }
+  const id = String(node.id || 'n');
+  const data = node.data && typeof node.data === 'object' ? node.data : {};
+  const projectedType = String(data.canvasBlockType ?? '').trim();
+  const isCanvasProjection = projectedType.length > 0;
+  const blockType = resolveCanonicalNodeType({
+    id,
+    type: isCanvasProjection ? projectedType : node.type,
+    data: isCanvasProjection
+      ? (data.props && typeof data.props === 'object' ? data.props : {})
+      : data,
+  });
+  const props = stripTypeFieldsFromData(
+    isCanvasProjection
+      ? (data.props && typeof data.props === 'object' ? data.props : {})
+      : data,
+  );
   return {
     id,
-    type: typeof node.type === 'string' && node.type !== 'cicada' ? node.type : 'message',
-    props: {},
-    semanticId: id,
+    type: blockType,
+    props,
+    semanticId: data.semanticId || data.id || id,
   };
 }

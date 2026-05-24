@@ -1,0 +1,1081 @@
+diff --git a/core/aiogram3PaletteOrder.js b/core/aiogram3PaletteOrder.js
+index 9cf5635..1296d7e 100644
+--- a/core/aiogram3PaletteOrder.js
++++ b/core/aiogram3PaletteOrder.js
+@@ -60,9 +60,10 @@ export const AIOGRAM3_BLOCK_FLOW_META = Object.freeze(
+       ['condition', 'control_flow', 0],
+       ['condition_not', 'control_flow', 1],
+       ['loop', 'control_flow', 2],
+-      ['delay', 'control_flow', 3],
+-      ['typing', 'control_flow', 4],
+-      ['log', 'control_flow', 5],
++      ['foreach', 'control_flow', 3],
++      ['delay', 'control_flow', 4],
++      ['typing', 'control_flow', 5],
++      ['log', 'control_flow', 6],
+       // E) FSM
+       ['ask', 'fsm', 0],
+       ['remember', 'fsm', 1],
+diff --git a/core/blockRegistry.js b/core/blockRegistry.js
+index e489ede..051e6fc 100644
+--- a/core/blockRegistry.js
++++ b/core/blockRegistry.js
+@@ -4,6 +4,11 @@ import {
+   isAiogram3PaletteBlockType,
+ } from './aiogram3Runtime.js';
+ import { sortCatalogByFlowOrder } from './aiogram3PaletteOrder.js';
++import {
++  attachCapabilitiesToDefinition,
++  getBlockCapabilities,
++  hasBlockCapabilities,
++} from './registry/blockCapabilities.js';
+ 
+ const VALID_CATEGORIES = new Set([
+   'render',
+@@ -20,8 +25,9 @@ const VALID_UI_SCOPES = new Set(['render', 'none']);
+ const RENDER_UI_CAPABILITIES = Object.freeze(['buttons', 'inline', 'media']);
+ 
+ function freezeDefinition(definition) {
++  const withCapabilities = attachCapabilitiesToDefinition(definition);
+   return Object.freeze({
+-    ...definition,
++    ...withCapabilities,
+     capabilities: Object.freeze([...(definition.capabilities || [])]),
+     constraints: definition.constraints
+       ? Object.freeze({
+@@ -234,6 +240,41 @@ export const controlBlocks = Object.freeze([
+       { mode: 'count', count: '3' },
+     ),
+   }),
++  block('foreach', 'control', 'Iterate a list; item variable in body or inline keyboard from list.', {
++    constraints: withDefaults(
++      withFlow(palette('Для каждого', '∀', '#d97706', 'Логика', false, true), {
++        maxOutputs: 2,
++        outputLabels: ['body', 'done'],
++      }),
++      {
++        list: 'products',
++        var: 'product',
++        output: 'body',
++        labelField: 'name',
++        idField: 'id',
++        callbackPrefix: 'prod:',
++        columns: 2,
++      },
++    ),
++  }),
++  block('fsm.state', 'control', 'FSM state node (graph-based).', {
++    constraints: withDefaults(
++      withFlow(palette('FSM состояние', '◎', '#ec4899', 'FSM', false, true), { maxOutputs: 1 }),
++      { group: 'Form', name: 'step' },
++    ),
++  }),
++  block('fsm.input', 'control', 'FSM input step — prompt and store field.', {
++    constraints: withDefaults(
++      withFlow(palette('FSM ввод', '⌨', '#f472b6', 'FSM', false, true), { maxOutputs: 1 }),
++      { group: 'Form', field: 'field', prompt: 'Введите значение' },
++    ),
++  }),
++  block('fsm.transition', 'control', 'FSM transition between states.', {
++    constraints: withDefaults(
++      withFlow(palette('FSM переход', '⇢', '#db2777', 'FSM', false, true), { maxOutputs: 1 }),
++      { event: '', from: '', to: '' },
++    ),
++  }),
+ ]);
+ 
+ export const logicBlocks = Object.freeze([
+@@ -365,6 +406,36 @@ export const dataBlocks = Object.freeze([
+   block('set_global', 'data', 'Update a module-level global variable.', {
+     constraints: palette('Обновить глобальную', '🌍', '#10b981', 'Данные', false, true),
+   }),
++  block('db.get', 'data', 'Read a value from sqlite kv store.', {
++    constraints: withDefaults(
++      withFlow(palette('DB получить', '📥', '#0891b2', 'База данных', false, true), { maxOutputs: 1 }),
++      { key: 'key', varname: 'value', table: 'kv_store' },
++    ),
++  }),
++  block('db.set', 'data', 'Write a value to sqlite kv store.', {
++    constraints: withDefaults(
++      withFlow(palette('DB записать', '💾', '#0e7490', 'База данных', false, true), { maxOutputs: 1 }),
++      { key: 'key', value: '', table: 'kv_store' },
++    ),
++  }),
++  block('db.query', 'data', 'Run a raw SQL query (sqlite).', {
++    constraints: withDefaults(
++      withFlow(palette('DB запрос', '⌗', '#155e75', 'База данных', false, true), { maxOutputs: 1 }),
++      { sql: 'SELECT 1', varname: 'rows' },
++    ),
++  }),
++  block('db.insert', 'data', 'Insert a row into a table.', {
++    constraints: withDefaults(
++      withFlow(palette('DB вставка', '➕', '#164e63', 'База данных', false, true), { maxOutputs: 1 }),
++      { table: 'records', values: {} },
++    ),
++  }),
++  block('db.update', 'data', 'Update rows in a table.', {
++    constraints: withDefaults(
++      withFlow(palette('DB обновить', '✎', '#083344', 'База данных', false, true), { maxOutputs: 1 }),
++      { table: 'records', where: 'id = ?', values: {} },
++    ),
++  }),
+ ]);
+ 
+ export const settingsBlocks = Object.freeze([
+@@ -496,6 +567,7 @@ export const BLOCK_STACK_COMPATIBILITY = freezeCompatibilityMap({
+   get: FLOW_NO_MEDIA,
+   save: FLOW_NO_MEDIA,
+   loop: FLOW_CHILDREN,
++  foreach: FLOW_CHILDREN,
+ 
+   delay: ['message', 'typing', 'condition', 'condition_not', 'ask', 'remember', 'get', 'save', 'log', 'stop', 'goto'],
+   typing: ['message', 'photo', 'photo_var', 'video', 'audio', 'document', 'document_var', 'send_file', 'sticker', 'condition', 'condition_not', 'ask', 'delay', 'stop', 'goto'],
+@@ -517,6 +589,17 @@ export const BLOCK_STACK_COMPATIBILITY = freezeCompatibilityMap({
+   poll: MEDIA_STACK_CHILDREN,
+ 
+   set_global: FLOW_NO_MEDIA,
++
++  'fsm.state': FLOW_CHILDREN,
++  'fsm.input': FLOW_CHILDREN,
++  'fsm.transition': FLOW_CHILDREN,
++  fsm: FLOW_CHILDREN,
++
++  'db.get': FLOW_NO_MEDIA,
++  'db.set': FLOW_NO_MEDIA,
++  'db.query': FLOW_NO_MEDIA,
++  'db.insert': FLOW_NO_MEDIA,
++  'db.update': FLOW_NO_MEDIA,
+ });
+ 
+ export function getCompatibleBlockTypes(parentType) {
+@@ -531,6 +614,13 @@ export function getBlockDefinition(type) {
+   return blockRegistry[String(type || '').trim()] || null;
+ }
+ 
++export { getBlockCapabilities, hasBlockCapabilities } from './registry/blockCapabilities.js';
++
++export function getNodeCapabilities(type) {
++  const def = getBlockDefinition(type);
++  return def?.nodeCapabilities ?? getBlockCapabilities(type);
++}
++
+ export function getBlockUiConstraints(type) {
+   return getBlockDefinition(type)?.constraints?.ui || null;
+ }
+diff --git a/core/codegen/ast/bindKeyboards.js b/core/codegen/ast/bindKeyboards.js
+index c6817aa..adb5a29 100644
+--- a/core/codegen/ast/bindKeyboards.js
++++ b/core/codegen/ast/bindKeyboards.js
+@@ -6,6 +6,7 @@ import { normalizeUiAttachments } from '../../capabilityEngine.js';
+ import { keyboardCodegenAlias, isGraphKeyboardNode } from '../../keyboard_topology.js';
+ import { keyboardDataToCodegenProps } from '../../keyboard_codegen.js';
+ import { ROLE_KEYBOARD, ROLE_OUTPUT_BIND_TARGET } from '../../rules/aiogram3BlockRoles.js';
++import { isForeachKeyboardOutput } from '../foreachCodegen.js';
+ 
+ function uiAttachmentItemsToKeyboardProps(kind, items) {
+   if (kind === 'buttons') {
+@@ -110,7 +111,14 @@ export function applyKeyboardBinding(stacks) {
+       const kb = blocks[i];
+       const kbType = String(kb?.type || '').trim();
+       const roleType = isGraphKeyboardNode(kbType) ? keyboardCodegenAlias(kbType) : kbType;
+-      if (!ROLE_KEYBOARD.has(kbType) && !ROLE_KEYBOARD.has(roleType)) continue;
++      const isForeachKb = kbType === 'foreach' && isForeachKeyboardOutput(kb?.props);
++      if (
++        !isForeachKb
++        && !ROLE_KEYBOARD.has(kbType)
++        && !ROLE_KEYBOARD.has(roleType)
++      ) {
++        continue;
++      }
+ 
+       const targetIdx = findBindTargetIndex(blocks, i);
+       if (targetIdx < 0) {
+@@ -142,7 +150,7 @@ export function applyKeyboardBinding(stacks) {
+         : (kb.props || {});
+       target.boundKeyboard = {
+         id: kb.id,
+-        type: roleType,
++        type: isForeachKb ? 'foreach' : roleType,
+         props: { ...codegenProps },
+       };
+       remove.add(i);
+diff --git a/core/codegen/ast/keyboardMarkup.js b/core/codegen/ast/keyboardMarkup.js
+index 8db41c5..65b01eb 100644
+--- a/core/codegen/ast/keyboardMarkup.js
++++ b/core/codegen/ast/keyboardMarkup.js
+@@ -11,6 +11,7 @@ import {
+ } from '../keyboards.js';
+ import { normalizeCallbackData } from '../callbackDataNormalize.js';
+ import { pyIndent, pyQuote } from '../utils.js';
++import { emitForeachInlineKeyboard } from '../foreachCodegen.js';
+ 
+ /** @param {object} ctx */
+ export function getAnswerTarget(ctx) {
+@@ -50,6 +51,9 @@ function emitKeyboardAssignment(kb, ctx) {
+     const rows = parseInlineRows(kb.props?.buttons || '');
+     return emitInlineKeyboard(rows, varName);
+   }
++  if (kb.type === 'foreach') {
++    return emitForeachInlineKeyboard(kb.props || {}, varName);
++  }
+   if (kb.type === 'inline_db') {
+     const p = kb.props || {};
+     const key = p.key || p.dbKey || 'products';
+diff --git a/core/codegen/blockCompilers/foreach.js b/core/codegen/blockCompilers/foreach.js
+new file mode 100644
+index 0000000..288ade2
+--- /dev/null
++++ b/core/codegen/blockCompilers/foreach.js
+@@ -0,0 +1 @@
++export { compileForeachBlock as compileForeach } from '../foreachCodegen.js';
+diff --git a/core/codegen/blockCompilers/registerAll.js b/core/codegen/blockCompilers/registerAll.js
+index 9ed1a24..6006166 100644
+--- a/core/codegen/blockCompilers/registerAll.js
++++ b/core/codegen/blockCompilers/registerAll.js
+@@ -26,6 +26,7 @@ import {
+   compileAsk,
+ } from './state.js';
+ import { compileGoto, compileStop, compileLoop, compileDelay, compileTyping, compileLog } from './loops.js';
++import { compileForeach } from './foreach.js';
+ import { compileCondition, compileConditionNot } from './conditions.js';
+ import {
+   compilePhoto,
+@@ -46,6 +47,13 @@ import {
+   compileGlobalDecl,
+   compileCommandsDecl,
+ } from './bot.js';
++import {
++  compileDbGet,
++  compileDbSet,
++  compileDbQuery,
++  compileDbInsert,
++  compileDbUpdate,
++} from './db.js';
+ 
+ /** Register every aiogram 3 visual block type → Python compiler. */
+ export function registerAllBlockCompilers() {
+@@ -83,6 +91,7 @@ export function registerAllBlockCompilers() {
+     ['goto', compileGoto],
+     ['stop', compileStop],
+     ['loop', compileLoop],
++    ['foreach', compileForeach],
+     ['delay', compileDelay],
+     ['pause', compileDelay],
+     ['typing', compileTyping],
+@@ -104,6 +113,11 @@ export function registerAllBlockCompilers() {
+     ['send_file', compileSendFile],
+     ['photo_var', compilePhotoVar],
+     ['document_var', compileDocumentVar],
++    ['db.get', compileDbGet],
++    ['db.set', compileDbSet],
++    ['db.query', compileDbQuery],
++    ['db.insert', compileDbInsert],
++    ['db.update', compileDbUpdate],
+   ];
+   for (const [type, fn] of pairs) registerCompiler(type, fn);
+ }
+diff --git a/core/codegen/compileCore.js b/core/codegen/compileCore.js
+index 19f8cba..0cd7e08 100644
+--- a/core/codegen/compileCore.js
++++ b/core/codegen/compileCore.js
+@@ -28,6 +28,13 @@ import {
+   emitInlineKeyboard,
+ } from './keyboards.js';
+ import { callbackKeysMatch, normalizeCallbackData } from './callbackDataNormalize.js';
++import { buildFsmGraphFromStacks, emitFsmPythonFromGraph } from './fsmCodegen.js';
++import {
++  stackHasVisualDb,
++  emitSqliteDbRuntime,
++  emitVisualDbManifest,
++} from '../db/dbCodegen.js';
++import { compileForeachBlock, isForeachKeyboardOutput } from './foreachCodegen.js';
+ 
+ export { parseButtonRows, parseInlineRows, emitReplyKeyboard, emitInlineKeyboard } from './keyboards.js';
+ 
+@@ -553,6 +560,12 @@ export function compileStop(block, ctx) {
+   return `${ind}return`;
+ }
+ 
++export function compileForeach(block, ctx) {
++  return compileForeachBlock(block, ctx);
++}
++
++export { isForeachKeyboardOutput } from './foreachCodegen.js';
++
+ export function compileLoop(block, ctx) {
+   const p = block?.props || {};
+   const mode = p.mode || 'count';
+@@ -805,7 +818,9 @@ export function compileNodeToPython(node, context = {}) {
+   if (stmt) lines.push(stmt);
+ 
+   const childIndent =
+-    isConditionLikeType(type) || type === 'else' || type === 'loop' ? ctx.indent + 1 : ctx.indent;
++    isConditionLikeType(type) || type === 'else' || type === 'loop' || type === 'foreach'
++      ? ctx.indent + 1
++      : ctx.indent;
+ 
+   for (const child of node?.children || []) {
+     lines.push(compileNodeToPython(child, { ...ctx, indent: childIndent }));
+@@ -817,7 +832,12 @@ function compileStatementBlock(block, ctx) {
+   if (isEventHandlerType(block.type) || block.type === 'else') {
+     return compileHandlerFromRoot(block, [], { ...ctx, indent: ctx.indent });
+   }
+-  if (isConditionLikeType(block.type) || block.type === 'else' || block.type === 'loop') {
++  if (
++    isConditionLikeType(block.type)
++    || block.type === 'else'
++    || block.type === 'loop'
++    || block.type === 'foreach'
++  ) {
+     return compileControlBlock(block, ctx);
+   }
+   return transpileBlockToPython(block, ctx);
+@@ -903,7 +923,12 @@ function compileHandlerTree(rootBlock, bodyBlocks, ctx) {
+ 
+   for (let si = 0; si < statements.length; si += 1) {
+     const block = statements[si];
+-    if (isConditionLikeType(block.type) || block.type === 'else' || block.type === 'loop') {
++    if (
++      isConditionLikeType(block.type)
++      || block.type === 'else'
++      || block.type === 'loop'
++      || block.type === 'foreach'
++    ) {
+       lines.push(compileConditionSequence(statements, si, bodyCtx));
+       break;
+     }
+@@ -928,7 +953,12 @@ function compileConditionSequence(allBlocks, startIndex, ctx) {
+   while (i < allBlocks.length) {
+     const b = allBlocks[i];
+     if (i > startIndex && (isEventHandlerType(b.type) || isRootChunkType(b.type))) break;
+-    if (isConditionLikeType(b.type) || b.type === 'else' || b.type === 'loop') {
++    if (
++      isConditionLikeType(b.type)
++      || b.type === 'else'
++      || b.type === 'loop'
++      || b.type === 'foreach'
++    ) {
+       lines.push(transpileBlockToPython(b, ctx));
+       i += 1;
+       const branchCtx = { ...ctx, indent: ctx.indent + 1 };
+@@ -937,6 +967,7 @@ function compileConditionSequence(allBlocks, startIndex, ctx) {
+         !isConditionLikeType(allBlocks[i].type) &&
+         allBlocks[i].type !== 'else' &&
+         allBlocks[i].type !== 'loop' &&
++        allBlocks[i].type !== 'foreach' &&
+         !isEventHandlerType(allBlocks[i].type)
+       ) {
+         lines.push(compileStatement(allBlocks[i], branchCtx));
+@@ -960,7 +991,7 @@ function compileStackBody(blocks, ctx) {
+     const lines = [];
+     const bodyCtx = { ...ctx };
+     for (const b of blocks) {
+-      if (isConditionLikeType(b.type) || b.type === 'loop') {
++      if (isConditionLikeType(b.type) || b.type === 'loop' || b.type === 'foreach') {
+         lines.push(compileConditionSequence(blocks, blocks.indexOf(b), bodyCtx));
+         break;
+       }
+@@ -1014,10 +1045,11 @@ function collectModuleMeta(stacks) {
+     botToken: 'YOUR_BOT_TOKEN',
+     globals: [],
+     commands: [],
+-    fsmStates: new Map(),
++    fsmGraph: null,
+     blockFuncs: [],
+     needsAiohttp: false,
+     needsDb: false,
++    needsSqlite: false,
+   };
+ 
+   for (const stack of stacks || []) {
+@@ -1039,56 +1071,26 @@ function collectModuleMeta(stacks) {
+       meta.blockFuncs.push(compileBlockDefinition(root, blocks.slice(1), { indent: 0 }));
+     }
+     for (const b of blocks) {
+-      if (b.type === 'ask') {
+-        const field = toPyIdent(b.props?.varname || 'field');
+-        if (!meta.fsmStates.has('Form')) meta.fsmStates.set('Form', new Set());
+-        meta.fsmStates.get('Form').add(field);
+-      }
+       if (b.type === 'http') meta.needsAiohttp = true;
+       if (b.type === 'inline_db') meta.needsDb = true;
+-      if (b.type === 'scenario') {
+-        const sc = toPascalCase(b.props?.name || 'Scenario');
+-        if (!meta.fsmStates.has(sc)) meta.fsmStates.set(sc, new Set());
+-      }
+-      if (b.type === 'step') {
+-        const sc = toPascalCase(b.props?.scenario || 'Scenario');
+-        if (!meta.fsmStates.has(sc)) meta.fsmStates.set(sc, new Set());
+-        meta.fsmStates.get(sc).add(toPyIdent(b.props?.name || 'step'));
+-      }
+-      // FIX: Track goto targets to automatically create FSM states
+-      if (b.type === 'goto' || b.type === 'run') {
+-        const target = b?.props?.target ?? b?.props?.label ?? b?.props?.name ?? b?.props?.scenario ?? 'main';
+-        const parts = String(target).split(/[./]/).filter(Boolean);
+-        const scenario = parts[0] || 'Scenario';
+-        const step = parts[1] || parts[0] || 'step';
+-        const sc = toPascalCase(scenario);
+-        if (!meta.fsmStates.has(sc)) meta.fsmStates.set(sc, new Set());
+-        if (parts.length > 1) {
+-          meta.fsmStates.get(sc).add(toPyIdent(step));
+-        } else {
+-          // Single-part target like 'main' becomes a state in Scenario
+-          const defaultScenario = toPascalCase('Scenario');
+-          if (!meta.fsmStates.has(defaultScenario)) meta.fsmStates.set(defaultScenario, new Set());
+-          meta.fsmStates.get(defaultScenario).add(toPyIdent(target));
+-        }
+-      }
+     }
+   }
+-  return meta;
+-}
+ 
+-function emitFsmStates(fsmStates) {
+-  const lines = [];
+-  for (const [group, fields] of fsmStates.entries()) {
+-    // Skip emitting empty State groups — avoid dead / unused FSM classes
+-    if (!fields || fields.size === 0) continue;
+-    lines.push(`class ${group}(StatesGroup):`);
+-    for (const f of fields) {
+-      lines.push(`    ${f} = State()`);
+-    }
+-    lines.push('');
++  meta.needsSqlite = stackHasVisualDb(stacks);
++  if (meta.needsSqlite) meta.needsDb = true;
++
++  meta.fsmGraph = buildFsmGraphFromStacks(stacks);
++  meta.fsmStates = new Map();
++  for (const state of meta.fsmGraph.states || []) {
++    if (!meta.fsmStates.has(state.group)) meta.fsmStates.set(state.group, new Set());
++    meta.fsmStates.get(state.group).add(state.name);
+   }
+-  return lines.join('\n');
++  for (const input of meta.fsmGraph.inputs || []) {
++    if (!meta.fsmStates.has(input.group)) meta.fsmStates.set(input.group, new Set());
++    meta.fsmStates.get(input.group).add(input.field);
++  }
++
++  return meta;
+ }
+ 
+ function emitSetCommands(commands) {
+@@ -1212,7 +1214,9 @@ export function buildPythonModule(stacks, options = {}) {
+     ')',
+   ];
+   if (meta.needsAiohttp) imports.splice(4, 0, 'import aiohttp');
+-  if (meta.needsDb) imports.push('', '# project DB adapter', 'db = {}  # replace with real db.get()');
++  if (meta.needsDb && !meta.needsSqlite) {
++    imports.push('', '# project DB adapter', 'db = {}  # replace with real db.get()');
++  }
+ 
+   const parts = [
+     imports.join('\n'),
+@@ -1221,12 +1225,17 @@ export function buildPythonModule(stacks, options = {}) {
+     '',
+   ];
+ 
++  if (meta.needsSqlite) {
++    parts.push(emitSqliteDbRuntime());
++    parts.push('');
++  }
++
+   for (const g of meta.globals) {
+     parts.push(`${escapePyKey(g.name)} = ${g.value}`);
+   }
+   if (meta.globals.length) parts.push('');
+ 
+-  const fsmCode = emitFsmStates(meta.fsmStates);
++  const fsmCode = emitFsmPythonFromGraph(meta.fsmGraph);
+   if (fsmCode.trim()) {
+     // ensure State/StatesGroup import present when FSM states are emitted
+     const stateImport = 'from aiogram.fsm.state import State, StatesGroup';
+diff --git a/core/codegen/foreachCodegen.js b/core/codegen/foreachCodegen.js
+new file mode 100644
+index 0000000..5f08121
+--- /dev/null
++++ b/core/codegen/foreachCodegen.js
+@@ -0,0 +1,79 @@
++/**
++ * foreach node — list input, item context (body), optional inline keyboard from list.
++ */
++
++import { pyQuote, escapePyKey } from './utils.js';
++
++/** @param {Record<string, unknown>} props */
++export function isForeachKeyboardOutput(props) {
++  const p = props || {};
++  const output = String(p.output ?? p.mode ?? 'body').trim().toLowerCase();
++  return (
++    output === 'inline_keyboard'
++    || output === 'inline'
++    || p.keyboard === 'inline'
++    || p.generateInline === true
++  );
++}
++
++function dslRhsToPython(value) {
++  const raw = String(value ?? '').trim();
++  if (!raw) return '[]';
++  if (/^-?\d+(\.\d+)?$/.test(raw)) return raw;
++  if (raw.toLowerCase() === 'true') return 'True';
++  if (raw.toLowerCase() === 'false') return 'False';
++  if (raw === '[]' || raw === '{}') return raw;
++  if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) {
++    return raw;
++  }
++  if (/^[\w\u0400-\u04FF][\w\u0400-\u04FF.]*$/.test(raw)) return raw;
++  return pyQuote(raw);
++}
++
++/**
++ * Emit inline keyboard built from a list (e.g. products).
++ * @param {Record<string, unknown>} props list, var, labelField, idField, callbackPrefix, columns
++ * @param {string} [varName]
++ */
++export function emitForeachInlineKeyboard(props, varName = 'kb') {
++  const p = props || {};
++  const listExpr = dslRhsToPython(p.list ?? p.collection ?? 'products');
++  const itemVar = escapePyKey(String(p.var ?? p.item ?? 'product'));
++  const labelField = String(p.labelField ?? 'name').trim();
++  const idField = String(p.idField ?? 'id').trim();
++  const prefix = String(p.callbackPrefix ?? 'prod:').replace(/"/g, '\\"');
++  const columns = Math.max(1, Number(p.columns) || 2);
++
++  const textExpr = labelField
++    ? `str(${itemVar}.get(${pyQuote(labelField)}, ${itemVar}) if isinstance(${itemVar}, dict) else ${itemVar})`
++    : `str(${itemVar})`;
++  const cbExpr = idField
++    ? `f"${prefix}{${itemVar}.get(${pyQuote(idField)}, ${itemVar}) if isinstance(${itemVar}, dict) else ${itemVar}}"`
++    : `f"${prefix}{${itemVar}}"`;
++
++  return [
++    `${varName}_rows = []`,
++    `${varName}_row = []`,
++    `for ${itemVar} in ${listExpr}:`,
++    `    ${varName}_row.append(InlineKeyboardButton(text=${textExpr}, callback_data=${cbExpr}))`,
++    `    if len(${varName}_row) >= ${columns}:`,
++    `        ${varName}_rows.append(${varName}_row)`,
++    `        ${varName}_row = []`,
++    `if ${varName}_row:`,
++    `    ${varName}_rows.append(${varName}_row)`,
++    `${varName} = InlineKeyboardMarkup(inline_keyboard=${varName}_rows)`,
++  ].join('\n');
++}
++
++/**
++ * @param {import('./compileCore.js').PythonCodegenContext & { indent?: number }} ctx
++ * @param {object} block
++ */
++export function compileForeachBlock(block, ctx) {
++  const p = block?.props || {};
++  if (isForeachKeyboardOutput(p)) return '';
++  const list = dslRhsToPython(p.list ?? p.collection ?? 'items');
++  const itemVar = escapePyKey(String(p.var ?? p.item ?? 'item'));
++  const ind = '    '.repeat(Math.max(0, ctx?.indent ?? 0));
++  return `${ind}for ${itemVar} in ${list}:`;
++}
+diff --git a/core/graph/flowPorts.js b/core/graph/flowPorts.js
+index 5141756..d6ed40b 100644
+--- a/core/graph/flowPorts.js
++++ b/core/graph/flowPorts.js
+@@ -43,6 +43,7 @@ const PORT_BY_TYPE = Object.freeze({
+   condition: FLOW,
+   condition_not: FLOW,
+   loop: FLOW,
++  foreach: FLOW,
+   delay: FLOW,
+   pause: FLOW,
+   typing: FLOW,
+@@ -61,6 +62,15 @@ const PORT_BY_TYPE = Object.freeze({
+   photo_var: FLOW,
+   document_var: FLOW,
+   media: FLOW,
++  'fsm.state': FLOW,
++  'fsm.input': FLOW,
++  'fsm.transition': FLOW,
++  fsm: FLOW,
++  'db.get': FLOW,
++  'db.set': FLOW,
++  'db.query': FLOW,
++  'db.insert': FLOW,
++  'db.update': FLOW,
+ });
+ 
+ function buildFlowPorts() {
+diff --git a/core/mappers/reactFlowToGraph.ts b/core/mappers/reactFlowToGraph.ts
+index ce98367..e864a83 100644
+--- a/core/mappers/reactFlowToGraph.ts
++++ b/core/mappers/reactFlowToGraph.ts
+@@ -1,19 +1,24 @@
+ import type { BotGraph, GraphNode } from "../../schemas/graph/graph.schema";
++import { normalizeFlowNode } from "../ir/normalizeFlowNode.js";
++import {
++  buildCanonicalFlowEdgeId,
++  sanitizeFlowPosition,
++  type FlowEdgeInput,
++  type FlowNodeInput,
++} from "./flowMapperUtils.ts";
+ 
+-function resolveBlockType(node: any): string {
+-  const raw = String(node?.type || "").trim();
+-  const data = node?.data && typeof node.data === "object" ? node.data : {};
+-  if (raw && raw !== "cicada" && raw !== "unknown") return raw;
+-  return String(data.type || data.blockType || "message").trim() || "message";
++function toCompilerNodeType(blockType: string): string {
++  if (blockType === "start") return "command";
++  if (blockType === "state") return "fsm.state";
++  if (blockType.startsWith("fsm.") || blockType.startsWith("db.")) return blockType;
++  return blockType;
+ }
+ 
+-function resolveBlockData(node: any, blockType: string): Record<string, any> {
+-  const data = node?.data && typeof node.data === "object" ? node.data : {};
+-  const props =
+-    data.props && typeof data.props === "object" && !Array.isArray(data.props)
+-      ? { ...data.props }
+-      : { ...data };
+-
++function resolveBlockData(
++  blockType: string,
++  props: Record<string, unknown>,
++  nodeId: string,
++): Record<string, unknown> {
+   if (blockType === "start" || blockType === "command") {
+     return {
+       command: props.cmd || props.command || "start",
+@@ -35,47 +40,120 @@ function resolveBlockData(node: any, blockType: string): Record<string, any> {
+     };
+   }
+ 
+-  if (blockType === "fsm" || blockType === "state") {
++  if (blockType === "fsm.state" || blockType === "fsm" || blockType === "state") {
+     return {
+-      state: props.state || props.name || node.id,
++      group: props.group || props.scenario || "Form",
++      name: props.name || props.state || props.step || nodeId,
+       ...props,
+     };
+   }
+ 
+-  return props;
+-}
++  if (blockType === "fsm.input") {
++    return {
++      group: props.group || props.scenario || "Form",
++      field: props.field || props.varname || "field",
++      prompt: props.prompt || props.question || props.text || "",
++      ...props,
++    };
++  }
+ 
+-function toCompilerNodeType(blockType: string): string {
+-  if (blockType === "start") return "command";
+-  if (blockType === "state") return "fsm";
+-  return blockType;
++  if (blockType === "fsm.transition") {
++    return {
++      from: props.from || props.source || "",
++      to: props.to || props.target || "",
++      event: props.event || props.label || "",
++      condition: props.condition || props.guard || "",
++      ...props,
++    };
++  }
++
++  if (blockType === "foreach") {
++    return {
++      list: props.list || props.collection || "products",
++      var: props.var || props.item || "product",
++      output: props.output || props.mode || "body",
++      labelField: props.labelField || "name",
++      idField: props.idField || "id",
++      callbackPrefix: props.callbackPrefix || "prod:",
++      columns: props.columns ?? 2,
++      ...props,
++    };
++  }
++
++  if (blockType === "db.get") {
++    return {
++      key: props.key || props.name || nodeId,
++      varname: props.varname || props.var || "value",
++      table: props.table || "kv_store",
++      ...props,
++    };
++  }
++
++  if (blockType === "db.set") {
++    return {
++      key: props.key || props.name || nodeId,
++      value: props.value ?? "",
++      table: props.table || "kv_store",
++      ...props,
++    };
++  }
++
++  if (blockType === "db.query") {
++    return {
++      sql: props.sql || props.query || "SELECT 1",
++      varname: props.varname || props.var || "rows",
++      ...props,
++    };
++  }
++
++  if (blockType === "db.insert") {
++    return {
++      table: props.table || "records",
++      values: props.values || props.row || props,
++      ...props,
++    };
++  }
++
++  if (blockType === "db.update") {
++    return {
++      table: props.table || "records",
++      where: props.where || props.condition || "1=1",
++      values: props.values || props.set || props,
++      ...props,
++    };
++  }
++
++  return { ...props };
+ }
+ 
+-function mapFlowNode(node: any): GraphNode | null {
++function mapFlowNode(node: FlowNodeInput): GraphNode | null {
+   if (!node?.id) return null;
+-  const blockType = resolveBlockType(node);
+-  const compilerType = toCompilerNodeType(blockType);
++  const norm = normalizeFlowNode(node);
++  const compilerType = toCompilerNodeType(norm.type);
+ 
+   return {
+-    id: String(node.id),
++    id: norm.id,
+     type: compilerType,
+-    position: node.position,
+-    data: resolveBlockData(node, blockType),
++    position: sanitizeFlowPosition(node.position),
++    data: resolveBlockData(norm.type, norm.props, norm.id),
+   };
+ }
+ 
+-function mapFlowEdge(edge: any) {
++function mapFlowEdge(edge: FlowEdgeInput) {
+   if (!edge?.source || !edge?.target) return null;
+   return {
+-    id: edge.id || `${edge.source}->${edge.target}`,
+-    source: edge.source,
+-    target: edge.target,
+-    sourceHandle: edge.sourceHandle,
+-    targetHandle: edge.targetHandle,
++    id: buildCanonicalFlowEdgeId(edge),
++    source: String(edge.source),
++    target: String(edge.target),
++    sourceHandle: edge.sourceHandle ?? undefined,
++    targetHandle: edge.targetHandle ?? undefined,
+   };
+ }
+ 
+-export function reactFlowToGraph(nodes: any[], edges: any[]): BotGraph {
++export function reactFlowToGraph(
++  nodes: FlowNodeInput[],
++  edges: FlowEdgeInput[],
++): BotGraph {
+   const compilerNodes = (nodes || [])
+     .map(mapFlowNode)
+     .filter((node): node is GraphNode => node != null);
+diff --git a/core/rules/aiogram3BlockRoles.js b/core/rules/aiogram3BlockRoles.js
+index f0d3f2f..c4bc0a8 100644
+--- a/core/rules/aiogram3BlockRoles.js
++++ b/core/rules/aiogram3BlockRoles.js
+@@ -57,7 +57,7 @@ export const ROLE_FSM = Object.freeze(new Set([
+ ]));
+ 
+ export const ROLE_CONTROL = Object.freeze(new Set([
+-  'condition', 'condition_not', 'else', 'loop', 'delay', 'typing',
++  'condition', 'condition_not', 'else', 'loop', 'foreach', 'delay', 'typing',
+ ]));
+ 
+ export const ROLE_OBSERVABILITY = Object.freeze(new Set(['log', 'analytics']));
+diff --git a/generators/python_aiogram/generateBot.ts b/generators/python_aiogram/generateBot.ts
+index a3a0f44..ab7584f 100644
+--- a/generators/python_aiogram/generateBot.ts
++++ b/generators/python_aiogram/generateBot.ts
+@@ -4,6 +4,25 @@ import {
+   type ExecutionPolicy,
+ } from "../../core/execution/executionPolicy";
+ import { sortEdges } from "../../core/execution/executionContract";
++import { buildFsmGraph } from "../../core/execution/fsmGraph";
++import { buildVisualDbGraphFromBotNodes } from "../../core/db/visual_db_ir";
++import {
++  emitSqliteDbRuntime,
++  emitVisualDbManifest,
++} from "../../core/db/dbCodegen.js";
++import { generateFsmPython } from "./generateFSM";
++import { generateForeachPython } from "./generateForeach";
++
++function executionNodesToDbSources(execution: ExecutionGraph) {
++  return execution.nodes.map((node) => ({
++    id: node.id,
++    type: node.type,
++    payload:
++      node.data && typeof node.data === "object"
++        ? { ...(node.data as Record<string, unknown>) }
++        : {},
++  }));
++}
+ 
+ function formatEdgeLine(edge: {
+   from: string;
+@@ -19,8 +38,8 @@ function formatEdgeLine(edge: {
+ }
+ 
+ /**
+- * Generate aiogram scaffold from prepared ExecutionGraph edges only.
+- * Expects graph that already passed prepareExecutionGraph.
++ * Generate aiogram scaffold from prepared ExecutionGraph.
++ * FSM is graph-based (fsm.state / fsm.input / transition edges).
+  */
+ export function generateAiogramBot(
+   execution: ExecutionGraph,
+@@ -30,13 +49,28 @@ export function generateAiogramBot(
+     .map(formatEdgeLine)
+     .join("\n");
+ 
++  const fsmGraph = buildFsmGraph(execution);
++  const fsmSection = generateFsmPython(fsmGraph);
++  const foreachSection = generateForeachPython(execution);
++  const visualDb = buildVisualDbGraphFromBotNodes(
++    executionNodesToDbSources(execution),
++  );
++  const dbManifest = emitVisualDbManifest(visualDb);
++  const dbRuntime =
++    visualDb.nodeCount > 0 ? `\n${emitSqliteDbRuntime()}\n` : "";
++
++  const fsmImports =
++    fsmSection.includes("StatesGroup") || fsmSection.includes("State()")
++      ? "from aiogram.fsm.state import State, StatesGroup\n"
++      : "";
++
+   return `# EXECUTION GRAPH VERSION: ${execution.version}
+ 
+ from aiogram import Router
+-
++${fsmImports}
+ router = Router()
+ 
+ # --- execution graph (source of truth) ---
+ ${edgeManifest || "# (no edges)"}
+-`;
++${dbManifest}${dbRuntime}${foreachSection}${fsmSection ? `\n${fsmSection}` : ""}`;
+ }
+diff --git a/generators/python_aiogram/generateForeach.ts b/generators/python_aiogram/generateForeach.ts
+new file mode 100644
+index 0000000..4534a7e
+--- /dev/null
++++ b/generators/python_aiogram/generateForeach.ts
+@@ -0,0 +1,23 @@
++import type { ExecutionGraph } from "../../core/execution/executionContract";
++
++/**
++ * Manifest comments for foreach nodes in the execution-graph scaffold.
++ */
++export function generateForeachPython(execution: ExecutionGraph): string {
++  const lines: string[] = [];
++  for (const node of execution.nodes) {
++    if (node.type !== "foreach") continue;
++    const data =
++      node.data && typeof node.data === "object"
++        ? (node.data as Record<string, unknown>)
++        : {};
++    const list = String(data.list ?? data.collection ?? "products");
++    const item = String(data.var ?? data.item ?? "product");
++    const output = String(data.output ?? data.mode ?? "body");
++    lines.push(
++      `# FOREACH ${node.id} list=${list} item=${item} output=${output}`,
++    );
++  }
++  if (!lines.length) return "";
++  return `# --- foreach (list → item context) ---\n${lines.join("\n")}\n`;
++}
+diff --git a/package.json b/package.json
+index fe4edf7..de68ae3 100644
+--- a/package.json
++++ b/package.json
+@@ -18,6 +18,11 @@
+     "lint": "eslint src core/tests services scripts server.mjs",
+     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
+     "test:compiler": "tsx tests/compiler/compiler.test.ts",
++    "test:bot-ir": "tsx tests/compiler/bot_ir.test.ts",
++    "test:block-capabilities": "node --test core/tests/block-capabilities.test.mjs",
++    "test:fsm-graph": "tsx tests/compiler/fsmGraph.test.ts",
++    "test:visual-db": "tsx tests/compiler/visual_db.test.ts",
++    "test:foreach": "tsx tests/compiler/foreach.test.ts",
+     "test:runtime": "tsx tests/compiler/runtime.test.ts",
+     "parser-core-blocks": "node scripts/core-blocks-check.mjs",
+     "jammer:publish": "node scripts/publish-jammer-firmware.mjs",
+diff --git a/src/constructor/graph_document/operation_registry.js b/src/constructor/graph_document/operation_registry.js
+index e64ff27..1b8be26 100644
+--- a/src/constructor/graph_document/operation_registry.js
++++ b/src/constructor/graph_document/operation_registry.js
+@@ -21,6 +21,7 @@ import {
+   blockDefinitions,
+   getBlockDefinition,
+ } from '../../../core/blockRegistry.js';
++import { isAllowedSourcePort } from '../../../core/registry/blockCapabilities.js';
+ import { FLOW_PORTS } from '../../../core/graph/flowPorts.js';
+ import {
+   isGraphKeyboardNode,
+@@ -144,6 +145,15 @@ const INSPECTOR_FIELDS = Object.freeze({
+     { key: 'count', label: 'Количество (если count)', tag: 'input' },
+     { key: 'cond', label: 'Условие (если while)', tag: 'input' },
+   ],
++  foreach: [
++    { key: 'list', label: 'Список (input)', tag: 'input' },
++    { key: 'var', label: 'Переменная элемента (item context)', tag: 'input' },
++    { key: 'output', label: 'body | inline_keyboard', tag: 'input' },
++    { key: 'labelField', label: 'Поле подписи кнопки', tag: 'input' },
++    { key: 'idField', label: 'Поле id для callback', tag: 'input' },
++    { key: 'callbackPrefix', label: 'Префикс callback', tag: 'input' },
++    { key: 'columns', label: 'Кнопок в ряд', tag: 'input' },
++  ],
+ 
+   delay: [{ key: 'seconds', label: 'Секунд ожидания', tag: 'input' }],
+   pause: [{ key: 'seconds', label: 'Секунд ожидания', tag: 'input' }],
+@@ -220,6 +230,15 @@ const VALIDATION_RULES = Object.freeze({
+     }
+     return null;
+   },
++  foreach: (props) => {
++    if (!String(props?.list ?? props?.collection ?? '').trim()) {
++      return 'Укажите список (list)';
++    }
++    if (!String(props?.var ?? props?.item ?? '').trim()) {
++      return 'Укажите переменную элемента (var)';
++    }
++    return null;
++  },
+   bot: (props) => (String(props?.token ?? '').trim() ? null : 'Токен бота обязателен'),
+   version: (props) => (String(props?.version ?? '').trim() ? null : 'Укажите версию'),
+ });
+@@ -253,7 +272,7 @@ function buildOutputPorts(definition) {
+       { id: PORT_KINDS.CONDITION_FALSE, transport, kind: PORT_KINDS.CONDITION_FALSE, label: 'FALSE', edgeLabel: 'FALSE' },
+     ];
+   }
+-  if (definition.type === 'loop') {
++  if (definition.type === 'loop' || definition.type === 'foreach') {
+     return [
+       { id: PORT_KINDS.LOOP_BODY, transport, kind: PORT_KINDS.LOOP_BODY, label: 'BODY', edgeLabel: 'body' },
+       { id: PORT_KINDS.LOOP_DONE, transport, kind: PORT_KINDS.LOOP_DONE, label: 'DONE', edgeLabel: 'done' },
+@@ -387,10 +406,28 @@ export function canConnect(sourceType, targetType, sourcePortId = null, targetPo
+   if (target.inputs.length === 0) {
+     return { ok: false, reason: `${target.type}: no input ports` };
+   }
++  const requestedSourcePort = sourcePortId != null && String(sourcePortId).trim() !== ''
++    ? String(sourcePortId).trim()
++    : null;
++  if (requestedSourcePort && !isAllowedSourcePort(source.type, requestedSourcePort)) {
++    return {
++      ok: false,
++      reason: `${source.type}: output port "${requestedSourcePort}" is not allowed for this block type`,
++      code: 'CAPABILITY_OUTPUT_PORT',
++    };
++  }
+   const sourcePort = findPort(source.outputs, sourcePortId);
+   const targetPort = findPort(target.inputs, targetPortId);
+   if (!sourcePort) return { ok: false, reason: `${source.type}: output port ${sourcePortId} not found` };
+   if (!targetPort) return { ok: false, reason: `${target.type}: input port ${targetPortId} not found` };
++  const resolvedSourcePortId = sourcePort.id || sourcePortId || 'flow';
++  if (!isAllowedSourcePort(source.type, resolvedSourcePortId)) {
++    return {
++      ok: false,
++      reason: `${source.type}: output port "${resolvedSourcePortId}" is not allowed for this block type`,
++      code: 'CAPABILITY_OUTPUT_PORT',
++    };
++  }
+   const sTrans = sourcePort.transport;
+   const tTrans = targetPort.transport;
+   if (sTrans !== '*' && tTrans !== '*' && sTrans !== tTrans) {
+diff --git a/tests/compiler/foreach.test.ts b/tests/compiler/foreach.test.ts
+new file mode 100644
+index 0000000..f1b5ee6
+--- /dev/null
++++ b/tests/compiler/foreach.test.ts
+@@ -0,0 +1,76 @@
++import assert from "node:assert/strict";
++
++import { emitForeachInlineKeyboard, isForeachKeyboardOutput } from "../../core/codegen/foreachCodegen.js";
++import { buildExecutionGraph } from "../../core/execution/buildExecutionGraph";
++import { generateAiogramBot } from "../../generators/python_aiogram/generateBot";
++import { buildPythonModule } from "../../core/codegen/compileCore.js";
++import "../../core/codegen/index.js";
++
++assert.ok(isForeachKeyboardOutput({ output: "inline_keyboard" }));
++assert.equal(isForeachKeyboardOutput({ output: "body" }), false);
++
++const inlinePy = emitForeachInlineKeyboard({
++  list: "products",
++  var: "product",
++  labelField: "name",
++  idField: "id",
++  callbackPrefix: "prod:",
++  columns: 2,
++});
++assert.match(inlinePy, /for product in products/);
++assert.match(inlinePy, /InlineKeyboardButton/);
++assert.match(inlinePy, /prod:/);
++
++const execution = buildExecutionGraph(
++  [
++    { id: "s1", type: "start", data: { cmd: "start" } },
++    {
++      id: "fe1",
++      type: "foreach",
++      data: { list: "products", var: "product", output: "inline_keyboard" },
++    },
++  ],
++  [{ source: "s1", target: "fe1", sourceHandle: "flow", targetHandle: "flow" }],
++);
++const scaffold = generateAiogramBot(execution);
++assert.match(scaffold, /# FOREACH fe1/);
++assert.match(scaffold, /list=products/);
++
++const stacks = [
++  {
++    blocks: [
++      { id: "start1", type: "start", props: { cmd: "start" } },
++      {
++        id: "fe1",
++        type: "foreach",
++        props: {
++          list: "products",
++          var: "product",
++          output: "inline_keyboard",
++          labelField: "name",
++          idField: "id",
++          callbackPrefix: "prod:",
++        },
++      },
++      { id: "msg1", type: "message", props: { text: "Choose:" } },
++    ],
++  },
++];
++const python = buildPythonModule(stacks);
++assert.match(python, /for product in products/);
++assert.match(python, /InlineKeyboardMarkup/);
++assert.match(python, /Choose:/);
++
++const bodyStacks = [
++  {
++    blocks: [
++      { id: "start1", type: "start", props: { cmd: "start" } },
++      { id: "fe1", type: "foreach", props: { list: "items", var: "item", output: "body" } },
++      { id: "log1", type: "log", props: { message: "x" } },
++    ],
++  },
++];
++const bodyPy = buildPythonModule(bodyStacks);
++assert.match(bodyPy, /for item in items:/);
++
++console.log("foreach test OK");

@@ -1,0 +1,1944 @@
+diff --git a/core/ai/dryRunFlow.js b/core/ai/dryRunFlow.js
+index aa6e91a..cc52b7b 100644
+--- a/core/ai/dryRunFlow.js
++++ b/core/ai/dryRunFlow.js
+@@ -1,3 +1,5 @@
++import { resolveFlowNodeType } from '../ir/resolveFlowNodeType.js';
++
+ /**
+  * Песочница / dry-run планировщика: без исполнения в Telegram, только эвристики политики и согласованности.
+  * Не заменяет parser.py и не является семантическим «исполнителем».
+@@ -33,8 +35,7 @@ export function dryRunFlowPolicy(flow, policy = {}) {
+   let gotoCount = 0;
+ 
+   for (const n of nodes) {
+-    const data = /** @type {{ type?: string, props?: Record<string, unknown> }} */ (n?.data || {});
+-    const t = data.type || /** @type {{ type?: string }} */ (n)?.type;
++    const t = resolveFlowNodeType(n);
+ 
+     if (t === 'http') httpCount += 1;
+     if (t === 'broadcast') broadcastCount += 1;
+diff --git a/core/ai/semanticValidateFlow.js b/core/ai/semanticValidateFlow.js
+index bfc4d5c..47b9d8e 100644
+--- a/core/ai/semanticValidateFlow.js
++++ b/core/ai/semanticValidateFlow.js
+@@ -6,6 +6,7 @@
+  */
+ 
+ import { validateFlow } from '../graph/flowValidate.js';
++import { resolveFlowNodeType, resolveFlowNodeProps } from '../ir/resolveFlowNodeType.js';
+ 
+ /**
+  * @param {{ nodes?: unknown[], edges?: unknown[] }} flow
+@@ -21,24 +22,24 @@ export function semanticValidateFlow(flow) {
+   const nodes = flow?.nodes || [];
+   for (const n of nodes) {
+     const id = typeof n?.id === 'string' ? n.id : undefined;
+-    const data = /** @type {{ type?: string, props?: Record<string, unknown> }} */ (n?.data || {});
+-    const t = data.type || /** @type {{ type?: string }} */ (n)?.type;
++    const t = resolveFlowNodeType(n);
++    const props = resolveFlowNodeProps(n);
+ 
+     if (t === 'poll') {
+-      const q = String(data.props?.question || '').trim();
+-      const opt = String(data.props?.options || '').trim();
++      const q = String(props.question || '').trim();
++      const opt = String(props.options || '').trim();
+       if (!q) errors.push({ type: 'SemanticError', message: 'Опрос: пустой вопрос', nodeId: id });
+       if (!opt) errors.push({ type: 'SemanticError', message: 'Опрос: нет вариантов ответа', nodeId: id });
+     }
+ 
+     if (t === 'random') {
+-      const v = String(data.props?.variants || '').trim();
++      const v = String(props.variants || '').trim();
+       if (!v) errors.push({ type: 'SemanticError', message: 'Рандом: нет вариантов', nodeId: id });
+     }
+ 
+     if (t === 'message') {
+-      const text = String(data.props?.text || '').trim();
+-      if (!text && !data.props?.media) {
++      const text = String(props.text || '').trim();
++      if (!text && !props.media) {
+         errors.push({ type: 'SemanticError', message: 'Ответ: пустой текст', nodeId: id });
+       }
+     }
+diff --git a/core/capabilities/nodeCapabilities.ts b/core/capabilities/nodeCapabilities.ts
+index 55fabb9..68529a3 100644
+--- a/core/capabilities/nodeCapabilities.ts
++++ b/core/capabilities/nodeCapabilities.ts
+@@ -1,21 +1,8 @@
+-export const NODE_CAPABILITIES = {
+-  command: {
+-    outputs: ["next"],
+-    inputs: [],
+-  },
+-
+-  message: {
+-    outputs: ["next"],
+-    inputs: ["input"],
+-  },
+-
+-  callback: {
+-    outputs: ["next"],
+-    inputs: ["input"],
+-  },
+-
+-  fsm: {
+-    outputs: ["success", "fail"],
+-    inputs: ["input"],
+-  },
+-};
++/**
++ * @deprecated Use `getBlockCapabilities` from `core/registry/blockCapabilities.js`.
++ * Kept for backward-compatible imports only.
++ */
++export {
++  getBlockCapabilities as getNodeCapabilitiesLegacy,
++  blockCapabilitiesByType as NODE_CAPABILITIES,
++} from "../registry/blockCapabilities.js";
+diff --git a/core/compiler/codegen.ts b/core/compiler/codegen.ts
+index 74ae23e..58c7162 100644
+--- a/core/compiler/codegen.ts
++++ b/core/compiler/codegen.ts
+@@ -1,8 +1,19 @@
+ import { parseGraph } from "./parser";
+ import { normalizeAst } from "./normalizer";
+-import { validateGraph } from "./validator";
+-import { buildExecutionGraph } from "../execution/buildExecutionGraph";
++import { validateGraph as validateExecutionAst } from "./validator";
++import {
++  buildExecutionGraph,
++  buildExecutionGraphFromBotIR,
++} from "../execution/buildExecutionGraph";
+ import { assertExecutionInvariants } from "../execution/assertExecutionInvariants";
++import { graphToBotIR, type GraphDocumentInput } from "../ir/bot_ir";
++import {
++  compileGraphDocumentToPython,
++  lowerGraphDocumentToExecution,
++  type UnifiedCompileOptions,
++  type UnifiedCompileResult,
++} from "./unifiedCompilePipeline";
++import { isGraphDocumentShape } from "../../src/constructor/graph_document/graph_schema.js";
+ import {
+   DEFAULT_EXECUTION_POLICY,
+   prepareExecutionGraph,
+@@ -10,14 +21,28 @@ import {
+   type ExecutionPolicy,
+   type PreparedExecutionGraphResult,
+ } from "../execution/prepareExecutionGraph";
+-import { buildFSM } from "../execution/buildFSM";
++import { buildFSM, buildFsmGraph } from "../execution/buildFSM";
+ import { buildCallbackRoutes } from "../execution/buildCallbackRoutes";
+ import { generateAiogramBot } from "../../generators/python_aiogram/generateBot";
++import { buildVisualDbGraphFromBotNodes } from "../db/visual_db_ir";
+ import { logStep } from "../debug/compilerLogger";
+ import { CURRENT_VERSION } from "../execution/version";
+ import type { ExecutionGraph } from "../execution/executionContract";
+ 
+-export interface CompileGraphOptions {
++function visualDbFromExecution(execution: ExecutionGraph) {
++  return buildVisualDbGraphFromBotNodes(
++    execution.nodes.map((node) => ({
++      id: node.id,
++      type: node.type,
++      payload:
++        node.data && typeof node.data === "object"
++          ? { ...(node.data as Record<string, unknown>) }
++          : {},
++    })),
++  );
++}
++
++export interface CompileGraphOptions extends UnifiedCompileOptions {
+   /** Skip build/migrate/validate when middleware already prepared the graph. */
+   prepared?: PreparedExecutionGraphResult;
+   policy?: ExecutionPolicy;
+@@ -26,9 +51,22 @@ export interface CompileGraphOptions {
+    * API / strict compile must leave this false.
+    */
+   allowIncomplete?: boolean;
++  /** Canonical GraphDocument input (Visual Graph). */
++  graphDocument?: GraphDocumentInput;
++}
++
++function isGraphDocumentInput(value: unknown): value is GraphDocumentInput {
++  return isGraphDocumentShape(value);
+ }
+ 
+ function compileGraphImpl(graph: any, options: CompileGraphOptions = {}) {
++  if (options.graphDocument || isGraphDocumentInput(graph)) {
++    return compileGraphDocumentToPython(
++      (options.graphDocument ?? graph) as GraphDocumentInput,
++      options,
++    );
++  }
++
+   const policy = resolveExecutionPolicy(
+     options.prepared?.policy ?? options.policy ?? DEFAULT_EXECUTION_POLICY,
+   );
+@@ -43,20 +81,29 @@ function compileGraphImpl(graph: any, options: CompileGraphOptions = {}) {
+ 
+   logStep("validate");
+ 
+-  validateGraph(normalized);
++  validateExecutionAst(normalized);
++
++  logStep("bot_ir");
++
++  const botIr = graphToBotIR({
++    schema_version: 2,
++    nodes: normalized.nodes,
++    edges: normalized.edges,
++    metadata: { generatedFrom: "legacy_flow" },
++  });
+ 
+   logStep("execution");
+ 
+-  const built = buildExecutionGraph(
+-    normalized.nodes,
+-    normalized.edges,
+-    normalized.version ?? graph.version ?? "1.0",
++  const built = buildExecutionGraphFromBotIR(
++    botIr,
++    normalized.version ?? graph.version ?? CURRENT_VERSION,
+   );
+ 
+   if (options.allowIncomplete && built.edges.length === 0) {
+     return {
+       success: false,
+       python: "",
++      botIr,
+       execution: built,
+       policy,
+       compatibilityWarnings: [],
+@@ -68,7 +115,9 @@ function compileGraphImpl(graph: any, options: CompileGraphOptions = {}) {
+       runtime: {
+         execution: built,
+         fsm: {},
++        fsmGraph: buildFsmGraph(built),
+         callbacks: {},
++        visualDb: botIr.visualDb,
+       },
+       empty: true,
+     };
+@@ -80,8 +129,10 @@ function compileGraphImpl(graph: any, options: CompileGraphOptions = {}) {
+   const { execution, compatibilityWarnings, migration } = prepared;
+   assertExecutionInvariants(execution);
+ 
++  const fsmGraph = buildFsmGraph(execution);
+   const fsm = buildFSM(execution);
+   const callbacks = buildCallbackRoutes(execution);
++  const visualDb = visualDbFromExecution(execution);
+ 
+   logStep("generate aiogram");
+ 
+@@ -90,6 +141,7 @@ function compileGraphImpl(graph: any, options: CompileGraphOptions = {}) {
+   return {
+     success: true,
+     python,
++    botIr,
+     execution,
+     policy: prepared.policy,
+     compatibilityWarnings,
+@@ -97,7 +149,9 @@ function compileGraphImpl(graph: any, options: CompileGraphOptions = {}) {
+     runtime: {
+       execution,
+       fsm,
++      fsmGraph,
+       callbacks,
++      visualDb: botIr.visualDb,
+     },
+   };
+ }
+@@ -116,4 +170,11 @@ export type {
+   ExecutionPolicy,
+   PreparedExecutionGraphResult,
+   CompileGraphOptions,
++  UnifiedCompileOptions,
++  UnifiedCompileResult,
++};
++
++export {
++  compileGraphDocumentToPython,
++  lowerGraphDocumentToExecution,
+ };
+diff --git a/core/compiler/index.ts b/core/compiler/index.ts
+index 44339eb..605434a 100644
+--- a/core/compiler/index.ts
++++ b/core/compiler/index.ts
+@@ -3,3 +3,4 @@ export * from "./normalizer";
+ export * from "./validator";
+ export * from "./dependencyResolver";
+ export * from "./codegen";
++export * from "./unifiedCompilePipeline";
+diff --git a/core/compiler/permissionValidator.ts b/core/compiler/permissionValidator.ts
+new file mode 100644
+index 0000000..49dff96
+--- /dev/null
++++ b/core/compiler/permissionValidator.ts
+@@ -0,0 +1,20 @@
++import { validateRequireRoleProps } from "../permissions/permissionRoles.js";
++
++export function validatePermissionNodes(nodes: Array<{ id?: string; type?: string; data?: Record<string, unknown> }>) {
++  const errors: Array<{ nodeId: string; message: string }> = [];
++
++  for (const node of nodes || []) {
++    if (String(node?.type || "").trim() !== "require_role") continue;
++    const payload =
++      node.data && typeof node.data === "object" ? node.data : {};
++    const err = validateRequireRoleProps(payload);
++    if (err) {
++      errors.push({
++        nodeId: String(node.id || "require_role"),
++        message: err,
++      });
++    }
++  }
++
++  return errors;
++}
+diff --git a/core/compiler/unifiedCompilePipeline.ts b/core/compiler/unifiedCompilePipeline.ts
+new file mode 100644
+index 0000000..e070774
+--- /dev/null
++++ b/core/compiler/unifiedCompilePipeline.ts
+@@ -0,0 +1,177 @@
++/**
++ * Unified compile pipeline:
++ *   Visual Graph (GraphDocument) → Bot IR → Execution Graph → aiogram3 Python
++ */
++
++import { graphToBotIR, type BotIRGraph, type GraphDocumentInput } from "../ir/bot_ir.js";
++import { botIrToExecutionGraph } from "../ir/botIrToExecutionGraph.js";
++import {
++  assertCompileReady,
++  validateBotIR,
++  validateCompile,
++  type StrictValidationOptions,
++} from "../validation/strictPipeline.js";
++import { assertExecutionInvariants } from "../execution/assertExecutionInvariants.js";
++import {
++  DEFAULT_EXECUTION_POLICY,
++  prepareExecutionGraph,
++  resolveExecutionPolicy,
++  type ExecutionPolicy,
++  type PreparedExecutionGraphResult,
++} from "../execution/prepareExecutionGraph.js";
++import { buildFSM, buildFsmGraph } from "../execution/buildFSM.js";
++import { buildCallbackRoutes } from "../execution/buildCallbackRoutes.js";
++import { generateAiogramBot } from "../../generators/python_aiogram/generateBot.js";
++import { CURRENT_VERSION } from "../execution/version.js";
++import type { ExecutionGraph } from "../execution/executionContract.js";
++import { logStep } from "../debug/compilerLogger.js";
++import type { VisualDbGraph } from "../db/visual_db_ir.js";
++
++export interface UnifiedCompileOptions extends StrictValidationOptions {
++  policy?: ExecutionPolicy;
++  /** UI preview: allow empty / edge-less graphs. */
++  allowIncomplete?: boolean;
++  /** Skip validateCompile gate (tests only). */
++  skipValidation?: boolean;
++  prepared?: PreparedExecutionGraphResult;
++}
++
++export interface UnifiedCompileResult {
++  success: boolean;
++  python: string;
++  botIr: BotIRGraph;
++  execution: ExecutionGraph;
++  policy: ExecutionPolicy;
++  compatibilityWarnings: string[];
++  migration: PreparedExecutionGraphResult["migration"];
++  runtime: {
++    execution: ExecutionGraph;
++    fsm: ReturnType<typeof buildFSM>;
++    fsmGraph: ReturnType<typeof buildFsmGraph>;
++    callbacks: ReturnType<typeof buildCallbackRoutes>;
++    visualDb: VisualDbGraph;
++  };
++  empty?: boolean;
++}
++
++/**
++ * Visual Graph → Bot IR → Execution Graph (validated).
++ */
++export function lowerGraphDocumentToExecution(
++  graphDocument: GraphDocumentInput,
++  options: UnifiedCompileOptions = {},
++): { botIr: BotIRGraph; execution: ExecutionGraph; prepared: PreparedExecutionGraphResult } {
++  const policy = resolveExecutionPolicy(
++    options.prepared?.policy ?? options.policy ?? DEFAULT_EXECUTION_POLICY,
++  );
++
++  logStep("bot_ir");
++  const botIr = graphToBotIR(graphDocument);
++
++  if (options.skipValidation !== true) {
++    logStep("validate_bot_ir");
++    const irGate = validateBotIR(botIr, {
++      failFast: options.failFast !== false,
++    });
++    if (!irGate.ok) {
++      const first = irGate.errors[0];
++      throw new Error(first?.message || "Bot IR validation failed");
++    }
++  }
++
++  logStep("execution_graph");
++  const built = botIrToExecutionGraph(botIr, CURRENT_VERSION);
++
++  if (options.allowIncomplete && built.edges.length === 0) {
++    return {
++      botIr,
++      execution: built,
++      prepared: {
++        execution: built,
++        policy,
++        compatibilityWarnings: [],
++        migration: {
++          migratedFrom: built.version,
++          migratedTo: built.version,
++          stepsApplied: [],
++        },
++      },
++    };
++  }
++
++  const prepared =
++    options.prepared ?? prepareExecutionGraph(built, CURRENT_VERSION, policy);
++
++  assertExecutionInvariants(prepared.execution);
++
++  return { botIr, execution: prepared.execution, prepared };
++}
++
++/**
++ * Full pipeline through aiogram3 codegen.
++ */
++export function compileGraphDocumentToPython(
++  graphDocument: GraphDocumentInput,
++  options: UnifiedCompileOptions = {},
++): UnifiedCompileResult {
++  if (options.skipValidation !== true) {
++    logStep("validate_compile");
++    if (options.failFast !== false) {
++      assertCompileReady(graphDocument, options);
++    } else {
++      const gate = validateCompile(graphDocument, options);
++      if (!gate.ok) {
++        const first = gate.errors[0];
++        throw new Error(first?.message || "Compile validation failed");
++      }
++    }
++  }
++
++  const { botIr, execution, prepared } = lowerGraphDocumentToExecution(
++    graphDocument,
++    options,
++  );
++
++  if (options.allowIncomplete && execution.edges.length === 0) {
++    return {
++      success: false,
++      python: "",
++      botIr,
++      execution,
++      policy: prepared.policy,
++      compatibilityWarnings: prepared.compatibilityWarnings,
++      migration: prepared.migration,
++      runtime: {
++        execution,
++        fsm: {},
++        fsmGraph: buildFsmGraph(execution),
++        callbacks: {},
++        visualDb: botIr.visualDb,
++      },
++      empty: true,
++    };
++  }
++
++  logStep("generate aiogram");
++  const fsmGraph = buildFsmGraph(execution);
++  const fsm = buildFSM(execution);
++  const callbacks = buildCallbackRoutes(execution);
++  const python = generateAiogramBot(execution, prepared.policy);
++
++  return {
++    success: true,
++    python,
++    botIr,
++    execution,
++    policy: prepared.policy,
++    compatibilityWarnings: prepared.compatibilityWarnings,
++    migration: prepared.migration,
++    runtime: {
++      execution,
++      fsm,
++      fsmGraph,
++      callbacks,
++      visualDb: botIr.visualDb,
++    },
++  };
++}
+diff --git a/core/compiler/validator.ts b/core/compiler/validator.ts
+index 227776e..d234fb1 100644
+--- a/core/compiler/validator.ts
++++ b/core/compiler/validator.ts
+@@ -1,3 +1,9 @@
++import {
++  assertBlockCapabilitiesRegistered,
++  getBlockCapabilities,
++} from "../registry/blockCapabilities.js";
++import { validatePermissionNodes } from "./permissionValidator";
++
+ export function validateGraph(ast: any) {
+   const ids = new Set<string>();
+ 
+@@ -10,6 +16,26 @@ export function validateGraph(ast: any) {
+     }
+ 
+     ids.add(node.id);
++
++    const blockType = String(node?.type || "").trim();
++    if (!blockType) {
++      throw new Error(`ExecutionGraph node "${node.id}" is missing type`);
++    }
++    assertBlockCapabilitiesRegistered(blockType);
++    const caps = getBlockCapabilities(blockType);
++    if (!Array.isArray(caps.outputs)) {
++      throw new Error(
++        `ExecutionGraph node "${node.id}": invalid capabilities.outputs`,
++      );
++    }
++  }
++
++  const permissionErrors = validatePermissionNodes(ast.nodes || []);
++  if (permissionErrors.length) {
++    const first = permissionErrors[0];
++    throw new Error(
++      `Permission validation failed for node "${first.nodeId}": ${first.message}`,
++    );
+   }
+ 
+   return true;
+diff --git a/core/execution/buildExecutionGraph.ts b/core/execution/buildExecutionGraph.ts
+index 68fd3f1..a78f3ce 100644
+--- a/core/execution/buildExecutionGraph.ts
++++ b/core/execution/buildExecutionGraph.ts
+@@ -1,4 +1,9 @@
+ import { CURRENT_VERSION } from "./version";
++import { executionTriggerForSource } from "../registry/blockCapabilities.js";
++import { assertRegisteredBlockType } from "../../src/constructor/graph_document/graph_node_payload.js";
++import { resolveFlowNodeType, resolveFlowNodeProps } from "../ir/resolveFlowNodeType.js";
++import type { BotIRGraph } from "../ir/bot_ir.js";
++import { botIrToExecutionGraph } from "../ir/botIrToExecutionGraph.js";
+ import type {
+   ExecutionEdge,
+   ExecutionGraph,
+@@ -6,23 +11,36 @@ import type {
+   ExecutionTrigger,
+ } from "./executionContract";
+ 
+-function inferTrigger(source: ExecutionNode): ExecutionTrigger {
+-  if (source.type === "fsm") return "state";
+-  if (source.type === "callback") return "callback";
+-  return "next";
++function inferTrigger(
++  source: ExecutionNode,
++  sourcePortId?: string | null,
++): ExecutionTrigger {
++  return executionTriggerForSource(source.type, sourcePortId);
+ }
+ 
+ function toExecutionNode(node: any): ExecutionNode {
++  const nodeId = String(node?.id ?? "").trim();
++  const type = assertRegisteredBlockType(resolveFlowNodeType(node), {
++    nodeId: nodeId || undefined,
++  });
++  const props = resolveFlowNodeProps(node);
+   return {
+-    id: node.id,
+-    type: node.type,
+-    data: (node.data && typeof node.data === "object" ? node.data : {}) as Record<
+-      string,
+-      unknown
+-    >,
++    id: nodeId,
++    type,
++    data: props as Record<string, unknown>,
+   };
+ }
+ 
++/**
++ * Lower Bot IR → Execution Graph (canonical path).
++ */
++export function buildExecutionGraphFromBotIR(
++  botIr: BotIRGraph,
++  version = CURRENT_VERSION,
++): ExecutionGraph {
++  return botIrToExecutionGraph(botIr, version);
++}
++
+ export function buildExecutionGraph(
+   nodes: any[],
+   edges: any[],
+@@ -37,7 +55,10 @@ export function buildExecutionGraph(
+     const source = nodeById.get(edge.source);
+     if (!source) continue;
+ 
+-    const trigger = inferTrigger(source);
++    const trigger = inferTrigger(
++      source,
++      edge.sourceHandle ?? edge.sourcePort ?? null,
++    );
+     const executionEdge: ExecutionEdge = {
+       from: edge.source,
+       to: edge.target,
+@@ -50,7 +71,13 @@ export function buildExecutionGraph(
+     }
+ 
+     if (trigger === "state") {
+-      const state = String(source.data?.state ?? "");
++      const data = source.data && typeof source.data === "object" ? source.data : {};
++      const state = String(
++        (data as Record<string, unknown>).name
++          ?? (data as Record<string, unknown>).state
++          ?? (data as Record<string, unknown>).event
++          ?? "",
++      );
+       if (state) executionEdge.condition = state;
+     }
+ 
+diff --git a/core/execution/validateExecutionGraphCore.ts b/core/execution/validateExecutionGraphCore.ts
+index 949e781..279cd9d 100644
+--- a/core/execution/validateExecutionGraphCore.ts
++++ b/core/execution/validateExecutionGraphCore.ts
+@@ -12,6 +12,7 @@ import {
+   DEFAULT_EXECUTION_POLICY,
+   type ExecutionPolicy,
+ } from "./executionPolicy";
++import { validateExecutionGraphRegistry } from "./validateExecutionGraphRegistry.js";
+ import {
+   executionGraphSchema,
+   type ExecutionGraphInput,
+@@ -23,7 +24,9 @@ export type ExecutionGraphValidationCode =
+   | "MISSING_EDGES"
+   | "ORPHAN_NODES"
+   | "CYCLE_DETECTED"
+-  | "UNKNOWN_EDGE_NODE";
++  | "UNKNOWN_EDGE_NODE"
++  | "UNKNOWN_NODE_TYPE"
++  | "UNREGISTERED_CAPABILITY";
+ 
+ export class ExecutionGraphValidationError extends Error {
+   readonly code: ExecutionGraphValidationCode;
+@@ -171,6 +174,8 @@ export function validateExecutionGraphCore(
+   const compatibilityWarnings = resolveVersionCompatibility(parsed.version);
+   const execution = normalizeExecutionGraph(parsed);
+ 
++  validateExecutionGraphRegistry(execution);
++
+   assertMissingEdges(execution);
+   assertEdgeNodeReferences(execution);
+   assertNoOrphanNodes(execution);
+diff --git a/core/execution/validateExecutionGraphRegistry.ts b/core/execution/validateExecutionGraphRegistry.ts
+new file mode 100644
+index 0000000..7f0e20d
+--- /dev/null
++++ b/core/execution/validateExecutionGraphRegistry.ts
+@@ -0,0 +1,54 @@
++/**
++ * Registry enforcement for Execution Graph nodes (fail-fast, no unknown types).
++ */
++
++import { assertRegisteredBlockType } from "../../src/constructor/graph_document/graph_node_payload.js";
++import {
++  assertBlockCapabilitiesRegistered,
++  hasBlockCapabilities,
++} from "../registry/blockCapabilities.js";
++import type { ExecutionGraph } from "./executionContract.js";
++import { ExecutionGraphValidationError } from "./validateExecutionGraphCore.js";
++
++export type ExecutionRegistryValidationCode =
++  | "UNKNOWN_NODE_TYPE"
++  | "UNREGISTERED_CAPABILITY";
++
++export function validateExecutionGraphRegistry(
++  execution: ExecutionGraph,
++): void {
++  for (const node of execution.nodes) {
++    const nodeId = String(node.id || "").trim();
++    const rawType = String(node.type || "").trim();
++
++    try {
++      assertRegisteredBlockType(rawType, { nodeId });
++    } catch (err) {
++      const message = err instanceof Error ? err.message : String(err);
++      throw new ExecutionGraphValidationError(
++        "UNKNOWN_NODE_TYPE",
++        message,
++        { nodeId, type: rawType },
++      );
++    }
++
++    if (!hasBlockCapabilities(rawType)) {
++      throw new ExecutionGraphValidationError(
++        "UNREGISTERED_CAPABILITY",
++        `Execution node "${nodeId}": no capability map for type "${rawType}"`,
++        { nodeId, type: rawType },
++      );
++    }
++
++    try {
++      assertBlockCapabilitiesRegistered(rawType);
++    } catch (err) {
++      const message = err instanceof Error ? err.message : String(err);
++      throw new ExecutionGraphValidationError(
++        "UNREGISTERED_CAPABILITY",
++        message,
++        { nodeId, type: rawType },
++      );
++    }
++  }
++}
+diff --git a/core/graph/flowValidate.js b/core/graph/flowValidate.js
+index 0660dfe..251ff22 100644
+--- a/core/graph/flowValidate.js
++++ b/core/graph/flowValidate.js
+@@ -4,6 +4,11 @@
+ import { FLOW_PORTS } from './flowPorts.js';
+ import { validateProjectIr } from '../ir/validateProjectIr.js';
+ import { validateAiogram3Graph } from '../rules/aiogram3RuleEngine.js';
++import {
++  resolveFlowNodeType,
++  resolveFlowNodeProps,
++  resolveFlowNodeLabel,
++} from '../ir/resolveFlowNodeType.js';
+ 
+ function portFor(blockType, dir) {
+   const cfg = FLOW_PORTS[blockType] || { input: 'flow', output: 'flow' };
+@@ -24,9 +29,9 @@ export function validateFlow(flow) {
+   const nodes = flow?.nodes || [];
+   const edges = flow?.edges || [];
+   const idset = new Set(nodes.map((n) => n.id));
+-  const blockType = (n) => n?.data?.type || n?.type;
+-  const blockProps = (n) => n?.data?.props || n.props || {};
+-  const blockLabel = (n) => n?.data?.label || n?.label || blockType(n);
++  const blockType = (n) => resolveFlowNodeType(n);
++  const blockProps = (n) => resolveFlowNodeProps(n);
++  const blockLabel = (n) => resolveFlowNodeLabel(n);
+ 
+   for (const e of edges) {
+     if (!idset.has(e.source) || !idset.has(e.target)) {
+diff --git a/core/graph/graphExecutor.ts b/core/graph/graphExecutor.ts
+index 7704575..a3c7c83 100644
+--- a/core/graph/graphExecutor.ts
++++ b/core/graph/graphExecutor.ts
+@@ -1,4 +1,7 @@
+-import { buildExecutionGraph } from "../execution/buildExecutionGraph";
++import { buildExecutionGraphFromBotIR } from "../execution/buildExecutionGraph";
++import { graphToBotIR } from "../ir/bot_ir";
++import type { GraphDocumentInput } from "../ir/bot_ir";
++import { isGraphDocumentShape } from "../../src/constructor/graph_document/graph_schema.js";
+ import { assertExecutionInvariants } from "../execution/assertExecutionInvariants";
+ import {
+   DEFAULT_EXECUTION_POLICY,
+@@ -7,7 +10,7 @@ import {
+   type ExecutionPolicy,
+   type PreparedExecutionGraphResult,
+ } from "../execution/prepareExecutionGraph";
+-import { buildFSM } from "../execution/buildFSM";
++import { buildFSM, buildFsmGraph } from "../execution/buildFSM";
+ import { buildCallbackRoutes } from "../execution/buildCallbackRoutes";
+ import type { ExecutionGraph } from "../execution/executionContract";
+ import { CURRENT_VERSION } from "../execution/version";
+@@ -18,6 +21,7 @@ export interface GraphExecutionResult {
+   compatibilityWarnings: string[];
+   migration: PreparedExecutionGraphResult["migration"];
+   fsm: ReturnType<typeof buildFSM>;
++  fsmGraph: ReturnType<typeof buildFsmGraph>;
+   callbacks: ReturnType<typeof buildCallbackRoutes>;
+ }
+ 
+@@ -25,20 +29,40 @@ export interface ExecuteGraphOptions {
+   policy?: ExecutionPolicy;
+ }
+ 
++function toBotIr(graph: {
++  nodes: any[];
++  edges: any[];
++  version?: string;
++  schema_version?: number;
++  metadata?: Record<string, unknown>;
++}) {
++  if (isGraphDocumentShape(graph)) {
++    return graphToBotIR(graph as GraphDocumentInput);
++  }
++  return graphToBotIR({
++    schema_version: graph.schema_version ?? 2,
++    nodes: graph.nodes,
++    edges: graph.edges,
++    metadata: graph.metadata ?? { generatedFrom: "flow" },
++  });
++}
++
+ export function executeGraph(
+   graph: {
+     nodes: any[];
+     edges: any[];
+     version?: string;
++    schema_version?: number;
++    metadata?: Record<string, unknown>;
+   },
+   options: ExecuteGraphOptions = {},
+ ): GraphExecutionResult {
+   const policy = resolveExecutionPolicy(options.policy ?? DEFAULT_EXECUTION_POLICY);
++  const botIr = toBotIr(graph);
+   const prepared = prepareExecutionGraph(
+-    buildExecutionGraph(
+-      graph.nodes,
+-      graph.edges,
+-      graph.version ?? "1.0",
++    buildExecutionGraphFromBotIR(
++      botIr,
++      graph.version ?? CURRENT_VERSION,
+     ),
+     CURRENT_VERSION,
+     policy,
+@@ -52,6 +76,7 @@ export function executeGraph(
+     compatibilityWarnings: prepared.compatibilityWarnings,
+     migration: prepared.migration,
+     fsm: buildFSM(prepared.execution),
++    fsmGraph: buildFsmGraph(prepared.execution),
+     callbacks: buildCallbackRoutes(prepared.execution),
+   };
+ }
+diff --git a/core/ir/botIrToExecutionGraph.ts b/core/ir/botIrToExecutionGraph.ts
+new file mode 100644
+index 0000000..f73e25c
+--- /dev/null
++++ b/core/ir/botIrToExecutionGraph.ts
+@@ -0,0 +1,104 @@
++/**
++ * Bot IR → Execution Graph (capability-based edge triggers).
++ */
++
++import {
++  assertBlockCapabilitiesRegistered,
++  executionTriggerForSource,
++} from "../registry/blockCapabilities.js";
++import { assertRegisteredBlockType } from "../../src/constructor/graph_document/graph_node_payload.js";
++import { CURRENT_VERSION } from "../execution/version.js";
++import type {
++  ExecutionEdge,
++  ExecutionGraph,
++  ExecutionNode,
++} from "../execution/executionContract.js";
++import type { BotIRGraph, BotIRNode } from "./bot_ir.js";
++
++function botIrNodeToExecution(node: BotIRNode): ExecutionNode {
++  const type = assertRegisteredBlockType(node.type, { nodeId: node.id });
++  assertBlockCapabilitiesRegistered(type);
++  return {
++    id: node.id,
++    type,
++    data: { ...node.payload },
++  };
++}
++
++function conditionFromSource(
++  source: ExecutionNode,
++  trigger: ExecutionEdge["trigger"],
++): string | undefined {
++  const data =
++    source.data && typeof source.data === "object" ? source.data : {};
++
++  if (trigger === "callback") {
++    const callback = String(
++      (data as Record<string, unknown>).callback
++        ?? (data as Record<string, unknown>).data
++        ?? (data as Record<string, unknown>).dataPrefix
++        ?? "",
++    );
++    return callback || undefined;
++  }
++
++  if (trigger === "state") {
++    const state = String(
++      (data as Record<string, unknown>).name
++        ?? (data as Record<string, unknown>).state
++        ?? (data as Record<string, unknown>).event
++        ?? "",
++    );
++    return state || undefined;
++  }
++
++  return undefined;
++}
++
++/**
++ * Lower capability-enriched Bot IR to Execution Graph.
++ */
++export function botIrToExecutionGraph(
++  botIr: BotIRGraph,
++  version: string = CURRENT_VERSION,
++): ExecutionGraph {
++  const executionNodes = botIr.nodes.map(botIrNodeToExecution);
++  const nodeById = new Map(executionNodes.map((n) => [n.id, n]));
++  const executionEdges: ExecutionEdge[] = [];
++
++  for (const edge of botIr.edges) {
++    const source = nodeById.get(edge.source);
++    if (!source) {
++      throw new Error(
++        `Bot IR edge "${edge.id}": unknown source node "${edge.source}"`,
++      );
++    }
++    const target = nodeById.get(edge.target);
++    if (!target) {
++      throw new Error(
++        `Bot IR edge "${edge.id}": unknown target node "${edge.target}"`,
++      );
++    }
++
++    const trigger = executionTriggerForSource(
++      source.type,
++      edge.sourcePort ?? "flow",
++    );
++    const executionEdge: ExecutionEdge = {
++      from: edge.source,
++      to: edge.target,
++      trigger,
++    };
++
++    const condition = conditionFromSource(source, trigger);
++    if (condition) executionEdge.condition = condition;
++
++    executionEdges.push(executionEdge);
++  }
++
++  return {
++    version,
++    nodes: executionNodes,
++    edges: executionEdges,
++  };
++}
+diff --git a/core/ir/bot_ir.ts b/core/ir/bot_ir.ts
+new file mode 100644
+index 0000000..341ed36
+--- /dev/null
++++ b/core/ir/bot_ir.ts
+@@ -0,0 +1,213 @@
++/**
++ * Bot IR — intermediate representation between GraphDocument and compilers.
++ * Canonical node type is always `node.type` (resolved via graph_node_payload).
++ */
++
++import { createGraphDocument } from "../../src/constructor/graph_document/graph_document.js";
++import { graphResolveNodeType } from "../../src/constructor/graph_document/graph_node_payload.js";
++import { getNodePortDescriptors } from "../../src/constructor/graph_document/operation_registry.js";
++import { getNodeCapabilities } from "../blockRegistry.js";
++import {
++  buildVisualDbGraphFromBotNodes,
++  type VisualDbGraph,
++} from "../db/visual_db_ir.js";
++
++export const BOT_IR_VERSION = "1.0";
++
++/** Connection port on a Bot IR node (from operation registry). */
++export interface BotIRPort {
++  id: string;
++  kind?: string;
++  label?: string;
++  transport?: string;
++}
++
++/** Single node in Bot IR — canonical block type + ports + capabilities + props payload. */
++export interface BotIRNode {
++  id: string;
++  /** Canonical block type (GraphDocument `node.type`, registry-validated). */
++  type: string;
++  inputs: readonly BotIRPort[];
++  outputs: readonly BotIRPort[];
++  /** Node capability contract (triggers, actions, async, outputs). */
++  capabilities: Readonly<{
++    triggers?: readonly string[];
++    actions?: readonly string[];
++    async: boolean;
++    outputs: readonly string[];
++  }>;
++  /** Block props only (GraphDocument `node.data`, no type mirrors). */
++  payload: Record<string, unknown>;
++}
++
++/** Directed edge between Bot IR nodes. */
++export interface BotIREdge {
++  id: string;
++  source: string;
++  target: string;
++  sourcePort: string;
++  targetPort: string;
++  label?: string;
++  condition?: string;
++  invalid?: boolean;
++  invalidReason?: string;
++}
++
++/** Graph-level context carried alongside nodes and edges. */
++export interface BotIRContext {
++  schemaVersion: number;
++  viewport: { x: number; y: number; zoom: number };
++  metadata: Record<string, unknown>;
++  revision?: number;
++  nodeCount: number;
++  edgeCount: number;
++  dbNodeCount?: number;
++}
++
++/** Full Bot intermediate representation of a constructor graph. */
++export interface BotIRGraph {
++  version: string;
++  nodes: BotIRNode[];
++  edges: BotIREdge[];
++  context: BotIRContext;
++  /** Visual DB operations extracted from db.* nodes. */
++  visualDb: VisualDbGraph;
++}
++
++export type { VisualDbGraph } from "../db/visual_db_ir.js";
++
++/** Minimal GraphDocument shape accepted by {@link graphToBotIR}. */
++export interface GraphDocumentInput {
++  schema_version?: number;
++  nodes?:
++    | Record<string, GraphDocumentNodeInput>
++    | GraphDocumentNodeInput[];
++  edges?:
++    | Record<string, GraphDocumentEdgeInput>
++    | GraphDocumentEdgeInput[];
++  viewport?: { x?: number; y?: number; zoom?: number; scale?: number };
++  metadata?: Record<string, unknown>;
++  ui_state?: unknown;
++}
++
++export interface GraphDocumentNodeInput {
++  id: string;
++  type?: string;
++  position?: { x?: number; y?: number };
++  data?: Record<string, unknown>;
++  props?: Record<string, unknown>;
++  meta?: Record<string, unknown>;
++}
++
++export interface GraphDocumentEdgeInput {
++  id: string;
++  source?: string;
++  target?: string;
++  from?: string;
++  to?: string;
++  sourcePort?: string;
++  sourceHandle?: string;
++  targetPort?: string;
++  targetHandle?: string;
++  label?: string;
++  condition?: string;
++  invalid?: boolean;
++  invalidReason?: string;
++}
++
++type RegistryPort = {
++  id: string;
++  kind?: string;
++  label?: string;
++  transport?: string;
++};
++
++function mapPorts(ports: readonly RegistryPort[]): BotIRPort[] {
++  return ports.map((p) => ({
++    id: String(p.id),
++    ...(p.kind != null ? { kind: String(p.kind) } : {}),
++    ...(p.label != null ? { label: String(p.label) } : {}),
++    ...(p.transport != null ? { transport: String(p.transport) } : {}),
++  }));
++}
++
++function sortById<T extends { id: string }>(items: T[]): T[] {
++  return [...items].sort((a, b) => a.id.localeCompare(b.id));
++}
++
++function documentNodeToBotIRNode(node: {
++  id: string;
++  type?: string;
++  data?: Record<string, unknown>;
++}): BotIRNode {
++  const type = graphResolveNodeType(node);
++  const { inputs, outputs } = getNodePortDescriptors(type);
++  const data = node.data && typeof node.data === "object" ? node.data : {};
++  return {
++    id: String(node.id),
++    type,
++    inputs: Object.freeze(mapPorts(inputs as RegistryPort[])),
++    outputs: Object.freeze(mapPorts(outputs as RegistryPort[])),
++    capabilities: Object.freeze({ ...getNodeCapabilities(type) }),
++    payload: Object.freeze({ ...data }),
++  };
++}
++
++function documentEdgeToBotIREdge(edge: {
++  id: string;
++  source: string;
++  target: string;
++  sourcePort?: string;
++  targetPort?: string;
++  label?: string;
++  condition?: string;
++  invalid?: boolean;
++  invalidReason?: string;
++}): BotIREdge {
++  return {
++    id: String(edge.id),
++    source: String(edge.source),
++    target: String(edge.target),
++    sourcePort: String(edge.sourcePort ?? "flow"),
++    targetPort: String(edge.targetPort ?? "flow"),
++    ...(edge.label ? { label: String(edge.label) } : {}),
++    ...(edge.condition ? { condition: String(edge.condition) } : {}),
++    ...(edge.invalid ? { invalid: true } : {}),
++    ...(edge.invalidReason
++      ? { invalidReason: String(edge.invalidReason) }
++      : {}),
++  };
++}
++
++/**
++ * Lower GraphDocument → Bot IR (read-only; does not mutate the source document).
++ */
++export function graphToBotIR(graphDocument: GraphDocumentInput): BotIRGraph {
++  const doc = createGraphDocument(graphDocument);
++  const nodes = sortById(
++    Object.values(doc.nodes).map((node) => documentNodeToBotIRNode(node)),
++  );
++  const edges = sortById(
++    Object.values(doc.edges).map((edge) => documentEdgeToBotIREdge(edge)),
++  );
++  const meta = (doc.metadata || {}) as Record<string, unknown>;
++
++  const visualDb = buildVisualDbGraphFromBotNodes(nodes);
++
++  return {
++    version: BOT_IR_VERSION,
++    nodes,
++    edges,
++    visualDb,
++    context: {
++      schemaVersion: doc.schema_version,
++      viewport: { ...doc.viewport },
++      metadata: { ...meta },
++      revision:
++        typeof meta.revision === "number" ? meta.revision : undefined,
++      nodeCount: nodes.length,
++      edgeCount: edges.length,
++      dbNodeCount: visualDb.nodeCount,
++    },
++  };
++}
+diff --git a/core/ir/index.ts b/core/ir/index.ts
+new file mode 100644
+index 0000000..6bcca18
+--- /dev/null
++++ b/core/ir/index.ts
+@@ -0,0 +1,16 @@
++export {
++  BOT_IR_VERSION,
++  graphToBotIR,
++  type BotIRGraph,
++  type BotIRNode,
++  type BotIREdge,
++  type BotIRContext,
++  type GraphDocumentInput,
++} from "./bot_ir.js";
++
++export { botIrToExecutionGraph } from "./botIrToExecutionGraph.js";
++export {
++  resolveFlowNodeType,
++  resolveFlowNodeProps,
++  resolveFlowNodeLabel,
++} from "./resolveFlowNodeType.js";
+diff --git a/core/ir/normalizeFlowNode.js b/core/ir/normalizeFlowNode.js
+index c768451..5fb626f 100644
+--- a/core/ir/normalizeFlowNode.js
++++ b/core/ir/normalizeFlowNode.js
+@@ -1,26 +1,42 @@
+ /**
+- * Нормализует узел React Flow к IR-узлу { id, type, props [, semanticId] }.
+- * Используется генератором DSL, хэшами графа и IR-валидацией.
+- *
++ * Normalizes React Flow / GraphDocument nodes to IR shape { id, type, props [, semanticId] }.
++ * Block type is always resolved via canonical `node.type` (RF: `data.canvasBlockType`).
++ */
++
++import {
++  resolveCanonicalNodeType,
++  stripTypeFieldsFromData,
++  UnknownBlockTypeError,
++} from '../../src/constructor/graph_document/graph_node_payload.js';
++
++/**
+  * @param {unknown} node
+  * @returns {{ id: string, type: string, props: Record<string, unknown>, semanticId?: string }}
+  */
+ export function normalizeFlowNode(node) {
+-  if (!node) return { id: 'unknown', type: 'message', props: {} };
+-  const id = node.id || 'n';
+-  const data = node.data || {};
+-  if (data.type) {
+-    return {
+-      id,
+-      type: data.type,
+-      props: { ...(data.props || {}) },
+-      semanticId: data.semanticId || data.id || id,
+-    };
++  if (!node || typeof node !== 'object') {
++    throw new UnknownBlockTypeError('normalizeFlowNode: node is required');
+   }
++  const id = String(node.id || 'n');
++  const data = node.data && typeof node.data === 'object' ? node.data : {};
++  const projectedType = String(data.canvasBlockType ?? '').trim();
++  const isCanvasProjection = projectedType.length > 0;
++  const blockType = resolveCanonicalNodeType({
++    id,
++    type: isCanvasProjection ? projectedType : node.type,
++    data: isCanvasProjection
++      ? (data.props && typeof data.props === 'object' ? data.props : {})
++      : data,
++  });
++  const props = stripTypeFieldsFromData(
++    isCanvasProjection
++      ? (data.props && typeof data.props === 'object' ? data.props : {})
++      : data,
++  );
+   return {
+     id,
+-    type: typeof node.type === 'string' && node.type !== 'cicada' ? node.type : 'message',
+-    props: {},
+-    semanticId: id,
++    type: blockType,
++    props,
++    semanticId: data.semanticId || data.id || id,
+   };
+ }
+diff --git a/core/ir/resolveFlowNodeType.js b/core/ir/resolveFlowNodeType.js
+new file mode 100644
+index 0000000..b86dd51
+--- /dev/null
++++ b/core/ir/resolveFlowNodeType.js
+@@ -0,0 +1,42 @@
++/**
++ * Canonical block type for flow / ReactFlow / GraphDocument nodes.
++ * node.type is the single source of truth; deprecated data.type is never preferred.
++ */
++
++import {
++  coerceLegacyBlockType,
++  stripTypeFieldsFromData,
++} from '../../src/constructor/graph_document/graph_node_payload.js';
++
++/**
++ * @param {{ id?: string, type?: string, data?: object, props?: object }} node
++ * @returns {string}
++ */
++export function resolveFlowNodeType(node) {
++  return coerceLegacyBlockType({
++    id: node?.id,
++    type: node?.type,
++    data: node?.data,
++  });
++}
++
++/**
++ * Props-only payload (no type / blockType mirrors).
++ * @param {{ data?: object, props?: object }} node
++ * @returns {Record<string, unknown>}
++ */
++export function resolveFlowNodeProps(node) {
++  const data = node?.data && typeof node.data === 'object' ? node.data : {};
++  const props = node?.props && typeof node.props === 'object' ? node.props : {};
++  return { ...stripTypeFieldsFromData(data), ...stripTypeFieldsFromData(props) };
++}
++
++/**
++ * @param {{ data?: object, props?: object, label?: string }} node
++ * @param {string} [type]
++ */
++export function resolveFlowNodeLabel(node, type) {
++  const t = type ?? resolveFlowNodeType(node);
++  const props = resolveFlowNodeProps(node);
++  return String(props.label ?? node?.label ?? t);
++}
+diff --git a/core/validation/strictPipeline.ts b/core/validation/strictPipeline.ts
+new file mode 100644
+index 0000000..397e88a
+--- /dev/null
++++ b/core/validation/strictPipeline.ts
+@@ -0,0 +1,534 @@
++/**
++ * Strict validation pipeline — registry enforcement, fail-fast, no "unknown" fallbacks.
++ *
++ * 1. validateGraph()   — GraphDocument node types + structural pipeline
++ * 2. validateBotIR()   — Bot IR node types + edge integrity
++ * 3. validateCompile() — graph + Bot IR + compile gate (pre-codegen)
++ */
++
++import { createGraphDocument } from "../../src/constructor/graph_document/graph_document.js";
++import {
++  assertRegisteredBlockType,
++  LEGACY_WRAPPER_TYPES,
++  UnknownBlockTypeError,
++} from "../../src/constructor/graph_document/graph_node_payload.js";
++import {
++  hasOperationContract,
++  validateGraph as validateRegistryGraph,
++} from "../../src/constructor/graph_document/operation_registry.js";
++import { collectRegistryViolations } from "./registryEnforce.js";
++import {
++  runGraphValidationPipeline,
++  strictCompileValidation,
++} from "../../src/constructor/graph_document/graph_validation_pipeline.js";
++import { VALIDATION_STAGE } from "../../src/constructor/graph_document/validation_stages.js";
++import { blockRegistry } from "../blockRegistry.js";
++import { assertBlockCapabilitiesRegistered } from "../registry/blockCapabilities.js";
++import { graphToBotIR, type BotIRGraph, type GraphDocumentInput } from "../ir/bot_ir.js";
++import {
++  StrictValidationError,
++  type StrictValidationIssue,
++  type StrictValidationStage,
++} from "./strictValidationError.js";
++
++export type { StrictValidationIssue, StrictValidationStage };
++export { StrictValidationError };
++
++export interface StrictValidationOptions {
++  /** Stop on first error (default true). */
++  failFast?: boolean;
++  /** Include callback handler checks in graph pipeline (default true for compile). */
++  includeCallbacks?: boolean;
++}
++
++export interface StrictValidationResult {
++  ok: boolean;
++  stage: StrictValidationStage;
++  errors: StrictValidationIssue[];
++  warnings: StrictValidationIssue[];
++  failFastStopped?: boolean;
++  document?: ReturnType<typeof createGraphDocument>;
++  botIr?: BotIRGraph;
++}
++
++function issue(
++  stage: StrictValidationStage,
++  code: string,
++  message: string,
++  extra: Partial<StrictValidationIssue> = {},
++): StrictValidationIssue {
++  return { stage, code, message, ...extra };
++}
++
++function pushOrThrow(
++  errors: StrictValidationIssue[],
++  next: StrictValidationIssue,
++  failFast: boolean,
++): boolean {
++  errors.push(next);
++  if (failFast) {
++    throw new StrictValidationError(next);
++  }
++  return true;
++}
++
++function fromUnknownBlockTypeError(
++  stage: StrictValidationStage,
++  err: UnknownBlockTypeError,
++): StrictValidationIssue {
++  return issue(stage, "unknown_block_type", err.message, {
++    nodeId: err.nodeId ?? undefined,
++    type: err.type ?? undefined,
++  });
++}
++
++function applyRegistryViolations(
++  nodes: Record<string, { id?: string; type?: string; data?: object }>,
++  stage: StrictValidationStage,
++  errors: StrictValidationIssue[],
++  failFast: boolean,
++): void {
++  for (const v of collectRegistryViolations(nodes)) {
++    pushOrThrow(
++      errors,
++      issue(stage, v.code, v.message, {
++        nodeId: v.nodeId,
++        type: v.type,
++      }),
++      failFast,
++    );
++  }
++}
++
++export { collectRegistryViolations, enforceRegistryNodeTypes } from "./registryEnforce.js";
++
++/**
++ * 1. validateGraph — strict GraphDocument validation (registry + pipeline).
++ */
++export function validateGraph(
++  graphOrDocument: GraphDocumentInput | Record<string, unknown>,
++  options: StrictValidationOptions = {},
++): StrictValidationResult {
++  const failFast = options.failFast !== false;
++  const errors: StrictValidationIssue[] = [];
++  const warnings: StrictValidationIssue[] = [];
++
++  let document: ReturnType<typeof createGraphDocument>;
++  try {
++    document = createGraphDocument(graphOrDocument);
++  } catch (err) {
++    if (err instanceof UnknownBlockTypeError) {
++      const registryIssue = fromUnknownBlockTypeError("graph", err);
++      errors.push(registryIssue);
++      if (failFast) {
++        throw new StrictValidationError(registryIssue);
++      }
++      return {
++        ok: false,
++        stage: "graph",
++        errors,
++        warnings,
++        failFastStopped: false,
++      };
++    }
++    const message = err instanceof Error ? err.message : String(err);
++    pushOrThrow(
++      errors,
++      issue("graph", "invalid_document", message),
++      failFast,
++    );
++    return { ok: false, stage: "graph", errors, warnings, failFastStopped: failFast };
++  }
++
++  try {
++    applyRegistryViolations(document.nodes, "graph", errors, failFast);
++  } catch (e) {
++    if (e instanceof StrictValidationError) {
++      return {
++        ok: false,
++        stage: "graph",
++        errors: [e.issue],
++        warnings,
++        failFastStopped: true,
++        document,
++      };
++    }
++    throw e;
++  }
++
++  const registry = validateRegistryGraph(document);
++  for (const msg of registry.errors || []) {
++    const code = msg.includes("unknown type") ? "unknown_block_type" : "registry_semantic";
++    try {
++      pushOrThrow(errors, issue("graph", code, msg), failFast);
++    } catch (e) {
++      if (e instanceof StrictValidationError) {
++        return {
++          ok: false,
++          stage: "graph",
++          errors: [e.issue],
++          warnings,
++          failFastStopped: true,
++          document,
++        };
++      }
++      throw e;
++    }
++  }
++  for (const msg of registry.warnings || []) {
++    warnings.push(issue("graph", "registry_semantic", msg));
++  }
++
++  const pipeline = runGraphValidationPipeline(document, {
++    strict: true,
++    validationStage: VALIDATION_STAGE.COMPILE,
++    allowMissingCallbackHandlers: false,
++    includeCallbacks: options.includeCallbacks !== false,
++  });
++
++  for (const d of pipeline.errors || []) {
++    try {
++      pushOrThrow(
++        errors,
++        issue("graph", d.code || "validation_error", d.message, {
++          nodeId: d.nodeId ?? undefined,
++          edgeId: d.edgeId ?? undefined,
++        }),
++        failFast,
++      );
++    } catch (e) {
++      if (e instanceof StrictValidationError) {
++        return {
++          ok: false,
++          stage: "graph",
++          errors: [e.issue, ...errors],
++          warnings,
++          failFastStopped: true,
++          document: pipeline.document,
++        };
++      }
++      throw e;
++    }
++  }
++
++  for (const d of pipeline.warnings || []) {
++    warnings.push(
++      issue("graph", d.code || "validation_warning", d.message, {
++        nodeId: d.nodeId ?? undefined,
++        edgeId: d.edgeId ?? undefined,
++      }),
++    );
++  }
++
++  const graphResult = {
++    ok: errors.length === 0,
++    stage: "graph" as const,
++    errors,
++    warnings,
++    document: pipeline.document,
++  };
++  if (failFast && errors.length > 0) {
++    throw new StrictValidationError(errors[0]);
++  }
++  return graphResult;
++}
++
++/**
++ * 2. validateBotIR — strict Bot IR node registry enforcement.
++ */
++export function validateBotIR(
++  botIr: BotIRGraph,
++  options: StrictValidationOptions = {},
++): StrictValidationResult {
++  const failFast = options.failFast !== false;
++  const errors: StrictValidationIssue[] = [];
++  const warnings: StrictValidationIssue[] = [];
++
++  if (!botIr || !Array.isArray(botIr.nodes)) {
++    pushOrThrow(
++      errors,
++      issue("bot_ir", "invalid_bot_ir", "Bot IR graph is missing nodes"),
++      failFast,
++    );
++    return { ok: false, stage: "bot_ir", errors, warnings, failFastStopped: failFast };
++  }
++
++  const nodeIds = new Set<string>();
++
++  for (const node of botIr.nodes) {
++    const nodeId = String(node.id || "").trim();
++    const rawType = String(node.type || "").trim();
++
++    if (!nodeId) {
++      pushOrThrow(
++        errors,
++        issue("bot_ir", "missing_node_id", "Bot IR node is missing id"),
++        failFast,
++      );
++      continue;
++    }
++
++    if (nodeIds.has(nodeId)) {
++      pushOrThrow(
++        errors,
++        issue("bot_ir", "duplicate_node_id", `Duplicate Bot IR node id "${nodeId}"`, {
++          nodeId,
++        }),
++        failFast,
++      );
++    }
++    nodeIds.add(nodeId);
++
++    if (LEGACY_WRAPPER_TYPES.has(rawType) || rawType === "unknown") {
++      pushOrThrow(
++        errors,
++        issue(
++          "bot_ir",
++          "unknown_block_type",
++          `Bot IR node "${nodeId}": type "${rawType || "∅"}" is not allowed`,
++          { nodeId, type: rawType || "unknown" },
++        ),
++        failFast,
++      );
++      continue;
++    }
++
++    try {
++      assertRegisteredBlockType(rawType, { nodeId });
++      assertBlockCapabilitiesRegistered(rawType);
++    } catch (err) {
++      if (err instanceof UnknownBlockTypeError) {
++        pushOrThrow(errors, fromUnknownBlockTypeError("bot_ir", err), failFast);
++        continue;
++      }
++      const message = err instanceof Error ? err.message : String(err);
++      pushOrThrow(
++        errors,
++        issue("bot_ir", "unregistered_capability", message, { nodeId, type: rawType }),
++        failFast,
++      );
++      continue;
++    }
++
++    if (!blockRegistry[rawType]) {
++      pushOrThrow(
++        errors,
++        issue(
++          "bot_ir",
++          "unregistered_block_type",
++          `Bot IR node "${nodeId}": type "${rawType}" not in blockRegistry`,
++          { nodeId, type: rawType },
++        ),
++        failFast,
++      );
++    }
++
++    if (!hasOperationContract(rawType)) {
++      pushOrThrow(
++        errors,
++        issue(
++          "bot_ir",
++          "unregistered_block_type",
++          `Bot IR node "${nodeId}": type "${rawType}" not in operation registry`,
++          { nodeId, type: rawType },
++        ),
++        failFast,
++      );
++    }
++  }
++
++  for (const edge of botIr.edges || []) {
++    if (!nodeIds.has(edge.source)) {
++      pushOrThrow(
++        errors,
++        issue(
++          "bot_ir",
++          "dangling_edge",
++          `Bot IR edge "${edge.id}": unknown source "${edge.source}"`,
++          { edgeId: edge.id },
++        ),
++        failFast,
++      );
++    }
++    if (!nodeIds.has(edge.target)) {
++      pushOrThrow(
++        errors,
++        issue(
++          "bot_ir",
++          "dangling_edge",
++          `Bot IR edge "${edge.id}": unknown target "${edge.target}"`,
++          { edgeId: edge.id },
++        ),
++        failFast,
++      );
++    }
++  }
++
++  const irResult = { ok: errors.length === 0, stage: "bot_ir" as const, errors, warnings, botIr };
++  if (failFast && errors.length > 0) {
++    throw new StrictValidationError(errors[0]);
++  }
++  return irResult;
++}
++
++/**
++ * 3. validateCompile — full pre-codegen gate (graph → Bot IR → compile validation).
++ */
++export function validateCompile(
++  graphOrDocument: GraphDocumentInput | Record<string, unknown>,
++  options: StrictValidationOptions = {},
++): StrictValidationResult {
++  const failFast = options.failFast !== false;
++  const errors: StrictValidationIssue[] = [];
++  const warnings: StrictValidationIssue[] = [];
++
++  let graphResult: StrictValidationResult;
++  try {
++    graphResult = validateGraph(graphOrDocument, {
++      ...options,
++      failFast,
++      includeCallbacks: options.includeCallbacks !== false,
++    });
++  } catch (e) {
++    if (e instanceof StrictValidationError) {
++      return {
++        ok: false,
++        stage: "compile",
++        errors: [e.issue],
++        warnings,
++        failFastStopped: true,
++      };
++    }
++    throw e;
++  }
++
++  errors.push(...graphResult.errors);
++  warnings.push(...graphResult.warnings);
++  if (!graphResult.ok) {
++    return {
++      ok: false,
++      stage: "compile",
++      errors,
++      warnings,
++      document: graphResult.document,
++      failFastStopped: graphResult.failFastStopped,
++    };
++  }
++
++  const document = graphResult.document!;
++  let botIr: BotIRGraph;
++  try {
++    botIr = graphToBotIR(document);
++  } catch (err) {
++    const message = err instanceof Error ? err.message : String(err);
++    if (failFast) {
++      throw new StrictValidationError(
++        issue("compile", "bot_ir_build_failed", message),
++      );
++    }
++    errors.push(issue("compile", "bot_ir_build_failed", message));
++    return { ok: false, stage: "compile", errors, warnings, document };
++  }
++
++  let irResult: StrictValidationResult;
++  try {
++    irResult = validateBotIR(botIr, { ...options, failFast });
++  } catch (e) {
++    if (e instanceof StrictValidationError) {
++      return {
++        ok: false,
++        stage: "compile",
++        errors: [...errors, e.issue],
++        warnings,
++        document,
++        botIr,
++        failFastStopped: true,
++      };
++    }
++    throw e;
++  }
++
++  errors.push(...irResult.errors);
++  warnings.push(...irResult.warnings);
++  if (!irResult.ok) {
++    return {
++      ok: false,
++      stage: "compile",
++      errors,
++      warnings,
++      document,
++      botIr,
++      failFastStopped: irResult.failFastStopped,
++    };
++  }
++
++  const gate = strictCompileValidation(document, {
++    strict: true,
++    validationStage: VALIDATION_STAGE.COMPILE,
++    includeCallbacks: options.includeCallbacks !== false,
++  });
++
++  const blocking = gate.blocking?.length ? gate.blocking : gate.errors || [];
++  for (const d of blocking) {
++    try {
++      pushOrThrow(
++        errors,
++        issue("compile", d.code || "compile_gate", d.message, {
++          nodeId: d.nodeId ?? undefined,
++          edgeId: d.edgeId ?? undefined,
++        }),
++        failFast,
++      );
++    } catch (e) {
++      if (e instanceof StrictValidationError) {
++        return {
++          ok: false,
++          stage: "compile",
++          errors: [...errors, e.issue],
++          warnings,
++          document,
++          botIr,
++          failFastStopped: true,
++        };
++      }
++      throw e;
++    }
++  }
++
++  for (const d of gate.warnings || []) {
++    warnings.push(
++      issue("compile", d.code || "compile_warning", d.message, {
++        nodeId: d.nodeId ?? undefined,
++        edgeId: d.edgeId ?? undefined,
++      }),
++    );
++  }
++
++  const compileResult = {
++    ok: errors.length === 0 && gate.ok,
++    stage: "compile" as const,
++    errors,
++    warnings,
++    document,
++    botIr,
++  };
++  if (failFast && errors.length > 0) {
++    throw new StrictValidationError(errors[0]);
++  }
++  return compileResult;
++}
++
++/** Assert compile-ready graph; throws StrictValidationError on failure. */
++export function assertCompileReady(
++  graphOrDocument: GraphDocumentInput | Record<string, unknown>,
++  options?: StrictValidationOptions,
++): StrictValidationResult {
++  const result = validateCompile(graphOrDocument, { ...options, failFast: true });
++  if (!result.ok) {
++    const first = result.errors[0];
++    throw new StrictValidationError(
++      first ?? issue("compile", "compile_validation_failed", "Compile validation failed"),
++    );
++  }
++  return result;
++}
+diff --git a/package.json b/package.json
+index fe4edf7..de60a07 100644
+--- a/package.json
++++ b/package.json
+@@ -18,6 +18,17 @@
+     "lint": "eslint src core/tests services scripts server.mjs",
+     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
+     "test:compiler": "tsx tests/compiler/compiler.test.ts",
++    "test:bot-ir": "tsx tests/compiler/bot_ir.test.ts",
++    "test:block-capabilities": "node --test core/tests/block-capabilities.test.mjs",
++    "test:fsm-graph": "tsx tests/compiler/fsmGraph.test.ts",
++    "test:visual-db": "tsx tests/compiler/visual_db.test.ts",
++    "test:foreach": "tsx tests/compiler/foreach.test.ts",
++    "test:runtime-context": "tsx tests/compiler/runtime_context.test.ts",
++    "test:permission": "tsx tests/compiler/permission.test.ts",
++    "test:system-templates": "tsx tests/compiler/system_templates.test.ts",
++    "test:python-bot-import": "tsx tests/compiler/python_bot_import.test.ts",
++    "test:strict-validation": "tsx tests/compiler/strict_validation_pipeline.test.ts",
++    "test:unified-pipeline": "tsx tests/compiler/unified_compile_pipeline.test.ts",
+     "test:runtime": "tsx tests/compiler/runtime.test.ts",
+     "parser-core-blocks": "node scripts/core-blocks-check.mjs",
+     "jammer:publish": "node scripts/publish-jammer-firmware.mjs",
+diff --git a/tests/compiler/unified_compile_pipeline.test.ts b/tests/compiler/unified_compile_pipeline.test.ts
+new file mode 100644
+index 0000000..71be058
+--- /dev/null
++++ b/tests/compiler/unified_compile_pipeline.test.ts
+@@ -0,0 +1,99 @@
++import assert from "node:assert/strict";
++
++import { createGraphDocument } from "../../src/constructor/graph_document/graph_document.js";
++import { buildGraphNodeData } from "../../src/constructor/graph_document/graph_node_payload.js";
++import {
++  compileGraphDocumentToPython,
++  lowerGraphDocumentToExecution,
++} from "../../core/compiler/unifiedCompilePipeline.ts";
++import { graphToBotIR } from "../../core/ir/bot_ir";
++import { botIrToExecutionGraph } from "../../core/ir/botIrToExecutionGraph.ts";
++import { resolveFlowNodeType } from "../../core/ir/resolveFlowNodeType.js";
++import { validateCompile } from "../../core/validation/index.ts";
++import { compileGraph } from "../../core/compiler/codegen";
++
++const doc = createGraphDocument({
++  schema_version: 2,
++  nodes: [
++    {
++      id: "s1",
++      type: "start",
++      position: { x: 0, y: 0 },
++      data: buildGraphNodeData("start", { cmd: "start" }),
++    },
++    {
++      id: "m1",
++      type: "message",
++      position: { x: 200, y: 0 },
++      data: buildGraphNodeData("message", { text: "Hello" }),
++    },
++    {
++      id: "stop1",
++      type: "stop",
++      position: { x: 400, y: 0 },
++      data: buildGraphNodeData("stop", {}),
++    },
++  ],
++  edges: [
++    {
++      id: "e1",
++      source: "s1",
++      target: "m1",
++      sourcePort: "flow",
++      targetPort: "flow",
++    },
++    {
++      id: "e2",
++      source: "m1",
++      target: "stop1",
++      sourcePort: "flow",
++      targetPort: "flow",
++    },
++  ],
++});
++
++assert.equal(validateCompile(doc, { failFast: false }).ok, true);
++
++const ir = graphToBotIR(doc);
++assert.ok(ir.nodes.every((n) => n.type === doc.nodes[n.id]?.type));
++assert.ok(!("type" in (ir.nodes[0]?.payload || {})));
++
++const lowered = lowerGraphDocumentToExecution(doc, { skipValidation: true });
++assert.equal(lowered.execution.nodes.length, 3);
++assert.ok(lowered.execution.edges.length >= 2);
++
++const compiled = compileGraphDocumentToPython(doc, { skipValidation: true });
++assert.equal(compiled.success, true);
++assert.ok(compiled.python.includes("aiogram"));
++
++const viaCodegen = await compileGraph(doc, { skipValidation: true });
++assert.equal(viaCodegen.success, true);
++assert.ok(viaCodegen.botIr);
++
++const legacyNode = {
++  id: "x",
++  type: "command",
++  data: { type: "start", cmd: "oops" },
++};
++assert.equal(resolveFlowNodeType(legacyNode), "command");
++
++assert.throws(
++  () =>
++    botIrToExecutionGraph({
++      ...ir,
++      nodes: [
++        ...ir.nodes,
++        {
++          id: "bad",
++          type: "not_registered_xyz",
++          inputs: [],
++          outputs: [],
++          capabilities: { async: false, outputs: [] },
++          payload: {},
++        },
++      ],
++    }),
++  /Unknown block type|capability map/,
++);
++
++console.log("unified_compile_pipeline.test.ts OK");

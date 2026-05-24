@@ -54,15 +54,15 @@ replayBootstrapOperations(imported, bootstrap);
 assert.equal(imported.document.nodes.z.type, 'start');
 
 const history = createGraphHistory();
-const h1 = applyHistoryOperation(history, createOperation('AddNode', { nodeId: 'x', type: 'noop' }));
+const h1 = applyHistoryOperation(history, createOperation('AddNode', { nodeId: 'x', type: 'global' }));
 const rolled = rollbackOperation(h1);
 assert.equal(Object.keys(rolled.document.nodes).length, 0);
-const h2 = applyHistoryOperation(rolled, createOperation('AddNode', { nodeId: 'x', type: 'noop' }));
+const h2 = applyHistoryOperation(rolled, createOperation('AddNode', { nodeId: 'x', type: 'global' }));
 assert.equal(Object.keys(h2.document.nodes).length, 1);
 
 const exported = exportGraphDocument(store.document);
 const imp = importGraphDocument(exported);
-assert.equal(imp.document.schema_version, 1);
+assert.equal(imp.document.schema_version, 2);
 
 const replayed = replayOperations({}, [
   createOperation('AddNode', { nodeId: 'r1', type: 'start' }),
@@ -97,7 +97,7 @@ assert.equal(merged.length, 2);
 
 const conflict = applyHistoryOperation(
   h2,
-  createOperation('AddNode', { nodeId: 'conflict', type: 'noop' }, { baseRevision: 0 }),
+  createOperation('AddNode', { nodeId: 'conflict', type: 'global' }, { baseRevision: 0 }),
 );
 assert.equal(conflict.lastError?.includes('Revision conflict'), true);
 

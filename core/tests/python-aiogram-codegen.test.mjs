@@ -35,29 +35,45 @@ test('message block → await message.answer(f"...")', () => {
   assert.match(py, /await message\.answer\(f"Привет, \{message\.from_user\.first_name\}!"\)/);
 });
 
-test('remember → local assignment', () => {
+test('remember → ctx.vars', () => {
   const py = transpileBlockToPython({
     type: 'remember',
     props: { varname: 'x', value: 'y' },
   });
-  assert.equal(py.trim(), 'x = y');
+  assert.match(py, /ctx_set_var\(ctx, "x", y\)/);
 });
 
-test('save → state.update_data', () => {
+test('set_variable → ctx.vars', () => {
+  const py = transpileBlockToPython({
+    type: 'set_variable',
+    props: { name: 'score', value: '10' },
+  });
+  assert.match(py, /ctx_set_var\(ctx, "score", 10\)/);
+});
+
+test('get_variable → ctx_get_var', () => {
+  const py = transpileBlockToPython({
+    type: 'get_variable',
+    props: { name: 'score', varname: 'score' },
+  });
+  assert.match(py, /score = ctx_get_var\(ctx, "score"\)/);
+});
+
+test('save → ctx_persist_state_key', () => {
   const py = transpileBlockToPython({
     type: 'save',
     props: { key: 'ключ', value: 'value' },
   });
-  assert.match(py, /await state\.update_data\(ключ=value\)/);
+  assert.match(py, /await ctx_persist_state_key\(ctx/);
 });
 
-test('get → state.get_data', () => {
+test('get → ctx_sync_state_key', () => {
   const py = transpileBlockToPython({
     type: 'get',
     props: { key: 'ключ', varname: 'x' },
   });
-  assert.match(py, /data = await state\.get_data\(\)/);
-  assert.match(py, /x = data\.get\("ключ"\)/);
+  assert.match(py, /await ctx_sync_state_key\(ctx, "ключ"/);
+  assert.match(py, /x = ctx_get_var\(ctx, "x"\)/);
 });
 
 test('buttons → ReplyKeyboardMarkup (AST bind phase)', () => {
@@ -110,10 +126,10 @@ test('callback with label → message handler (reply keyboard, not CallbackQuery
   assert.doesNotMatch(py, /callback\.answer\(\)/);
 });
 
-test('db_delete → FSM data.pop', () => {
+test('db_delete → ctx.state data.pop', () => {
   const py = transpileBlockToPython({ type: 'db_delete', props: { key: 'мой_ключ' } });
-  assert.match(py, /data\.pop\("мой_ключ", None\)/);
-  assert.match(py, /await state\.set_data\(data\)/);
+  assert.match(py, /_data\.pop\("мой_ключ", None\)/);
+  assert.match(py, /ctx\["vars"\]\.pop\("мой_ключ", None\)/);
 });
 
 test('voice + sticker + delete + reply stack (user example)', () => {
@@ -162,12 +178,14 @@ test('generatePythonFromStacks builds full aiogram module', () => {
   assert.match(mod, /async def main\(\):/);
 });
 
-test('global module variable', () => {
+test('global → _RUNTIME_CTX_DEFAULTS', () => {
   const mod = generatePythonFromStacks([
     { blocks: [{ type: 'global', props: { varname: 'X', value: '123' } }] },
     { blocks: [{ type: 'start', props: {} }, { type: 'message', props: { text: 'ok' } }] },
   ]);
-  assert.match(mod, /^X = 123$/m);
+  assert.match(mod, /"X": 123/);
+  assert.match(mod, /X = ctx_get_var\(ctx, "X"\)/);
+  assert.doesNotMatch(mod, /^X = 123$/m);
 });
 
 test('compileNodeToPython with children', () => {
@@ -176,7 +194,8 @@ test('compileNodeToPython with children', () => {
     payload: {},
     children: [{ type: 'message', payload: { text: '{сообщение.text}' } }],
   });
-  assert.match(py, /@router\.message\(F\.text\)/);
+  assert.match(py, /@router\.message\(StateFilter\(None\), F\.text\)/);
+  assert.match(py, /ctx = build_runtime_ctx/);
   assert.match(py, /message\.text/);
 });
 

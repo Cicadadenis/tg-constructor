@@ -11,13 +11,13 @@ import { getChainStepBelow, hasIncomingFlowEdge } from '../../builder/blockLayou
 import { moveNode } from '../../constructor/graph_document/graph_operation_client.js';
 import { getNodePortDescriptors } from '../../constructor/graph_document/operation_registry.js';
 
-/** Canonical block type from a GraphDocument node (handles legacy `cicada` wrapper). */
-export function graphResolveNodeType(node) {
-  const raw = String(node?.type ?? '').trim();
-  if (raw && raw !== 'cicada' && raw !== 'unknown') return raw;
-  const nested = String(node?.data?.type || node?.data?.blockType || '').trim();
-  return nested || raw || 'message';
-}
+import {
+  UnknownBlockTypeError,
+  graphResolveNodeType,
+  resolveCanonicalNodeType,
+} from '../../constructor/graph_document/graph_node_payload.js';
+
+export { UnknownBlockTypeError, graphResolveNodeType, resolveCanonicalNodeType };
 
 /** Whether parent→child can be linked as a vertical flow chain (both sides need ports). */
 export function graphCanChainAfter(parentType, newType) {

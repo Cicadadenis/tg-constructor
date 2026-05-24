@@ -12,6 +12,9 @@ import {
   validateCompositionOperationPayload,
 } from './graph_compiler_vm_contract.js';
 import { validateCompositionEdge } from './graph_composition_validate.js';
+import { blockToNodePayload } from './graph_node_payload.js';
+
+export { blockToNodePayload } from './graph_node_payload.js';
 
 export {
   COMPILER_LAYER,
@@ -30,16 +33,6 @@ export function blockPositionInStack(stackX, stackY, blockIndex) {
 
 export function findStack(stacks, stackId) {
   return stacks?.find((s) => s.id === stackId) || null;
-}
-
-export function blockToNodePayload(block, position) {
-  return {
-    nodeId: block.id,
-    type: block.type,
-    position,
-    data: { ...(block.props || {}) },
-    meta: { uiAttachments: block.uiAttachments || {} },
-  };
 }
 
 /** Frozen canonical op spec — compiler output cell. */

@@ -1,4 +1,6 @@
-import { getBlockDefinition } from './blockRegistry.js';
+import { getBlockDefinition, getNodeCapabilities } from './blockRegistry.js';
+
+export { getNodeCapabilities };
 
 export const UI_ATTACHMENT_GROUPS = Object.freeze(['replies', 'buttons', 'inline', 'media', 'transitions']);
 

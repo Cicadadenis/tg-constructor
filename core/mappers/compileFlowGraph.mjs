@@ -3,10 +3,9 @@ import { compileGraphSync } from "../compiler/codegen.ts";
 import { isFlowEmptyForCodegen } from "../codegen/emptyGraph.js";
 import { isGraphEffectivelyEmpty } from "../../src/constructor/graph_document/graph_canvas_state.js";
 import {
-  ExecutionGraphMigrationError,
-  ExecutionGraphValidationError,
-  MigrationChainError,
-} from "../execution/prepareExecutionGraph.ts";
+  isExecutionGraphValidationError,
+  isMigrationError,
+} from "./executionGraphErrors.mjs";
 
 const PREVIEW_INCOMPLETE_CODES = new Set(["MISSING_EDGES", "ORPHAN_NODES"]);
 
@@ -32,21 +31,12 @@ function executionErrorToCompileError(err) {
   };
 }
 
-function isExecutionGraphValidationError(err) {
-  return (
-    err instanceof ExecutionGraphValidationError
-    || err?.name === "ExecutionGraphValidationError"
-    || (typeof err?.code === "string" && err.code.length > 0)
-  );
-}
-
-function isMigrationError(err) {
-  return (
-    err instanceof MigrationChainError
-    || err instanceof ExecutionGraphMigrationError
-    || err?.name === "MigrationChainError"
-    || err?.name === "ExecutionGraphMigrationError"
-  );
+function missingEdgesWarning() {
+  return {
+    code: "MISSING_EDGES",
+    message: "Graph has blocks but no connections — connect blocks to generate bot code",
+    severity: "warning",
+  };
 }
 
 /**
@@ -57,7 +47,12 @@ function isMigrationError(err) {
  * @param {{ graphDocument?: object, strict?: boolean }} [options]
  */
 export function compileFlowToPython(flow, options = {}) {
-  if (isFlowEmptyForCodegen(flow)) {
+  const sanitizedFlow = {
+    nodes: (flow?.nodes || []).filter((n) => n && n.id),
+    edges: (flow?.edges || []).filter((e) => e && e.source && e.target),
+  };
+
+  if (isFlowEmptyForCodegen(sanitizedFlow)) {
     return emptyCompileMeta();
   }
 
@@ -65,13 +60,27 @@ export function compileFlowToPython(flow, options = {}) {
     return emptyCompileMeta();
   }
 
-  const flowEdges = flow?.edges || [];
-  if (!options.strict && flowEdges.length === 0) {
-    return emptyCompileMeta();
+  const flowEdges = sanitizedFlow.edges;
+  const nodeCount = sanitizedFlow.nodes.length;
+
+  if (flowEdges.length === 0 && nodeCount > 0) {
+    if (options.strict) {
+      return emptyCompileMeta({
+        compileErrors: [{
+          code: "MISSING_EDGES",
+          message: "ExecutionGraph must contain at least one edge",
+          severity: "error",
+        }],
+        aborted: true,
+      });
+    }
+    return emptyCompileMeta({
+      compileWarnings: [missingEdgesWarning()],
+    });
   }
 
   try {
-    const botGraph = reactFlowToGraph(flow?.nodes || [], flow?.edges || []);
+    const botGraph = reactFlowToGraph(sanitizedFlow.nodes, sanitizedFlow.edges);
     const result = compileGraphSync(botGraph, {
       allowIncomplete: !options.strict,
     });
@@ -100,7 +109,15 @@ export function compileFlowToPython(flow, options = {}) {
       && !options.strict
       && PREVIEW_INCOMPLETE_CODES.has(err.code)
     ) {
-      return emptyCompileMeta();
+      return emptyCompileMeta({
+        compileWarnings: err.code === "MISSING_EDGES"
+          ? [missingEdgesWarning()]
+          : [{
+            code: err.code,
+            message: err.message,
+            severity: "warning",
+          }],
+      });
     }
 
     if (isExecutionGraphValidationError(err) || isMigrationError(err)) {

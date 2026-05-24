@@ -12,6 +12,7 @@ import {
   DEFAULT_EXECUTION_POLICY,
   type ExecutionPolicy,
 } from "./executionPolicy";
+import { validateExecutionGraphRegistry } from "./validateExecutionGraphRegistry.js";
 import {
   executionGraphSchema,
   type ExecutionGraphInput,
@@ -23,7 +24,9 @@ export type ExecutionGraphValidationCode =
   | "MISSING_EDGES"
   | "ORPHAN_NODES"
   | "CYCLE_DETECTED"
-  | "UNKNOWN_EDGE_NODE";
+  | "UNKNOWN_EDGE_NODE"
+  | "UNKNOWN_NODE_TYPE"
+  | "UNREGISTERED_CAPABILITY";
 
 export class ExecutionGraphValidationError extends Error {
   readonly code: ExecutionGraphValidationCode;
@@ -170,6 +173,8 @@ export function validateExecutionGraphCore(
   const parsed = parseExecutionGraph(input);
   const compatibilityWarnings = resolveVersionCompatibility(parsed.version);
   const execution = normalizeExecutionGraph(parsed);
+
+  validateExecutionGraphRegistry(execution);
 
   assertMissingEdges(execution);
   assertEdgeNodeReferences(execution);

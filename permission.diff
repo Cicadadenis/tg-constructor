@@ -1,0 +1,1302 @@
+diff --git a/core/blockRegistry.js b/core/blockRegistry.js
+index e489ede..8a14a1c 100644
+--- a/core/blockRegistry.js
++++ b/core/blockRegistry.js
+@@ -4,6 +4,11 @@ import {
+   isAiogram3PaletteBlockType,
+ } from './aiogram3Runtime.js';
+ import { sortCatalogByFlowOrder } from './aiogram3PaletteOrder.js';
++import {
++  attachCapabilitiesToDefinition,
++  getBlockCapabilities,
++  hasBlockCapabilities,
++} from './registry/blockCapabilities.js';
+ 
+ const VALID_CATEGORIES = new Set([
+   'render',
+@@ -20,8 +25,9 @@ const VALID_UI_SCOPES = new Set(['render', 'none']);
+ const RENDER_UI_CAPABILITIES = Object.freeze(['buttons', 'inline', 'media']);
+ 
+ function freezeDefinition(definition) {
++  const withCapabilities = attachCapabilitiesToDefinition(definition);
+   return Object.freeze({
+-    ...definition,
++    ...withCapabilities,
+     capabilities: Object.freeze([...(definition.capabilities || [])]),
+     constraints: definition.constraints
+       ? Object.freeze({
+@@ -222,6 +228,12 @@ export const controlBlocks = Object.freeze([
+   block('contact_received', 'control', 'Alias for the incoming contact entry point.', {
+     constraints: hidden(),
+   }),
++  block('require_role', 'control', 'Guard flow by bot role (admin / moderator / user).', {
++    constraints: withDefaults(
++      withFlow(palette('Требуется роль', '🛡', '#dc2626', 'Права', false, true), { maxOutputs: 1 }),
++      { role: 'user', roles: '', message: 'Недостаточно прав' },
++    ),
++  }),
+   block('goto', 'control', 'Jump to another handler label.', {
+     constraints: withDefaults(
+       withFlow(palette('Переход', '→', '#a3a3a3', 'Действия', false, false), { maxOutputs: 0 }),
+@@ -234,6 +246,41 @@ export const controlBlocks = Object.freeze([
+       { mode: 'count', count: '3' },
+     ),
+   }),
++  block('foreach', 'control', 'Iterate a list; item variable in body or inline keyboard from list.', {
++    constraints: withDefaults(
++      withFlow(palette('Для каждого', '∀', '#d97706', 'Логика', false, true), {
++        maxOutputs: 2,
++        outputLabels: ['body', 'done'],
++      }),
++      {
++        list: 'products',
++        var: 'product',
++        output: 'body',
++        labelField: 'name',
++        idField: 'id',
++        callbackPrefix: 'prod:',
++        columns: 2,
++      },
++    ),
++  }),
++  block('fsm.state', 'control', 'FSM state node (graph-based).', {
++    constraints: withDefaults(
++      withFlow(palette('FSM состояние', '◎', '#ec4899', 'FSM', false, true), { maxOutputs: 1 }),
++      { group: 'Form', name: 'step' },
++    ),
++  }),
++  block('fsm.input', 'control', 'FSM input step — prompt and store field.', {
++    constraints: withDefaults(
++      withFlow(palette('FSM ввод', '⌨', '#f472b6', 'FSM', false, true), { maxOutputs: 1 }),
++      { group: 'Form', field: 'field', prompt: 'Введите значение' },
++    ),
++  }),
++  block('fsm.transition', 'control', 'FSM transition between states.', {
++    constraints: withDefaults(
++      withFlow(palette('FSM переход', '⇢', '#db2777', 'FSM', false, true), { maxOutputs: 1 }),
++      { event: '', from: '', to: '' },
++    ),
++  }),
+ ]);
+ 
+ export const logicBlocks = Object.freeze([
+@@ -258,6 +305,18 @@ export const logicBlocks = Object.freeze([
+   block('remember', 'logic', 'Store a temporary session variable.', {
+     constraints: palette('Запомнить', '♦', '#94a3b8', 'Логика', false, true),
+   }),
++  block('set_variable', 'logic', 'Set runtime ctx.vars entry.', {
++    constraints: withDefaults(
++      withFlow(palette('Задать переменную', '=', '#8b5cf6', 'Переменные', false, true), { maxOutputs: 1 }),
++      { name: 'var', value: '' },
++    ),
++  }),
++  block('get_variable', 'logic', 'Read runtime ctx.vars entry.', {
++    constraints: withDefaults(
++      withFlow(palette('Получить переменную', '≡', '#7c3aed', 'Переменные', false, true), { maxOutputs: 1 }),
++      { name: 'var', varname: 'var' },
++    ),
++  }),
+   block('get', 'logic', 'Read a value from persistent storage.', {
+     constraints: palette('Получить', '📥', '#0ea5e9', 'Логика', false, true),
+   }),
+@@ -365,6 +424,36 @@ export const dataBlocks = Object.freeze([
+   block('set_global', 'data', 'Update a module-level global variable.', {
+     constraints: palette('Обновить глобальную', '🌍', '#10b981', 'Данные', false, true),
+   }),
++  block('db.get', 'data', 'Read a value from sqlite kv store.', {
++    constraints: withDefaults(
++      withFlow(palette('DB получить', '📥', '#0891b2', 'База данных', false, true), { maxOutputs: 1 }),
++      { key: 'key', varname: 'value', table: 'kv_store' },
++    ),
++  }),
++  block('db.set', 'data', 'Write a value to sqlite kv store.', {
++    constraints: withDefaults(
++      withFlow(palette('DB записать', '💾', '#0e7490', 'База данных', false, true), { maxOutputs: 1 }),
++      { key: 'key', value: '', table: 'kv_store' },
++    ),
++  }),
++  block('db.query', 'data', 'Run a raw SQL query (sqlite).', {
++    constraints: withDefaults(
++      withFlow(palette('DB запрос', '⌗', '#155e75', 'База данных', false, true), { maxOutputs: 1 }),
++      { sql: 'SELECT 1', varname: 'rows' },
++    ),
++  }),
++  block('db.insert', 'data', 'Insert a row into a table.', {
++    constraints: withDefaults(
++      withFlow(palette('DB вставка', '➕', '#164e63', 'База данных', false, true), { maxOutputs: 1 }),
++      { table: 'records', values: {} },
++    ),
++  }),
++  block('db.update', 'data', 'Update rows in a table.', {
++    constraints: withDefaults(
++      withFlow(palette('DB обновить', '✎', '#083344', 'База данных', false, true), { maxOutputs: 1 }),
++      { table: 'records', where: 'id = ?', values: {} },
++    ),
++  }),
+ ]);
+ 
+ export const settingsBlocks = Object.freeze([
+@@ -493,9 +582,13 @@ export const BLOCK_STACK_COMPATIBILITY = freezeCompatibilityMap({
+   else: FLOW_CHILDREN,
+   ask: ['message', 'remember', 'get', 'save', 'condition', 'condition_not', 'log', 'stop', 'goto'],
+   remember: FLOW_NO_MEDIA,
++  set_variable: FLOW_NO_MEDIA,
++  get_variable: FLOW_NO_MEDIA,
+   get: FLOW_NO_MEDIA,
+   save: FLOW_NO_MEDIA,
+   loop: FLOW_CHILDREN,
++  foreach: FLOW_CHILDREN,
++  require_role: FLOW_CHILDREN,
+ 
+   delay: ['message', 'typing', 'condition', 'condition_not', 'ask', 'remember', 'get', 'save', 'log', 'stop', 'goto'],
+   typing: ['message', 'photo', 'photo_var', 'video', 'audio', 'document', 'document_var', 'send_file', 'sticker', 'condition', 'condition_not', 'ask', 'delay', 'stop', 'goto'],
+@@ -517,6 +610,17 @@ export const BLOCK_STACK_COMPATIBILITY = freezeCompatibilityMap({
+   poll: MEDIA_STACK_CHILDREN,
+ 
+   set_global: FLOW_NO_MEDIA,
++
++  'fsm.state': FLOW_CHILDREN,
++  'fsm.input': FLOW_CHILDREN,
++  'fsm.transition': FLOW_CHILDREN,
++  fsm: FLOW_CHILDREN,
++
++  'db.get': FLOW_NO_MEDIA,
++  'db.set': FLOW_NO_MEDIA,
++  'db.query': FLOW_NO_MEDIA,
++  'db.insert': FLOW_NO_MEDIA,
++  'db.update': FLOW_NO_MEDIA,
+ });
+ 
+ export function getCompatibleBlockTypes(parentType) {
+@@ -531,6 +635,13 @@ export function getBlockDefinition(type) {
+   return blockRegistry[String(type || '').trim()] || null;
+ }
+ 
++export { getBlockCapabilities, hasBlockCapabilities } from './registry/blockCapabilities.js';
++
++export function getNodeCapabilities(type) {
++  const def = getBlockDefinition(type);
++  return def?.nodeCapabilities ?? getBlockCapabilities(type);
++}
++
+ export function getBlockUiConstraints(type) {
+   return getBlockDefinition(type)?.constraints?.ui || null;
+ }
+diff --git a/core/codegen/blockCompilers/permissions.js b/core/codegen/blockCompilers/permissions.js
+new file mode 100644
+index 0000000..c21a642
+--- /dev/null
++++ b/core/codegen/blockCompilers/permissions.js
+@@ -0,0 +1 @@
++export { compileRequireRole } from '../permissionCodegen.js';
+diff --git a/core/codegen/compileCore.js b/core/codegen/compileCore.js
+index 19f8cba..576807a 100644
+--- a/core/codegen/compileCore.js
++++ b/core/codegen/compileCore.js
+@@ -28,6 +28,36 @@ import {
+   emitInlineKeyboard,
+ } from './keyboards.js';
+ import { callbackKeysMatch, normalizeCallbackData } from './callbackDataNormalize.js';
++import { buildFsmGraphFromStacks, emitFsmPythonFromGraph } from './fsmCodegen.js';
++import {
++  stackHasVisualDb,
++  emitSqliteDbRuntime,
++  emitVisualDbManifest,
++} from '../db/dbCodegen.js';
++import { compileForeachBlock, isForeachKeyboardOutput } from './foreachCodegen.js';
++import {
++  emitRuntimeContextRuntime,
++  emitRuntimeContextDefaults,
++  emitHandlerContextPreamble,
++  emitCtxLocalAliases,
++} from './runtimeContextCodegen.js';
++import {
++  compileSetVariable,
++  compileGetVariable,
++  compileRememberCtx,
++  compileGetCtx,
++  compileSaveCtx,
++  compileSetGlobalCtx,
++  compileSaveGlobalCtx,
++} from './variableCompilers.js';
++import {
++  emitPermissionMiddlewareRuntime,
++  emitPermissionMiddlewareRegistration,
++  emitCtxRoleFromMiddleware,
++  compileRequireRole,
++  stackHasRequireRole,
++  collectRequireRoleIssues,
++} from './permissionCodegen.js';
+ 
+ export { parseButtonRows, parseInlineRows, emitReplyKeyboard, emitInlineKeyboard } from './keyboards.js';
+ 
+@@ -338,14 +368,14 @@ export function compileDeleteKey(block, ctx) {
+   const key = block?.props?.key ?? block?.payload?.key ?? '';
+   const storage = ctx.storage ?? 'fsm_pop';
+   const ind = pyIndent(ctx.indent);
+-  if (storage === 'fsm_update_data') {
+-    return `${ind}await state.update_data(${escapePyKey(key)}=None)`;
+-  }
+   const k = pyQuote(String(key).trim());
+   return [
+-    `${ind}data = await state.get_data()`,
+-    `${ind}data.pop(${k}, None)`,
+-    `${ind}await state.set_data(data)`,
++    `${ind}_st = ctx["state"]`,
++    `${ind}if _st is not None:`,
++    `${ind}    _data = await _st.get_data()`,
++    `${ind}    _data.pop(${k}, None)`,
++    `${ind}    await _st.set_data(_data)`,
++    `${ind}ctx["vars"].pop(${k}, None)`,
+   ].join('\n');
+ }
+ 
+@@ -442,43 +472,28 @@ export function compileElseEvent(block, ctx) {
+ }
+ 
+ export function compileRemember(block, ctx) {
+-  const varname = escapePyKey(block?.props?.varname || 'var');
+-  const value = dslRhsToPython(block?.props?.value);
+-  return `${pyIndent(ctx.indent)}${varname} = ${value}`;
++  return compileRememberCtx(block, ctx);
+ }
+ 
+ export function compileGet(block, ctx) {
+-  const key = block?.props?.key || '';
+-  const varname = escapePyKey(block?.props?.varname || 'var');
+-  const ind = pyIndent(ctx.indent);
+-  const k = pyQuote(String(key).trim());
+-  return [
+-    `${ind}data = await state.get_data()`,
+-    `${ind}${varname} = data.get(${k})`,
+-  ].join('\n');
++  return compileGetCtx(block, ctx);
+ }
+ 
+ export function compileSave(block, ctx) {
+-  const key = block?.props?.key || '';
+-  const value = dslRhsToPython(block?.props?.value);
+-  const ind = pyIndent(ctx.indent);
+-  const k = escapePyKey(String(key).trim());
+-  return `${ind}await state.update_data(${k}=${value})`;
++  return compileSaveCtx(block, ctx);
+ }
+ 
+ export function compileSaveGlobal(block, ctx) {
+-  const key = block?.props?.key || '';
+-  const value = dslRhsToPython(block?.props?.value);
+-  const ind = pyIndent(ctx.indent);
+-  return `${ind}GLOBAL_STORE[${pyQuote(String(key).trim())}] = ${value}`;
++  return compileSaveGlobalCtx(block, ctx);
+ }
+ 
+ export function compileSetGlobal(block, ctx) {
+-  const varname = escapePyKey(block?.props?.varname || 'var');
+-  const value = dslRhsToPython(block?.props?.value);
+-  return `${pyIndent(ctx.indent)}${varname} = ${value}`;
++  return compileSetGlobalCtx(block, ctx);
+ }
+ 
++export { compileSetVariable, compileGetVariable } from './variableCompilers.js';
++export { compileRequireRole } from './permissionCodegen.js';
++
+ export function compileAsk(block, ctx) {
+   const question = dslTextToPythonFString(block?.props?.question || '');
+   const field = toPyIdent(block?.props?.varname || 'field');
+@@ -553,6 +568,12 @@ export function compileStop(block, ctx) {
+   return `${ind}return`;
+ }
+ 
++export function compileForeach(block, ctx) {
++  return compileForeachBlock(block, ctx);
++}
++
++export { isForeachKeyboardOutput } from './foreachCodegen.js';
++
+ export function compileLoop(block, ctx) {
+   const p = block?.props || {};
+   const mode = p.mode || 'count';
+@@ -768,8 +789,10 @@ export function compileAllKeys(block, ctx) {
+   const vn = escapePyKey(block?.props?.varname || 'keys');
+   const ind = pyIndent(ctx.indent);
+   return [
+-    `${ind}data = await state.get_data()`,
+-    `${ind}${vn} = list(data.keys())`,
++    `${ind}_st = ctx["state"]`,
++    `${ind}_data = await _st.get_data() if _st is not None else {}`,
++    `${ind}${vn} = list(_data.keys())`,
++    `${ind}ctx_set_var(ctx, ${pyQuote(vn)}, ${vn})`,
+   ].join('\n');
+ }
+ export function compileCallBlock(block, ctx) {
+@@ -805,7 +828,9 @@ export function compileNodeToPython(node, context = {}) {
+   if (stmt) lines.push(stmt);
+ 
+   const childIndent =
+-    isConditionLikeType(type) || type === 'else' || type === 'loop' ? ctx.indent + 1 : ctx.indent;
++    isConditionLikeType(type) || type === 'else' || type === 'loop' || type === 'foreach'
++      ? ctx.indent + 1
++      : ctx.indent;
+ 
+   for (const child of node?.children || []) {
+     lines.push(compileNodeToPython(child, { ...ctx, indent: childIndent }));
+@@ -817,7 +842,12 @@ function compileStatementBlock(block, ctx) {
+   if (isEventHandlerType(block.type) || block.type === 'else') {
+     return compileHandlerFromRoot(block, [], { ...ctx, indent: ctx.indent });
+   }
+-  if (isConditionLikeType(block.type) || block.type === 'else' || block.type === 'loop') {
++  if (
++    isConditionLikeType(block.type)
++    || block.type === 'else'
++    || block.type === 'loop'
++    || block.type === 'foreach'
++  ) {
+     return compileControlBlock(block, ctx);
+   }
+   return transpileBlockToPython(block, ctx);
+@@ -878,10 +908,20 @@ function compileHandlerTree(rootBlock, bodyBlocks, ctx) {
+   lines.push(`${pyIndent(indent)}async def ${handlerName}(${params}):`);
+ 
+   const bodyIndent = indent + 1;
++  lines.push(emitHandlerContextPreamble(isCallback, bodyIndent));
++  if (ctx?.needsPermissionMiddleware) {
++    lines.push(emitCtxRoleFromMiddleware(bodyIndent));
++  }
++  const defaultVarNames = ctx?.ctxDefaultVarNames || [];
++  if (defaultVarNames.length) {
++    lines.push(emitCtxLocalAliases(defaultVarNames, bodyIndent));
++  }
++
+   const bodyCtx = {
+     ...ctx,
+     indent: bodyIndent,
+     inCallbackHandler: isCallback,
++    hasRuntimeCtx: true,
+   };
+ 
+   const { events, bodies, parentTail } = distributeEventChainBodies(bodyBlocks);
+@@ -903,7 +943,12 @@ function compileHandlerTree(rootBlock, bodyBlocks, ctx) {
+ 
+   for (let si = 0; si < statements.length; si += 1) {
+     const block = statements[si];
+-    if (isConditionLikeType(block.type) || block.type === 'else' || block.type === 'loop') {
++    if (
++      isConditionLikeType(block.type)
++      || block.type === 'else'
++      || block.type === 'loop'
++      || block.type === 'foreach'
++    ) {
+       lines.push(compileConditionSequence(statements, si, bodyCtx));
+       break;
+     }
+@@ -928,7 +973,12 @@ function compileConditionSequence(allBlocks, startIndex, ctx) {
+   while (i < allBlocks.length) {
+     const b = allBlocks[i];
+     if (i > startIndex && (isEventHandlerType(b.type) || isRootChunkType(b.type))) break;
+-    if (isConditionLikeType(b.type) || b.type === 'else' || b.type === 'loop') {
++    if (
++      isConditionLikeType(b.type)
++      || b.type === 'else'
++      || b.type === 'loop'
++      || b.type === 'foreach'
++    ) {
+       lines.push(transpileBlockToPython(b, ctx));
+       i += 1;
+       const branchCtx = { ...ctx, indent: ctx.indent + 1 };
+@@ -937,6 +987,7 @@ function compileConditionSequence(allBlocks, startIndex, ctx) {
+         !isConditionLikeType(allBlocks[i].type) &&
+         allBlocks[i].type !== 'else' &&
+         allBlocks[i].type !== 'loop' &&
++        allBlocks[i].type !== 'foreach' &&
+         !isEventHandlerType(allBlocks[i].type)
+       ) {
+         lines.push(compileStatement(allBlocks[i], branchCtx));
+@@ -960,7 +1011,7 @@ function compileStackBody(blocks, ctx) {
+     const lines = [];
+     const bodyCtx = { ...ctx };
+     for (const b of blocks) {
+-      if (isConditionLikeType(b.type) || b.type === 'loop') {
++      if (isConditionLikeType(b.type) || b.type === 'loop' || b.type === 'foreach') {
+         lines.push(compileConditionSequence(blocks, blocks.indexOf(b), bodyCtx));
+         break;
+       }
+@@ -1013,11 +1064,14 @@ function collectModuleMeta(stacks) {
+     version: '1.0',
+     botToken: 'YOUR_BOT_TOKEN',
+     globals: [],
++    ctxDefaults: {},
+     commands: [],
+-    fsmStates: new Map(),
++    fsmGraph: null,
+     blockFuncs: [],
+     needsAiohttp: false,
+     needsDb: false,
++    needsSqlite: false,
++    needsPermissionMiddleware: false,
+   };
+ 
+   for (const stack of stacks || []) {
+@@ -1026,12 +1080,6 @@ function collectModuleMeta(stacks) {
+     const root = blocks[0];
+     if (root.type === 'version') meta.version = root.props?.version || meta.version;
+     if (root.type === 'bot') meta.botToken = String(root.props?.token || meta.botToken).trim() || meta.botToken;
+-    if (root.type === 'global' || root.type === 'set_global') {
+-      meta.globals.push({
+-        name: root.props?.varname || 'var',
+-        value: dslRhsToPython(root.props?.value),
+-      });
+-    }
+     if (root.type === 'commands') {
+       meta.commands.push(...parseCommandLines(root.props?.commands));
+     }
+@@ -1039,56 +1087,18 @@ function collectModuleMeta(stacks) {
+       meta.blockFuncs.push(compileBlockDefinition(root, blocks.slice(1), { indent: 0 }));
+     }
+     for (const b of blocks) {
+-      if (b.type === 'ask') {
+-        const field = toPyIdent(b.props?.varname || 'field');
+-        if (!meta.fsmStates.has('Form')) meta.fsmStates.set('Form', new Set());
+-        meta.fsmStates.get('Form').add(field);
++      if (b.type === 'global' || b.type === 'set_global') {
++        const name = String(b.props?.varname || 'var').trim();
++        meta.ctxDefaults[name] = dslRhsToPython(b.props?.value);
++        meta.globals.push({ name, value: meta.ctxDefaults[name] });
+       }
+       if (b.type === 'http') meta.needsAiohttp = true;
+       if (b.type === 'inline_db') meta.needsDb = true;
+-      if (b.type === 'scenario') {
+-        const sc = toPascalCase(b.props?.name || 'Scenario');
+-        if (!meta.fsmStates.has(sc)) meta.fsmStates.set(sc, new Set());
+-      }
+-      if (b.type === 'step') {
+-        const sc = toPascalCase(b.props?.scenario || 'Scenario');
+-        if (!meta.fsmStates.has(sc)) meta.fsmStates.set(sc, new Set());
+-        meta.fsmStates.get(sc).add(toPyIdent(b.props?.name || 'step'));
+-      }
+-      // FIX: Track goto targets to automatically create FSM states
+-      if (b.type === 'goto' || b.type === 'run') {
+-        const target = b?.props?.target ?? b?.props?.label ?? b?.props?.name ?? b?.props?.scenario ?? 'main';
+-        const parts = String(target).split(/[./]/).filter(Boolean);
+-        const scenario = parts[0] || 'Scenario';
+-        const step = parts[1] || parts[0] || 'step';
+-        const sc = toPascalCase(scenario);
+-        if (!meta.fsmStates.has(sc)) meta.fsmStates.set(sc, new Set());
+-        if (parts.length > 1) {
+-          meta.fsmStates.get(sc).add(toPyIdent(step));
+-        } else {
+-          // Single-part target like 'main' becomes a state in Scenario
+-          const defaultScenario = toPascalCase('Scenario');
+-          if (!meta.fsmStates.has(defaultScenario)) meta.fsmStates.set(defaultScenario, new Set());
+-          meta.fsmStates.get(defaultScenario).add(toPyIdent(target));
+-        }
+-      }
++      if (b.type === 'require_role') meta.needsPermissionMiddleware = true;
+     }
+   }
+-  return meta;
+-}
+ 
+-function emitFsmStates(fsmStates) {
+-  const lines = [];
+-  for (const [group, fields] of fsmStates.entries()) {
+-    // Skip emitting empty State groups — avoid dead / unused FSM classes
+-    if (!fields || fields.size === 0) continue;
+-    lines.push(`class ${group}(StatesGroup):`);
+-    for (const f of fields) {
+-      lines.push(`    ${f} = State()`);
+-    }
+-    lines.push('');
+-  }
+-  return lines.join('\n');
++  return meta;
+ }
+ 
+ function emitSetCommands(commands) {
+@@ -1157,6 +1167,17 @@ export function buildPythonModule(stacks, options = {}) {
+     });
+   }
+   stacks = bind.stacks;
++  const meta = collectModuleMeta(stacks);
++
++  const permissionIssues = collectRequireRoleIssues(stacks);
++  if (permissionIssues.length) {
++    const first = permissionIssues[0];
++    throw new CodegenError(first.message, {
++      code: first.code || 'INVALID_REQUIRE_ROLE',
++      nodeId: first.nodeId,
++      blockType: 'require_role',
++    });
++  }
+ 
+   assertCallbackResolution(stacks, options.flow || null);
+ 
+@@ -1190,7 +1211,25 @@ export function buildPythonModule(stacks, options = {}) {
+     const pb = HANDLER_EMIT_ORDER[tb] ?? (isEventHandlerType(tb) ? 20 : 100);
+     return pa - pb;
+   });
+-  const meta = collectModuleMeta(stacks);
++  for (const stack of stacks) {
++    for (const b of stack?.blocks || []) {
++      if (b.type === 'http') meta.needsAiohttp = true;
++      if (b.type === 'inline_db') meta.needsDb = true;
++    }
++  }
++  meta.needsSqlite = stackHasVisualDb(stacks);
++  meta.needsPermissionMiddleware = meta.needsPermissionMiddleware || stackHasRequireRole(stacks);
++  meta.fsmGraph = buildFsmGraphFromStacks(stacks);
++  meta.fsmStates = new Map();
++  for (const state of meta.fsmGraph.states || []) {
++    if (!meta.fsmStates.has(state.group)) meta.fsmStates.set(state.group, new Set());
++    meta.fsmStates.get(state.group).add(state.name);
++  }
++  for (const input of meta.fsmGraph.inputs || []) {
++    if (!meta.fsmStates.has(input.group)) meta.fsmStates.set(input.group, new Set());
++    meta.fsmStates.get(input.group).add(input.field);
++  }
++
+   const handlerBodies = [];
+ 
+   const imports = [
+@@ -1212,21 +1251,29 @@ export function buildPythonModule(stacks, options = {}) {
+     ')',
+   ];
+   if (meta.needsAiohttp) imports.splice(4, 0, 'import aiohttp');
+-  if (meta.needsDb) imports.push('', '# project DB adapter', 'db = {}  # replace with real db.get()');
++  if (meta.needsDb && !meta.needsSqlite) {
++    imports.push('', '# project DB adapter', 'db = {}  # replace with real db.get()');
++  }
+ 
+   const parts = [
+     imports.join('\n'),
+     '',
+-    `GLOBAL_STORE: dict = {}`,
++    emitRuntimeContextDefaults(meta.ctxDefaults),
++    emitRuntimeContextRuntime(),
+     '',
+   ];
+ 
+-  for (const g of meta.globals) {
+-    parts.push(`${escapePyKey(g.name)} = ${g.value}`);
++  if (meta.needsSqlite) {
++    parts.push(emitSqliteDbRuntime());
++    parts.push('');
+   }
+-  if (meta.globals.length) parts.push('');
+ 
+-  const fsmCode = emitFsmStates(meta.fsmStates);
++  if (meta.needsPermissionMiddleware) {
++    parts.push(emitPermissionMiddlewareRuntime());
++    parts.push('');
++  }
++
++  const fsmCode = emitFsmPythonFromGraph(meta.fsmGraph);
+   if (fsmCode.trim()) {
+     // ensure State/StatesGroup import present when FSM states are emitted
+     const stateImport = 'from aiogram.fsm.state import State, StatesGroup';
+@@ -1251,6 +1298,11 @@ export function buildPythonModule(stacks, options = {}) {
+   parts.push('router = Router()');
+   parts.push('');
+ 
++  if (meta.needsPermissionMiddleware) {
++    parts.push(emitPermissionMiddlewareRegistration());
++    parts.push('');
++  }
++
+   const setCmd = emitSetCommands(meta.commands);
+   if (setCmd) parts.push(setCmd);
+ 
+@@ -1270,6 +1322,8 @@ export function buildPythonModule(stacks, options = {}) {
+         indent: 0,
+         handlerNames,
+         fsmStates: meta.fsmStates,
++        ctxDefaultVarNames: Object.keys(meta.ctxDefaults || {}),
++        needsPermissionMiddleware: meta.needsPermissionMiddleware,
+         transpileTrace,
+       });
+       if (h?.trim()) {
+diff --git a/core/codegen/permissionCodegen.js b/core/codegen/permissionCodegen.js
+new file mode 100644
+index 0000000..9c5692f
+--- /dev/null
++++ b/core/codegen/permissionCodegen.js
+@@ -0,0 +1,105 @@
++/**
++ * require_role → aiogram middleware + handler guards (ctx.vars._role).
++ */
++
++import { pyQuote, pyIndent } from './utils.js';
++import {
++  parseRequireRoleProps,
++  validateRequireRoleProps,
++} from '../permissions/permissionRoles.js';
++
++/** Runtime: role store + middleware + checks. */
++export function emitPermissionMiddlewareRuntime() {
++  return [
++    'ROLE_RANK: dict[str, int] = {"user": 1, "moderator": 2, "admin": 3}',
++    'BOT_ROLES: tuple[str, ...] = ("admin", "moderator", "user")',
++    '_ROLE_STORE: dict[int, str] = {}',
++    '',
++    'async def resolve_user_role(user_id: int | None) -> str:',
++    '    if user_id is None:',
++    '        return "user"',
++    '    return _ROLE_STORE.get(int(user_id), "user")',
++    '',
++    'def user_has_required_role(ctx: dict, allowed_roles: tuple[str, ...]) -> bool:',
++    '    role = str(ctx.get("vars", {}).get("_role", "user")).lower()',
++    '    return role in allowed_roles',
++    '',
++    'from aiogram import BaseMiddleware',
++    '',
++    'class RolePermissionMiddleware(BaseMiddleware):',
++    '    async def __call__(self, handler, event, data):',
++    '        user = getattr(event, "from_user", None)',
++    '        if user is None and isinstance(event, CallbackQuery):',
++    '            user = event.from_user',
++    '        uid = int(user.id) if user else None',
++    '        data["user_role"] = await resolve_user_role(uid)',
++    '        return await handler(event, data)',
++    '',
++  ].join('\n');
++}
++
++export function emitPermissionMiddlewareRegistration() {
++  return [
++    'router.message.middleware(RolePermissionMiddleware())',
++    'router.callback_query.middleware(RolePermissionMiddleware())',
++  ].join('\n');
++}
++
++/** Sync ctx.vars._role from middleware data (after build_runtime_ctx). */
++export function emitCtxRoleFromMiddleware(indent = 1) {
++  const ind = pyIndent(indent);
++  return `${ind}ctx_set_var(ctx, "_role", data.get("user_role", "user"))`;
++}
++
++/**
++ * @param {object} block
++ * @param {{ indent?: number, inCallbackHandler?: boolean }} ctx
++ */
++export function compileRequireRole(block, ctx = {}) {
++  const err = validateRequireRoleProps(block?.props);
++  if (err) {
++    return `${pyIndent(ctx.indent ?? 0)}# require_role: ${err}`;
++  }
++  const { allowedRoles, denyMessage } = parseRequireRoleProps(block?.props || {});
++  const ind = pyIndent(ctx.indent ?? 0);
++  const allowedPy = `(${allowedRoles.map((r) => pyQuote(r)).join(', ')})`;
++  const target = ctx.inCallbackHandler ? 'callback.message' : 'message';
++  const msg = pyQuote(denyMessage);
++  return [
++    `${ind}if not user_has_required_role(ctx, ${allowedPy}):`,
++    `${ind}    await ${target}.answer(${msg})`,
++    `${ind}    return`,
++  ].join('\n');
++}
++
++export { validateRequireRoleProps };
++
++/** @param {object[]} stacks */
++export function stackHasRequireRole(stacks) {
++  for (const stack of stacks || []) {
++    for (const b of stack?.blocks || []) {
++      if (b?.type === 'require_role') return true;
++    }
++  }
++  return false;
++}
++
++/** @param {object[]} stacks @returns {string[]} */
++export function collectRequireRoleIssues(stacks) {
++  const issues = [];
++  for (const stack of stacks || []) {
++    for (const b of stack?.blocks || []) {
++      if (b?.type !== 'require_role') continue;
++      const err = validateRequireRoleProps(b?.props);
++      if (err) {
++        issues.push({
++          code: 'INVALID_REQUIRE_ROLE',
++          message: err,
++          nodeId: b.id,
++          blockType: 'require_role',
++        });
++      }
++    }
++  }
++  return issues;
++}
+diff --git a/core/compiler/permissionValidator.ts b/core/compiler/permissionValidator.ts
+new file mode 100644
+index 0000000..49dff96
+--- /dev/null
++++ b/core/compiler/permissionValidator.ts
+@@ -0,0 +1,20 @@
++import { validateRequireRoleProps } from "../permissions/permissionRoles.js";
++
++export function validatePermissionNodes(nodes: Array<{ id?: string; type?: string; data?: Record<string, unknown> }>) {
++  const errors: Array<{ nodeId: string; message: string }> = [];
++
++  for (const node of nodes || []) {
++    if (String(node?.type || "").trim() !== "require_role") continue;
++    const payload =
++      node.data && typeof node.data === "object" ? node.data : {};
++    const err = validateRequireRoleProps(payload);
++    if (err) {
++      errors.push({
++        nodeId: String(node.id || "require_role"),
++        message: err,
++      });
++    }
++  }
++
++  return errors;
++}
+diff --git a/core/compiler/validator.ts b/core/compiler/validator.ts
+index 227776e..d234fb1 100644
+--- a/core/compiler/validator.ts
++++ b/core/compiler/validator.ts
+@@ -1,3 +1,9 @@
++import {
++  assertBlockCapabilitiesRegistered,
++  getBlockCapabilities,
++} from "../registry/blockCapabilities.js";
++import { validatePermissionNodes } from "./permissionValidator";
++
+ export function validateGraph(ast: any) {
+   const ids = new Set<string>();
+ 
+@@ -10,6 +16,26 @@ export function validateGraph(ast: any) {
+     }
+ 
+     ids.add(node.id);
++
++    const blockType = String(node?.type || "").trim();
++    if (!blockType) {
++      throw new Error(`ExecutionGraph node "${node.id}" is missing type`);
++    }
++    assertBlockCapabilitiesRegistered(blockType);
++    const caps = getBlockCapabilities(blockType);
++    if (!Array.isArray(caps.outputs)) {
++      throw new Error(
++        `ExecutionGraph node "${node.id}": invalid capabilities.outputs`,
++      );
++    }
++  }
++
++  const permissionErrors = validatePermissionNodes(ast.nodes || []);
++  if (permissionErrors.length) {
++    const first = permissionErrors[0];
++    throw new Error(
++      `Permission validation failed for node "${first.nodeId}": ${first.message}`,
++    );
+   }
+ 
+   return true;
+diff --git a/core/graph/permissionGraphValidate.js b/core/graph/permissionGraphValidate.js
+new file mode 100644
+index 0000000..11de4b6
+--- /dev/null
++++ b/core/graph/permissionGraphValidate.js
+@@ -0,0 +1,32 @@
++/**
++ * GraphDocument permission validation (require_role nodes).
++ */
++
++import { validateRequireRoleProps } from '../permissions/permissionRoles.js';
++
++/**
++ * @param {object} document GraphDocument
++ * @returns {Array<{ code: string, message: string, nodeId?: string, severity: string }>}
++ */
++export function validateGraphPermissions(document) {
++  const diagnostics = [];
++  const nodes = document?.nodes && typeof document.nodes === 'object'
++    ? Object.values(document.nodes)
++    : [];
++
++  for (const node of nodes) {
++    if (String(node?.type || '').trim() !== 'require_role') continue;
++    const data = node?.data && typeof node.data === 'object' ? node.data : {};
++    const err = validateRequireRoleProps(data);
++    if (err) {
++      diagnostics.push({
++        code: 'invalid_require_role',
++        severity: 'error',
++        message: err,
++        nodeId: node.id,
++      });
++    }
++  }
++
++  return diagnostics;
++}
+diff --git a/core/permissions/permissionRoles.js b/core/permissions/permissionRoles.js
+new file mode 100644
+index 0000000..a1db307
+--- /dev/null
++++ b/core/permissions/permissionRoles.js
+@@ -0,0 +1,92 @@
++/**
++ * Bot permission roles — admin / moderator / user (hierarchy).
++ */
++
++export const BOT_ROLES = Object.freeze(['admin', 'moderator', 'user']);
++
++export const ROLE_RANK = Object.freeze({
++  admin: 3,
++  moderator: 2,
++  user: 1,
++});
++
++/** @param {string} role */
++export function normalizeBotRole(role) {
++  const r = String(role || '').trim().toLowerCase();
++  return BOT_ROLES.includes(r) ? r : null;
++}
++
++/**
++ * @param {string} spec comma/space separated or single role
++ * @returns {string[]}
++ */
++export function parseRoleList(spec) {
++  const raw = String(spec ?? '').trim();
++  if (!raw) return ['user'];
++  const parts = raw.split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean);
++  const out = [];
++  for (const p of parts) {
++    const n = normalizeBotRole(p);
++    if (n && !out.includes(n)) out.push(n);
++  }
++  return out.length ? out : ['user'];
++}
++
++/**
++ * Expand minimum role to all roles that satisfy hierarchy (inclusive).
++ * @param {string} minRole
++ * @returns {string[]}
++ */
++export function expandRoleRequirement(minRole) {
++  const base = normalizeBotRole(minRole) || 'user';
++  const minRank = ROLE_RANK[base] || 1;
++  return BOT_ROLES.filter((r) => ROLE_RANK[r] >= minRank);
++}
++
++/**
++ * @param {Record<string, unknown>} props
++ * @returns {{ allowedRoles: string[], denyMessage: string }}
++ */
++export function parseRequireRoleProps(props) {
++  const p = props && typeof props === 'object' ? props : {};
++  const explicit = String(p.roles ?? '').trim();
++  const allowedRoles = explicit
++    ? parseRoleList(explicit)
++    : expandRoleRequirement(String(p.role ?? 'user'));
++  const denyMessage = String(
++    p.message ?? p.deny_message ?? p.denyMessage ?? 'Недостаточно прав',
++  ).trim();
++  return { allowedRoles, denyMessage };
++}
++
++/**
++ * @param {Record<string, unknown>} props
++ * @returns {string | null} validation error
++ */
++export function validateRequireRoleProps(props) {
++  const p = props && typeof props === 'object' ? props : {};
++  const explicit = String(p.roles ?? '').trim();
++  if (explicit) {
++    const parts = explicit.split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean);
++    for (const part of parts) {
++      if (!normalizeBotRole(part)) {
++        return `Неизвестная роль «${part}». Допустимо: ${BOT_ROLES.join(', ')}`;
++      }
++    }
++    return null;
++  }
++  const single = String(p.role ?? '').trim();
++  if (single && !normalizeBotRole(single)) {
++    return `Неизвестная роль «${single}». Допустимо: ${BOT_ROLES.join(', ')}`;
++  }
++  return null;
++}
++
++/** @param {string} userRole @param {readonly string[]} allowedRoles */
++export function isRoleAllowed(userRole, allowedRoles) {
++  const u = normalizeBotRole(userRole) || 'user';
++  const allowed = new Set(
++    (allowedRoles || []).map((r) => normalizeBotRole(r)).filter(Boolean),
++  );
++  return allowed.has(u);
++}
+diff --git a/generators/python_aiogram/generateBot.ts b/generators/python_aiogram/generateBot.ts
+index a3a0f44..d5c684b 100644
+--- a/generators/python_aiogram/generateBot.ts
++++ b/generators/python_aiogram/generateBot.ts
+@@ -4,6 +4,27 @@ import {
+   type ExecutionPolicy,
+ } from "../../core/execution/executionPolicy";
+ import { sortEdges } from "../../core/execution/executionContract";
++import { buildFsmGraph } from "../../core/execution/fsmGraph";
++import { buildVisualDbGraphFromBotNodes } from "../../core/db/visual_db_ir";
++import {
++  emitSqliteDbRuntime,
++  emitVisualDbManifest,
++} from "../../core/db/dbCodegen.js";
++import { generateFsmPython } from "./generateFSM";
++import { generateForeachPython } from "./generateForeach";
++import { generatePermissionPython } from "./generatePermission";
++import { emitRuntimeContextRuntime } from "../../core/codegen/runtimeContextCodegen.js";
++
++function executionNodesToDbSources(execution: ExecutionGraph) {
++  return execution.nodes.map((node) => ({
++    id: node.id,
++    type: node.type,
++    payload:
++      node.data && typeof node.data === "object"
++        ? { ...(node.data as Record<string, unknown>) }
++        : {},
++  }));
++}
+ 
+ function formatEdgeLine(edge: {
+   from: string;
+@@ -19,8 +40,8 @@ function formatEdgeLine(edge: {
+ }
+ 
+ /**
+- * Generate aiogram scaffold from prepared ExecutionGraph edges only.
+- * Expects graph that already passed prepareExecutionGraph.
++ * Generate aiogram scaffold from prepared ExecutionGraph.
++ * FSM is graph-based (fsm.state / fsm.input / transition edges).
+  */
+ export function generateAiogramBot(
+   execution: ExecutionGraph,
+@@ -30,13 +51,35 @@ export function generateAiogramBot(
+     .map(formatEdgeLine)
+     .join("\n");
+ 
++  const fsmGraph = buildFsmGraph(execution);
++  const fsmSection = generateFsmPython(fsmGraph);
++  const foreachSection = generateForeachPython(execution);
++  const permissionSection = generatePermissionPython(execution);
++  const hasHandlers = execution.nodes.some((n) =>
++    ["start", "command", "callback", "on_text", "message"].includes(n.type),
++  );
++  const runtimeCtxSection = hasHandlers
++    ? `# --- runtime ctx (user, message, callback, state, vars) ---\n${emitRuntimeContextRuntime()}\n`
++    : "";
++  const visualDb = buildVisualDbGraphFromBotNodes(
++    executionNodesToDbSources(execution),
++  );
++  const dbManifest = emitVisualDbManifest(visualDb);
++  const dbRuntime =
++    visualDb.nodeCount > 0 ? `\n${emitSqliteDbRuntime()}\n` : "";
++
++  const fsmImports =
++    fsmSection.includes("StatesGroup") || fsmSection.includes("State()")
++      ? "from aiogram.fsm.state import State, StatesGroup\n"
++      : "";
++
+   return `# EXECUTION GRAPH VERSION: ${execution.version}
+ 
+ from aiogram import Router
+-
++${fsmImports}
+ router = Router()
+ 
+ # --- execution graph (source of truth) ---
+ ${edgeManifest || "# (no edges)"}
+-`;
++${runtimeCtxSection}${permissionSection}${dbManifest}${dbRuntime}${foreachSection}${fsmSection ? `\n${fsmSection}` : ""}`;
+ }
+diff --git a/generators/python_aiogram/generatePermission.ts b/generators/python_aiogram/generatePermission.ts
+new file mode 100644
+index 0000000..0c453bc
+--- /dev/null
++++ b/generators/python_aiogram/generatePermission.ts
+@@ -0,0 +1,22 @@
++import type { ExecutionGraph } from "../../core/execution/executionContract";
++
++/**
++ * Manifest comments for require_role nodes in execution scaffold.
++ */
++export function generatePermissionPython(execution: ExecutionGraph): string {
++  const lines: string[] = [];
++  for (const node of execution.nodes) {
++    if (node.type !== "require_role") continue;
++    const data =
++      node.data && typeof node.data === "object"
++        ? (node.data as Record<string, unknown>)
++        : {};
++    const role = String(data.role ?? "user");
++    const roles = String(data.roles ?? "");
++    lines.push(
++      `# REQUIRE_ROLE ${node.id} role=${role}${roles ? ` roles=${roles}` : ""}`,
++    );
++  }
++  if (!lines.length) return "";
++  return `# --- permissions (admin / moderator / user) ---\n${lines.join("\n")}\n`;
++}
+diff --git a/package.json b/package.json
+index fe4edf7..bfe2b08 100644
+--- a/package.json
++++ b/package.json
+@@ -18,6 +18,13 @@
+     "lint": "eslint src core/tests services scripts server.mjs",
+     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
+     "test:compiler": "tsx tests/compiler/compiler.test.ts",
++    "test:bot-ir": "tsx tests/compiler/bot_ir.test.ts",
++    "test:block-capabilities": "node --test core/tests/block-capabilities.test.mjs",
++    "test:fsm-graph": "tsx tests/compiler/fsmGraph.test.ts",
++    "test:visual-db": "tsx tests/compiler/visual_db.test.ts",
++    "test:foreach": "tsx tests/compiler/foreach.test.ts",
++    "test:runtime-context": "tsx tests/compiler/runtime_context.test.ts",
++    "test:permission": "tsx tests/compiler/permission.test.ts",
+     "test:runtime": "tsx tests/compiler/runtime.test.ts",
+     "parser-core-blocks": "node scripts/core-blocks-check.mjs",
+     "jammer:publish": "node scripts/publish-jammer-firmware.mjs",
+diff --git a/src/constructor/graph_document/graph_validation_pipeline.js b/src/constructor/graph_document/graph_validation_pipeline.js
+index 451981e..ec9c816 100644
+--- a/src/constructor/graph_document/graph_validation_pipeline.js
++++ b/src/constructor/graph_document/graph_validation_pipeline.js
+@@ -9,6 +9,7 @@ import { runGraphStructuralAudit } from './graph_structural_audit.js';
+ import { graphHasDanglingEdges } from './graph_edge_repair.js';
+ import { formatDiagnosticsForUser } from '../../builder/graph_error_messages.js';
+ import { isGraphEffectivelyEmpty } from './graph_canvas_state.js';
++import { validateGraphPermissions } from '../../../core/graph/permissionGraphValidate.js';
+ import {
+   defersCallbackBlocking,
+   isDeferredCallbackError,
+@@ -283,6 +284,9 @@ export function runGraphValidationPipeline(graphOrDocument, options = {}) {
+   diagnostics.push(...normalizeStructuralItems(structural.errors, 'connections'));
+   diagnostics.push(...normalizeStructuralItems(structural.warnings, 'topology'));
+   checkFsmTransitions(document.nodes, (d) => diagnostics.push(d));
++  for (const d of validateGraphPermissions(document)) {
++    diagnostics.push({ ...d, stage: 'permissions' });
++  }
+ 
+   const softened = applyEditorCallbackSoftening(diagnostics, pipelineOptions);
+   const promoted = applyStrictPromotion(softened, strict);
+diff --git a/src/constructor/graph_document/operation_registry.js b/src/constructor/graph_document/operation_registry.js
+index e64ff27..7d79508 100644
+--- a/src/constructor/graph_document/operation_registry.js
++++ b/src/constructor/graph_document/operation_registry.js
+@@ -21,6 +21,7 @@ import {
+   blockDefinitions,
+   getBlockDefinition,
+ } from '../../../core/blockRegistry.js';
++import { isAllowedSourcePort } from '../../../core/registry/blockCapabilities.js';
+ import { FLOW_PORTS } from '../../../core/graph/flowPorts.js';
+ import {
+   isGraphKeyboardNode,
+@@ -131,6 +132,14 @@ const INSPECTOR_FIELDS = Object.freeze({
+     { key: 'varname', label: 'Переменная', tag: 'input' },
+     { key: 'value', label: 'Значение', tag: 'input' },
+   ],
++  set_variable: [
++    { key: 'name', label: 'Имя (ctx.vars)', tag: 'input' },
++    { key: 'value', label: 'Значение', tag: 'input' },
++  ],
++  get_variable: [
++    { key: 'name', label: 'Имя в ctx.vars', tag: 'input' },
++    { key: 'varname', label: 'Локальная переменная', tag: 'input' },
++  ],
+   get: [
+     { key: 'key', label: 'Ключ хранилища', tag: 'input' },
+     { key: 'varname', label: 'Переменная', tag: 'input' },
+@@ -144,6 +153,20 @@ const INSPECTOR_FIELDS = Object.freeze({
+     { key: 'count', label: 'Количество (если count)', tag: 'input' },
+     { key: 'cond', label: 'Условие (если while)', tag: 'input' },
+   ],
++  require_role: [
++    { key: 'role', label: 'Минимальная роль (admin|moderator|user)', tag: 'input' },
++    { key: 'roles', label: 'Роли через запятую (override)', tag: 'input' },
++    { key: 'message', label: 'Сообщение при отказе', tag: 'input' },
++  ],
++  foreach: [
++    { key: 'list', label: 'Список (input)', tag: 'input' },
++    { key: 'var', label: 'Переменная элемента (item context)', tag: 'input' },
++    { key: 'output', label: 'body | inline_keyboard', tag: 'input' },
++    { key: 'labelField', label: 'Поле подписи кнопки', tag: 'input' },
++    { key: 'idField', label: 'Поле id для callback', tag: 'input' },
++    { key: 'callbackPrefix', label: 'Префикс callback', tag: 'input' },
++    { key: 'columns', label: 'Кнопок в ряд', tag: 'input' },
++  ],
+ 
+   delay: [{ key: 'seconds', label: 'Секунд ожидания', tag: 'input' }],
+   pause: [{ key: 'seconds', label: 'Секунд ожидания', tag: 'input' }],
+@@ -207,6 +230,14 @@ const VALIDATION_RULES = Object.freeze({
+   condition_not: (props) => (String(props?.cond ?? '').trim() ? null : 'Условие не может быть пустым'),
+   ask: (props) => (String(props?.question ?? '').trim() ? null : 'Вопрос не может быть пустым'),
+   remember: (props) => (String(props?.varname ?? '').trim() ? null : 'Укажите имя переменной'),
++  set_variable: (props) => {
++    if (!String(props?.name ?? props?.varname ?? '').trim()) return 'Укажите имя переменной';
++    return null;
++  },
++  get_variable: (props) => {
++    if (!String(props?.name ?? '').trim()) return 'Укажите имя в ctx.vars';
++    return null;
++  },
+   get: (props) => (String(props?.key ?? '').trim() ? null : 'Укажите ключ хранилища'),
+   save: (props) => (String(props?.key ?? '').trim() ? null : 'Укажите ключ хранилища'),
+   goto: (props) => (String(props?.target ?? '').trim() ? null : 'Укажите целевой обработчик'),
+@@ -220,6 +251,33 @@ const VALIDATION_RULES = Object.freeze({
+     }
+     return null;
+   },
++  require_role: (props) => {
++    const explicit = String(props?.roles ?? '').trim();
++    if (explicit) {
++      const parts = explicit.split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean);
++      const allowed = new Set(['admin', 'moderator', 'user']);
++      for (const p of parts) {
++        if (!allowed.has(p.toLowerCase())) {
++          return `Неизвестная роль «${p}». Допустимо: admin, moderator, user`;
++        }
++      }
++      return null;
++    }
++    const role = String(props?.role ?? 'user').trim().toLowerCase();
++    if (!['admin', 'moderator', 'user'].includes(role)) {
++      return 'Роль должна быть admin, moderator или user';
++    }
++    return null;
++  },
++  foreach: (props) => {
++    if (!String(props?.list ?? props?.collection ?? '').trim()) {
++      return 'Укажите список (list)';
++    }
++    if (!String(props?.var ?? props?.item ?? '').trim()) {
++      return 'Укажите переменную элемента (var)';
++    }
++    return null;
++  },
+   bot: (props) => (String(props?.token ?? '').trim() ? null : 'Токен бота обязателен'),
+   version: (props) => (String(props?.version ?? '').trim() ? null : 'Укажите версию'),
+ });
+@@ -253,7 +311,7 @@ function buildOutputPorts(definition) {
+       { id: PORT_KINDS.CONDITION_FALSE, transport, kind: PORT_KINDS.CONDITION_FALSE, label: 'FALSE', edgeLabel: 'FALSE' },
+     ];
+   }
+-  if (definition.type === 'loop') {
++  if (definition.type === 'loop' || definition.type === 'foreach') {
+     return [
+       { id: PORT_KINDS.LOOP_BODY, transport, kind: PORT_KINDS.LOOP_BODY, label: 'BODY', edgeLabel: 'body' },
+       { id: PORT_KINDS.LOOP_DONE, transport, kind: PORT_KINDS.LOOP_DONE, label: 'DONE', edgeLabel: 'done' },
+@@ -387,10 +445,28 @@ export function canConnect(sourceType, targetType, sourcePortId = null, targetPo
+   if (target.inputs.length === 0) {
+     return { ok: false, reason: `${target.type}: no input ports` };
+   }
++  const requestedSourcePort = sourcePortId != null && String(sourcePortId).trim() !== ''
++    ? String(sourcePortId).trim()
++    : null;
++  if (requestedSourcePort && !isAllowedSourcePort(source.type, requestedSourcePort)) {
++    return {
++      ok: false,
++      reason: `${source.type}: output port "${requestedSourcePort}" is not allowed for this block type`,
++      code: 'CAPABILITY_OUTPUT_PORT',
++    };
++  }
+   const sourcePort = findPort(source.outputs, sourcePortId);
+   const targetPort = findPort(target.inputs, targetPortId);
+   if (!sourcePort) return { ok: false, reason: `${source.type}: output port ${sourcePortId} not found` };
+   if (!targetPort) return { ok: false, reason: `${target.type}: input port ${targetPortId} not found` };
++  const resolvedSourcePortId = sourcePort.id || sourcePortId || 'flow';
++  if (!isAllowedSourcePort(source.type, resolvedSourcePortId)) {
++    return {
++      ok: false,
++      reason: `${source.type}: output port "${resolvedSourcePortId}" is not allowed for this block type`,
++      code: 'CAPABILITY_OUTPUT_PORT',
++    };
++  }
+   const sTrans = sourcePort.transport;
+   const tTrans = targetPort.transport;
+   if (sTrans !== '*' && tTrans !== '*' && sTrans !== tTrans) {
+diff --git a/tests/compiler/permission.test.ts b/tests/compiler/permission.test.ts
+new file mode 100644
+index 0000000..58b6805
+--- /dev/null
++++ b/tests/compiler/permission.test.ts
+@@ -0,0 +1,82 @@
++import assert from "node:assert/strict";
++
++import {
++  expandRoleRequirement,
++  parseRequireRoleProps,
++  validateRequireRoleProps,
++} from "../../core/permissions/permissionRoles.js";
++import {
++  compileRequireRole,
++  emitPermissionMiddlewareRuntime,
++  stackHasRequireRole,
++} from "../../core/codegen/permissionCodegen.js";
++import { validatePermissionNodes } from "../../core/compiler/permissionValidator.ts";
++import { validateGraphPermissions } from "../../core/graph/permissionGraphValidate.js";
++import { buildPythonModule } from "../../core/codegen/compileCore.js";
++import { buildExecutionGraph } from "../../core/execution/buildExecutionGraph";
++import { generateAiogramBot } from "../../generators/python_aiogram/generateBot";
++import "../../core/codegen/index.js";
++
++assert.deepEqual(expandRoleRequirement("moderator"), ["admin", "moderator"]);
++assert.deepEqual(expandRoleRequirement("admin"), ["admin"]);
++
++const spec = parseRequireRoleProps({ role: "admin" });
++assert.ok(spec.allowedRoles.includes("admin"));
++
++assert.match(
++  validateRequireRoleProps({ role: "superuser" }) || "",
++  /Неизвестная роль/,
++);
++assert.deepEqual(expandRoleRequirement("user"), ["admin", "moderator", "user"]);
++
++const guard = compileRequireRole(
++  { props: { role: "admin", message: "No access" } },
++  { indent: 1 },
++);
++assert.match(guard, /user_has_required_role\(ctx/);
++assert.match(guard, /return/);
++
++const runtime = emitPermissionMiddlewareRuntime();
++assert.match(runtime, /class RolePermissionMiddleware/);
++assert.match(runtime, /resolve_user_role/);
++
++const permErrors = validatePermissionNodes([
++  { id: "r1", type: "require_role", data: { role: "admin" } },
++  { id: "r2", type: "require_role", data: { roles: "bad" } },
++]);
++assert.equal(permErrors.length, 1);
++
++const graphDiag = validateGraphPermissions({
++  nodes: {
++    n1: { id: "n1", type: "require_role", data: { role: "moderator" } },
++  },
++});
++assert.equal(graphDiag.length, 0);
++
++const execution = buildExecutionGraph(
++  [
++    { id: "s1", type: "start", data: {} },
++    { id: "p1", type: "require_role", data: { role: "admin" } },
++  ],
++  [{ source: "s1", target: "p1", sourceHandle: "flow", targetHandle: "flow" }],
++);
++assert.match(generateAiogramBot(execution), /# REQUIRE_ROLE p1/);
++
++const stacks = [
++  { blocks: [{ id: "b1", type: "bot", props: { token: "T" } }] },
++  {
++    blocks: [
++      { id: "start1", type: "start", props: {} },
++      { id: "rr1", type: "require_role", props: { role: "admin" } },
++      { id: "msg1", type: "message", props: { text: "secret" } },
++    ],
++  },
++];
++assert.ok(stackHasRequireRole(stacks));
++const py = buildPythonModule(stacks);
++assert.match(py, /RolePermissionMiddleware/);
++assert.match(py, /router\.message\.middleware/);
++assert.match(py, /user_has_required_role/);
++assert.match(py, /ctx_set_var\(ctx, "_role"/);
++
++console.log("permission test OK");

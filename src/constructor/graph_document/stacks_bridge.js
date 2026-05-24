@@ -7,6 +7,7 @@ import { KEYBOARD_EDGE_SOURCE_PORT, isGraphKeyboardNode } from '../../../core/ke
 import { keyboardNodeToStackBlock } from './graph_keyboard_nodes.js';
 import { createGraphDocument } from './graph_document.js';
 import { graphDocumentToProjectGraph } from './graph_project_bridge.js';
+import { buildGraphDocumentNodeRow, resolveStackBlockType } from './graph_node_payload.js';
 
 /** Import ad-hoc UI stacks into canonical GraphDocument. */
 export function stacksToGraphDocument(stacks = [], options = {}) {
@@ -19,13 +20,11 @@ export function stacksToGraphDocument(stacks = [], options = {}) {
     for (let i = 0; i < blocks.length; i += 1) {
       const block = blocks[i] || {};
       const nodeId = String(block.id || `node_${stack.id || 'stack'}_${i}`);
-      nodes.push({
-        id: nodeId,
-        type: block.type || 'message',
-        position: { x: baseX, y: baseY + i * 112 },
-        data: { ...(block.props || {}) },
-        meta: { uiAttachments: block.uiAttachments || {} },
-      });
+      const blockType = resolveStackBlockType(block);
+      nodes.push(buildGraphDocumentNodeRow(
+        { ...block, id: nodeId, type: blockType },
+        { x: baseX, y: baseY + i * 112 },
+      ));
       if (i > 0) {
         const prevId = String(blocks[i - 1]?.id || '');
         if (prevId) {

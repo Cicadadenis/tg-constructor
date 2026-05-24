@@ -1,0 +1,785 @@
+diff --git a/core/templates/botIrToGraphDocument.ts b/core/templates/botIrToGraphDocument.ts
+new file mode 100644
+index 0000000..ac790d6
+--- /dev/null
++++ b/core/templates/botIrToGraphDocument.ts
+@@ -0,0 +1,64 @@
++/**
++ * Bot IR → GraphDocument (editor / compile pipeline input).
++ */
++
++import type { BotIRGraph } from "../ir/bot_ir.js";
++import type { GraphDocumentInput } from "../ir/bot_ir.js";
++import type { TemplateNodeLayout } from "./templateTypes.js";
++
++function layoutFromMetadata(
++  ir: BotIRGraph,
++  nodeId: string,
++  index: number,
++): TemplateNodeLayout {
++  const positions = ir.context.metadata?.nodePositions;
++  if (
++    positions &&
++    typeof positions === "object" &&
++    nodeId in (positions as Record<string, TemplateNodeLayout>)
++  ) {
++    const pos = (positions as Record<string, TemplateNodeLayout>)[nodeId];
++    if (pos && typeof pos.x === "number" && typeof pos.y === "number") {
++      return { x: pos.x, y: pos.y };
++    }
++  }
++  const col = index % 3;
++  const row = Math.floor(index / 3);
++  return { x: col * 280, y: row * 140 };
++}
++
++/**
++ * Project Bot IR nodes/edges back to a GraphDocument seed (positions from metadata or grid).
++ */
++export function botIRToGraphDocument(ir: BotIRGraph): GraphDocumentInput {
++  const templateId = ir.context.metadata?.systemTemplate;
++  return {
++    schema_version: ir.context.schemaVersion,
++    viewport: { ...ir.context.viewport },
++    metadata: {
++      ...ir.context.metadata,
++      generatedFrom: "bot_ir",
++      ...(templateId ? { systemTemplate: templateId } : {}),
++    },
++    nodes: ir.nodes.map((node, index) => {
++      const layout = layoutFromMetadata(ir, node.id, index);
++      return {
++        id: node.id,
++        type: node.type,
++        position: layout,
++        data: { ...node.payload },
++      };
++    }),
++    edges: ir.edges.map((edge) => ({
++      id: edge.id,
++      source: edge.source,
++      target: edge.target,
++      sourcePort: edge.sourcePort,
++      targetPort: edge.targetPort,
++      ...(edge.label ? { label: edge.label } : {}),
++      ...(edge.condition ? { condition: edge.condition } : {}),
++      ...(edge.invalid ? { invalid: true } : {}),
++      ...(edge.invalidReason ? { invalidReason: edge.invalidReason } : {}),
++    })),
++  };
++}
+diff --git a/core/templates/buildTemplateBotIR.ts b/core/templates/buildTemplateBotIR.ts
+new file mode 100644
+index 0000000..9abc134
+--- /dev/null
++++ b/core/templates/buildTemplateBotIR.ts
+@@ -0,0 +1,27 @@
++/**
++ * System template → canonical Bot IR.
++ */
++
++import { graphToBotIR, type BotIRGraph } from "../ir/bot_ir.js";
++import type { SystemTemplateId } from "./templateTypes.js";
++import { getSystemTemplateSpec } from "./systemTemplateRegistry.js";
++
++/**
++ * Build prebuilt Bot IR for a system template (via GraphDocument → graphToBotIR).
++ */
++export function buildTemplateBotIR(templateId: SystemTemplateId): BotIRGraph {
++  const spec = getSystemTemplateSpec(templateId);
++  const ir = graphToBotIR(spec);
++  return {
++    ...ir,
++    context: {
++      ...ir.context,
++      metadata: {
++        ...ir.context.metadata,
++        systemTemplate: templateId,
++        templateTitle: spec.metadata.title,
++        templateDescription: spec.metadata.description,
++      },
++    },
++  };
++}
+diff --git a/core/templates/index.ts b/core/templates/index.ts
+new file mode 100644
+index 0000000..d06831a
+--- /dev/null
++++ b/core/templates/index.ts
+@@ -0,0 +1,24 @@
++export type {
++  SystemTemplateId,
++  SystemTemplateMeta,
++  SystemTemplateSpec,
++} from "./templateTypes.js";
++
++export {
++  SYSTEM_TEMPLATE_IDS,
++  listSystemTemplates,
++  getSystemTemplateMeta,
++  getSystemTemplateSpec,
++  isSystemTemplateId,
++} from "./systemTemplateRegistry.js";
++
++export { buildTemplateBotIR } from "./buildTemplateBotIR.js";
++export { botIRToGraphDocument } from "./botIrToGraphDocument.js";
++
++export {
++  templateToGraph,
++  templateToGraphViaIR,
++  templateSpecToGraph,
++  generateGraphFromTemplate,
++  getTemplateBotIR,
++} from "./templateToGraph.js";
+diff --git a/core/templates/specs/adminPanel.ts b/core/templates/specs/adminPanel.ts
+new file mode 100644
+index 0000000..a3fd0dc
+--- /dev/null
++++ b/core/templates/specs/adminPanel.ts
+@@ -0,0 +1,76 @@
++import { resetTemplateSpecBuilder, tplEdge, tplNode, tplSpec } from "../templateSpecBuilder.js";
++
++export function buildAdminPanelSpec() {
++  resetTemplateSpecBuilder();
++  const nodes = [
++    tplNode("bot_1", "bot", { token: "YOUR_BOT_TOKEN" }, { x: 0, y: 0 }),
++    tplNode(
++      "global_admins",
++      "global",
++      { varname: "admin_ids", value: "[]" },
++      { x: 280, y: 0 },
++    ),
++    tplNode("start_1", "start", {}, { x: 0, y: 140 }),
++    tplNode(
++      "req_admin",
++      "require_role",
++      { role: "admin", message: "⛔ Доступ только для администраторов" },
++      { x: 280, y: 140 },
++    ),
++    tplNode(
++      "msg_panel",
++      "message",
++      {
++        text: "🛠 Панель администратора\n/stats — статистика\n/users — пользователи\n/broadcast — рассылка",
++      },
++      { x: 0, y: 280 },
++    ),
++    tplNode("cmd_stats", "command", { cmd: "stats" }, { x: 0, y: 420 }),
++    tplNode(
++      "msg_stats",
++      "message",
++      { text: "📊 Статистика: пользователей — {users_count}" },
++      { x: 280, y: 420 },
++    ),
++    tplNode("cmd_users", "command", { cmd: "users" }, { x: 0, y: 560 }),
++    tplNode(
++      "msg_users",
++      "message",
++      { text: "👥 Список пользователей загружается…" },
++      { x: 280, y: 560 },
++    ),
++    tplNode("cmd_broadcast", "command", { cmd: "broadcast" }, { x: 0, y: 700 }),
++    tplNode(
++      "ask_broadcast",
++      "ask",
++      { question: "Текст рассылки:", varname: "broadcast_text" },
++      { x: 280, y: 700 },
++    ),
++    tplNode(
++      "msg_broadcast_ok",
++      "message",
++      { text: "📣 Рассылка поставлена в очередь." },
++      { x: 0, y: 840 },
++    ),
++  ];
++
++  const edges = [
++    tplEdge("start_1", "req_admin"),
++    tplEdge("req_admin", "msg_panel"),
++    tplEdge("cmd_stats", "msg_stats"),
++    tplEdge("cmd_users", "msg_users"),
++    tplEdge("cmd_broadcast", "ask_broadcast"),
++    tplEdge("ask_broadcast", "msg_broadcast_ok"),
++  ];
++
++  return tplSpec(
++    "admin_panel",
++    {
++      title: "Admin Panel",
++      description: "Команды администратора с проверкой роли admin",
++      tags: ["admin", "require_role", "commands"],
++    },
++    nodes,
++    edges,
++  );
++}
+diff --git a/core/templates/specs/referralSystem.ts b/core/templates/specs/referralSystem.ts
+new file mode 100644
+index 0000000..e5e1569
+--- /dev/null
++++ b/core/templates/specs/referralSystem.ts
+@@ -0,0 +1,77 @@
++import { resetTemplateSpecBuilder, tplEdge, tplNode, tplSpec } from "../templateSpecBuilder.js";
++
++export function buildReferralSystemSpec() {
++  resetTemplateSpecBuilder();
++  const nodes = [
++    tplNode("bot_1", "bot", { token: "YOUR_BOT_TOKEN" }, { x: 0, y: 0 }),
++    tplNode(
++      "global_refs",
++      "global",
++      { varname: "referral_stats", value: "{}" },
++      { x: 280, y: 0 },
++    ),
++    tplNode("start_1", "start", {}, { x: 0, y: 140 }),
++    tplNode(
++      "msg_ref_intro",
++      "message",
++      {
++        text: "🎁 Реферальная программа\nПриглашайте друзей — получайте бонусы!\nВаш код: {ref_code}",
++      },
++      { x: 280, y: 140 },
++    ),
++    tplNode(
++      "set_ref_code",
++      "set_variable",
++      { name: "ref_code", value: "пользователь.id" },
++      { x: 0, y: 280 },
++    ),
++    tplNode("cmd_invite", "command", { cmd: "invite" }, { x: 0, y: 420 }),
++    tplNode(
++      "msg_invite",
++      "message",
++      {
++        text: "🔗 Поделитесь ссылкой:\nhttps://t.me/YOUR_BOT?start=ref_{ref_code}",
++      },
++      { x: 280, y: 420 },
++    ),
++    tplNode("cmd_my_refs", "command", { cmd: "my_refs" }, { x: 0, y: 560 }),
++    tplNode(
++      "get_ref_count",
++      "get_variable",
++      { name: "referral_count", varname: "referral_count" },
++      { x: 280, y: 560 },
++    ),
++    tplNode(
++      "msg_ref_stats",
++      "message",
++      { text: "📈 Приглашено друзей: {referral_count}" },
++      { x: 0, y: 700 },
++    ),
++    tplNode(
++      "remember_inviter",
++      "remember",
++      { varname: "invited_by", value: "start_payload" },
++      { x: 0, y: 840 },
++    ),
++  ];
++
++  const edges = [
++    tplEdge("start_1", "msg_ref_intro"),
++    tplEdge("msg_ref_intro", "set_ref_code"),
++    tplEdge("set_ref_code", "remember_inviter"),
++    tplEdge("cmd_invite", "msg_invite"),
++    tplEdge("cmd_my_refs", "get_ref_count"),
++    tplEdge("get_ref_count", "msg_ref_stats"),
++  ];
++
++  return tplSpec(
++    "referral_system",
++    {
++      title: "Referral System",
++      description: "Реферальные коды, приглашения и учёт приглашённых",
++      tags: ["referral", "invite", "variables"],
++    },
++    nodes,
++    edges,
++  );
++}
+diff --git a/core/templates/specs/shopBot.ts b/core/templates/specs/shopBot.ts
+new file mode 100644
+index 0000000..11d2c06
+--- /dev/null
++++ b/core/templates/specs/shopBot.ts
+@@ -0,0 +1,74 @@
++import { resetTemplateSpecBuilder, tplEdge, tplNode, tplSpec } from "../templateSpecBuilder.js";
++
++export function buildShopBotSpec() {
++  resetTemplateSpecBuilder();
++  const y0 = 0;
++  const y1 = 140;
++  const y2 = 280;
++  const y3 = 420;
++  const x0 = 0;
++  const x1 = 280;
++
++  const nodes = [
++    tplNode("bot_1", "bot", { token: "YOUR_BOT_TOKEN" }, { x: x0, y: y0 }),
++    tplNode(
++      "global_products",
++      "global",
++      { varname: "products", value: "[]" },
++      { x: x1, y: y0 },
++    ),
++    tplNode("start_1", "start", { cmd: "start" }, { x: x0, y: y1 }),
++    tplNode(
++      "msg_welcome",
++      "message",
++      { text: "🛍 Добро пожаловать в магазин! Нажмите «Каталог» или /catalog" },
++      { x: x1, y: y1 },
++    ),
++    tplNode("cmd_catalog", "command", { cmd: "catalog" }, { x: x0, y: y2 }),
++    tplNode(
++      "fe_catalog",
++      "foreach",
++      {
++        list: "products",
++        var: "product",
++        output: "inline_keyboard",
++        labelField: "name",
++        idField: "id",
++        callbackPrefix: "prod:",
++        columns: 2,
++      },
++      { x: x0, y: y2 + 70 },
++    ),
++    tplNode(
++      "msg_catalog",
++      "message",
++      { text: "Выберите товар:" },
++      { x: x1, y: y2 },
++    ),
++    tplNode("cb_product", "callback", { dataPrefix: "prod:" }, { x: x0, y: y3 }),
++    tplNode(
++      "msg_ordered",
++      "message",
++      { text: "✅ Товар выбран. Оформление заказа: {product}" },
++      { x: x1, y: y3 },
++    ),
++  ];
++
++  const edges = [
++    tplEdge("start_1", "msg_welcome"),
++    tplEdge("cmd_catalog", "msg_catalog"),
++    tplEdge("msg_catalog", "fe_catalog"),
++    tplEdge("cb_product", "msg_ordered"),
++  ];
++
++  return tplSpec(
++    "shop_bot",
++    {
++      title: "Shop Bot",
++      description: "Каталог товаров с inline-кнопками и оформлением заказа",
++      tags: ["commerce", "catalog", "foreach", "inline"],
++    },
++    nodes,
++    edges,
++  );
++}
+diff --git a/core/templates/specs/supportBot.ts b/core/templates/specs/supportBot.ts
+new file mode 100644
+index 0000000..58b8d57
+--- /dev/null
++++ b/core/templates/specs/supportBot.ts
+@@ -0,0 +1,65 @@
++import { resetTemplateSpecBuilder, tplEdge, tplNode, tplSpec } from "../templateSpecBuilder.js";
++
++export function buildSupportBotSpec() {
++  resetTemplateSpecBuilder();
++  const nodes = [
++    tplNode("bot_1", "bot", { token: "YOUR_BOT_TOKEN" }, { x: 0, y: 0 }),
++    tplNode("start_1", "start", {}, { x: 0, y: 140 }),
++    tplNode(
++      "msg_help",
++      "message",
++      { text: "🎧 Поддержка. Опишите проблему — мы создадим тикет." },
++      { x: 280, y: 140 },
++    ),
++    tplNode(
++      "ask_issue",
++      "ask",
++      { question: "Опишите вашу проблему:", varname: "issue" },
++      { x: 0, y: 280 },
++    ),
++    tplNode(
++      "set_ticket",
++      "set_variable",
++      { name: "ticket", value: "issue" },
++      { x: 280, y: 280 },
++    ),
++    tplNode(
++      "msg_ticket_ok",
++      "message",
++      { text: "✅ Тикет создан. Номер обращения сохранён." },
++      { x: 0, y: 420 },
++    ),
++    tplNode("cmd_status", "command", { cmd: "status" }, { x: 0, y: 560 }),
++    tplNode(
++      "get_ticket",
++      "get_variable",
++      { name: "ticket", varname: "ticket" },
++      { x: 280, y: 560 },
++    ),
++    tplNode(
++      "msg_status",
++      "message",
++      { text: "📋 Статус тикета: {ticket}" },
++      { x: 0, y: 700 },
++    ),
++  ];
++
++  const edges = [
++    tplEdge("start_1", "ask_issue"),
++    tplEdge("ask_issue", "set_ticket"),
++    tplEdge("set_ticket", "msg_ticket_ok"),
++    tplEdge("cmd_status", "get_ticket"),
++    tplEdge("get_ticket", "msg_status"),
++  ];
++
++  return tplSpec(
++    "support_bot",
++    {
++      title: "Support Bot",
++      description: "Приём обращений, FSM-вопрос и проверка статуса тикета",
++      tags: ["support", "ask", "ticket"],
++    },
++    nodes,
++    edges,
++  );
++}
+diff --git a/core/templates/systemTemplateRegistry.ts b/core/templates/systemTemplateRegistry.ts
+new file mode 100644
+index 0000000..688f93b
+--- /dev/null
++++ b/core/templates/systemTemplateRegistry.ts
+@@ -0,0 +1,71 @@
++/**
++ * Registry of system template GraphDocument specs.
++ */
++
++import {
++  SYSTEM_TEMPLATE_IDS,
++  type SystemTemplateId,
++  type SystemTemplateMeta,
++  type SystemTemplateSpec,
++} from "./templateTypes.js";
++
++export { SYSTEM_TEMPLATE_IDS };
++import { buildShopBotSpec } from "./specs/shopBot.js";
++import { buildSupportBotSpec } from "./specs/supportBot.js";
++import { buildAdminPanelSpec } from "./specs/adminPanel.js";
++import { buildReferralSystemSpec } from "./specs/referralSystem.js";
++
++const BUILDERS: Record<SystemTemplateId, () => SystemTemplateSpec> = {
++  shop_bot: buildShopBotSpec,
++  support_bot: buildSupportBotSpec,
++  admin_panel: buildAdminPanelSpec,
++  referral_system: buildReferralSystemSpec,
++};
++
++const META: Record<SystemTemplateId, SystemTemplateMeta> = {
++  shop_bot: {
++    id: "shop_bot",
++    title: "Shop Bot",
++    description: "Каталог товаров с inline-кнопками и оформлением заказа",
++    tags: ["commerce", "catalog"],
++  },
++  support_bot: {
++    id: "support_bot",
++    title: "Support Bot",
++    description: "Тикеты поддержки и статус обращения",
++    tags: ["support", "ask"],
++  },
++  admin_panel: {
++    id: "admin_panel",
++    title: "Admin Panel",
++    description: "Админ-команды с require_role admin",
++    tags: ["admin", "permissions"],
++  },
++  referral_system: {
++    id: "referral_system",
++    title: "Referral System",
++    description: "Реферальные коды и учёт приглашений",
++    tags: ["referral", "growth"],
++  },
++};
++
++export function isSystemTemplateId(id: string): id is SystemTemplateId {
++  return id in BUILDERS;
++}
++
++export function listSystemTemplates(): SystemTemplateMeta[] {
++  return Object.values(META);
++}
++
++export function getSystemTemplateMeta(id: SystemTemplateId): SystemTemplateMeta {
++  return META[id];
++}
++
++/** Raw GraphDocument seed for a system template. */
++export function getSystemTemplateSpec(id: SystemTemplateId): SystemTemplateSpec {
++  const build = BUILDERS[id];
++  if (!build) {
++    throw new Error(`Unknown system template: ${id}`);
++  }
++  return build();
++}
+diff --git a/core/templates/templateSpecBuilder.ts b/core/templates/templateSpecBuilder.ts
+new file mode 100644
+index 0000000..b0588f7
+--- /dev/null
++++ b/core/templates/templateSpecBuilder.ts
+@@ -0,0 +1,65 @@
++/**
++ * Helpers for building system template GraphDocument specs.
++ */
++
++import type { GraphDocumentEdgeInput, GraphDocumentNodeInput } from "../ir/bot_ir.js";
++import type { SystemTemplateId, SystemTemplateSpec, TemplateNodeLayout } from "./templateTypes.js";
++
++let edgeSeq = 0;
++
++export function resetTemplateSpecBuilder() {
++  edgeSeq = 0;
++}
++
++export function tplNode(
++  id: string,
++  type: string,
++  data: Record<string, unknown>,
++  layout: TemplateNodeLayout,
++): GraphDocumentNodeInput {
++  return {
++    id,
++    type,
++    position: { x: layout.x, y: layout.y },
++    data: { ...data },
++  };
++}
++
++export function tplEdge(
++  source: string,
++  target: string,
++  ports: { sourcePort?: string; targetPort?: string } = {},
++): GraphDocumentEdgeInput {
++  edgeSeq += 1;
++  return {
++    id: `e_${source}_${target}_${edgeSeq}`,
++    source,
++    target,
++    sourcePort: ports.sourcePort ?? "flow",
++    targetPort: ports.targetPort ?? "flow",
++  };
++}
++
++export function tplSpec(
++  id: SystemTemplateId,
++  meta: { title: string; description: string; tags?: string[] },
++  nodes: GraphDocumentNodeInput[],
++  edges: GraphDocumentEdgeInput[],
++): SystemTemplateSpec {
++  return {
++    schema_version: 2,
++    viewport: { x: 0, y: 0, zoom: 1 },
++    metadata: {
++      systemTemplate: id,
++      title: meta.title,
++      description: meta.description,
++      tags: meta.tags ?? [],
++      templateVersion: "1.0",
++      nodePositions: Object.fromEntries(
++        nodes.map((n) => [n.id, { ...(n.position || { x: 0, y: 0 }) }]),
++      ),
++    },
++    nodes,
++    edges,
++  };
++}
+diff --git a/core/templates/templateToGraph.ts b/core/templates/templateToGraph.ts
+new file mode 100644
+index 0000000..f3da11c
+--- /dev/null
++++ b/core/templates/templateToGraph.ts
+@@ -0,0 +1,60 @@
++/**
++ * System template → GraphDocument generator (primary API for editor bootstrap).
++ */
++
++import type { BotIRGraph } from "../ir/bot_ir.js";
++import type { GraphDocumentInput } from "../ir/bot_ir.js";
++import type { SystemTemplateId } from "./templateTypes.js";
++import { buildTemplateBotIR } from "./buildTemplateBotIR.js";
++import { botIRToGraphDocument } from "./botIrToGraphDocument.js";
++import { getSystemTemplateSpec } from "./systemTemplateRegistry.js";
++
++export type { SystemTemplateId, SystemTemplateMeta } from "./templateTypes.js";
++export {
++  SYSTEM_TEMPLATE_IDS,
++  listSystemTemplates,
++  getSystemTemplateMeta,
++  getSystemTemplateSpec,
++  isSystemTemplateId,
++} from "./systemTemplateRegistry.js";
++export { buildTemplateBotIR } from "./buildTemplateBotIR.js";
++export { botIRToGraphDocument } from "./botIrToGraphDocument.js";
++
++/**
++ * Direct spec → graph (preserves authored layout from template spec).
++ */
++export function templateSpecToGraph(templateId: SystemTemplateId): GraphDocumentInput {
++  return getSystemTemplateSpec(templateId);
++}
++
++/**
++ * Template → Bot IR → GraphDocument (round-trip through canonical IR).
++ */
++export function templateToGraphViaIR(templateId: SystemTemplateId): GraphDocumentInput {
++  return botIRToGraphDocument(buildTemplateBotIR(templateId));
++}
++
++/**
++ * Default template → graph: canonical spec with full metadata.
++ */
++export function templateToGraph(templateId: SystemTemplateId): GraphDocumentInput {
++  return templateSpecToGraph(templateId);
++}
++
++/**
++ * @param templateId
++ * @param options.viaIR when true, rebuild graph from Bot IR projection
++ */
++export function generateGraphFromTemplate(
++  templateId: SystemTemplateId,
++  options: { viaIR?: boolean } = {},
++): GraphDocumentInput {
++  if (options.viaIR) {
++    return templateToGraphViaIR(templateId);
++  }
++  return templateToGraph(templateId);
++}
++
++export function getTemplateBotIR(templateId: SystemTemplateId): BotIRGraph {
++  return buildTemplateBotIR(templateId);
++}
+diff --git a/core/templates/templateTypes.ts b/core/templates/templateTypes.ts
+new file mode 100644
+index 0000000..1ff8e6c
+--- /dev/null
++++ b/core/templates/templateTypes.ts
+@@ -0,0 +1,35 @@
++/**
++ * System template identifiers — prebuilt Bot IR graphs for common bot patterns.
++ */
++
++import type { GraphDocumentInput } from "../ir/bot_ir.js";
++
++export const SYSTEM_TEMPLATE_IDS = [
++  "shop_bot",
++  "support_bot",
++  "admin_panel",
++  "referral_system",
++] as const;
++
++export type SystemTemplateId = (typeof SYSTEM_TEMPLATE_IDS)[number];
++
++export interface SystemTemplateMeta {
++  id: SystemTemplateId;
++  title: string;
++  description: string;
++  tags: readonly string[];
++}
++
++/** Declarative graph seed before {@link graphToBotIR}. */
++export interface SystemTemplateSpec extends GraphDocumentInput {
++  metadata: Record<string, unknown> & {
++    systemTemplate: SystemTemplateId;
++    title: string;
++    description: string;
++  };
++}
++
++export interface TemplateNodeLayout {
++  x: number;
++  y: number;
++}
+diff --git a/package.json b/package.json
+index fe4edf7..ad32cdb 100644
+--- a/package.json
++++ b/package.json
+@@ -18,6 +18,14 @@
+     "lint": "eslint src core/tests services scripts server.mjs",
+     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
+     "test:compiler": "tsx tests/compiler/compiler.test.ts",
++    "test:bot-ir": "tsx tests/compiler/bot_ir.test.ts",
++    "test:block-capabilities": "node --test core/tests/block-capabilities.test.mjs",
++    "test:fsm-graph": "tsx tests/compiler/fsmGraph.test.ts",
++    "test:visual-db": "tsx tests/compiler/visual_db.test.ts",
++    "test:foreach": "tsx tests/compiler/foreach.test.ts",
++    "test:runtime-context": "tsx tests/compiler/runtime_context.test.ts",
++    "test:permission": "tsx tests/compiler/permission.test.ts",
++    "test:system-templates": "tsx tests/compiler/system_templates.test.ts",
+     "test:runtime": "tsx tests/compiler/runtime.test.ts",
+     "parser-core-blocks": "node scripts/core-blocks-check.mjs",
+     "jammer:publish": "node scripts/publish-jammer-firmware.mjs",
+diff --git a/tests/compiler/system_templates.test.ts b/tests/compiler/system_templates.test.ts
+new file mode 100644
+index 0000000..8f11d6e
+--- /dev/null
++++ b/tests/compiler/system_templates.test.ts
+@@ -0,0 +1,56 @@
++import assert from "node:assert/strict";
++
++import {
++  SYSTEM_TEMPLATE_IDS,
++  listSystemTemplates,
++  buildTemplateBotIR,
++  templateToGraph,
++  templateToGraphViaIR,
++  botIRToGraphDocument,
++  isSystemTemplateId,
++} from "../../core/templates/index.ts";
++import { graphToBotIR } from "../../core/ir/bot_ir";
++
++assert.equal(SYSTEM_TEMPLATE_IDS.length, 4);
++assert.equal(listSystemTemplates().length, 4);
++assert.ok(isSystemTemplateId("shop_bot"));
++assert.equal(isSystemTemplateId("unknown"), false);
++
++for (const id of SYSTEM_TEMPLATE_IDS) {
++  const ir = buildTemplateBotIR(id);
++  assert.equal(ir.context.metadata.systemTemplate, id);
++  assert.ok(ir.nodes.length >= 4);
++  assert.ok(ir.nodes.some((n) => n.type === "start" || n.type === "command"));
++  assert.equal(ir.version, "1.0");
++
++  const graph = templateToGraph(id);
++  assert.equal(graph.metadata?.systemTemplate, id);
++  const nodes = Array.isArray(graph.nodes) ? graph.nodes : Object.values(graph.nodes || {});
++  assert.ok(nodes.length >= 4);
++
++  const round = templateToGraphViaIR(id);
++  const roundNodes = Array.isArray(round.nodes) ? round.nodes : Object.values(round.nodes || {});
++  assert.equal(roundNodes.length, ir.nodes.length);
++
++  const backIr = graphToBotIR(graph);
++  assert.equal(backIr.nodes.length, ir.nodes.length);
++}
++
++const shop = buildTemplateBotIR("shop_bot");
++assert.ok(shop.nodes.some((n) => n.type === "foreach"));
++assert.ok(shop.nodes.some((n) => n.type === "global"));
++
++const admin = buildTemplateBotIR("admin_panel");
++assert.ok(admin.nodes.some((n) => n.type === "require_role"));
++
++const support = buildTemplateBotIR("support_bot");
++assert.ok(support.nodes.some((n) => n.type === "ask"));
++
++const referral = buildTemplateBotIR("referral_system");
++assert.ok(referral.nodes.some((n) => n.type === "set_variable"));
++
++const projected = botIRToGraphDocument(shop);
++assert.ok(Array.isArray(projected.nodes));
++assert.ok(projected.nodes!.length >= shop.nodes.length);
++
++console.log("system_templates test OK");

@@ -466,12 +466,28 @@ function normalizeAiPartialResponse(data) {
     reasonCodes.includes('IR_FALLBACK_SKELETON_USED') ||
     data?.irState === 'SKELETON_IR'
   );
-  const recoveryMode = executionMode === 'AI_RECOVERY';
+  const templateMode = (
+    executionMode === 'SEMANTIC_TEMPLATE' ||
+    Boolean(data?.meta?.deterministicTemplate)
+  );
+  const recoveryMode = executionMode === 'AI_RECOVERY' && !templateMode;
+  const suppressedTemplateCodes = new Set([
+    'AI_API',
+    'AI_NETWORK_ERROR',
+    'AI_RATE_LIMIT',
+    'AI_BAD_RESPONSE',
+    'IR_PRUNER_FAILED',
+    'INTENT_NOT_SATISFIED',
+    'MISSING_REQUIRED_CAPABILITY',
+    'NO_VALID_IR',
+    'SEMANTIC_TEMPLATE_APPLIED',
+  ]);
   const fallbackFailed = normalizedFailed.length ? normalizedFailed : diagnostics;
-  const whatFailed = fallbackFailed.filter((item) => (
-    item?.severity !== 'info' &&
-    item?.code !== 'IR_FALLBACK_SKELETON_USED'
-  ));
+  const whatFailed = fallbackFailed.filter((item) => {
+    if (item?.severity === 'info' || item?.code === 'IR_FALLBACK_SKELETON_USED') return false;
+    if (templateMode && suppressedTemplateCodes.has(item?.code)) return false;
+    return true;
+  });
   const safeToRun = Boolean(data?.safeToRun ?? data?.safeToExecute);
   const userActions = Array.isArray(data?.userActions) ? data.userActions : [];
   const hasContext = Boolean(
@@ -495,6 +511,7 @@ function normalizeAiPartialResponse(data) {
     isDegraded: Boolean(data?.isDegraded ?? skeletonFallback),
     isAIGenerated: Boolean(data?.isAIGenerated ?? !skeletonFallback),
     skeletonFallback,
+    templateMode,
     recoveryMode,
     safeToRun,
     userActions,
@@ -547,7 +564,14 @@ function AiDiagnosticSection({ title, items, emptyText }) {
             </span>
           </div>
           {item.detail ? (
-            <div style={{ marginTop: 3, fontSize: 11, color: 'var(--text3)', lineHeight: 1.45 }}>
+            <div style={{
+              marginTop: 3,
+              fontSize: 11,
+              color: 'var(--text3)',
+              lineHeight: 1.45,
+              wordBreak: 'break-word',
+              overflowWrap: 'anywhere',
+            }}>
               {item.detail}
             </div>
           ) : null}

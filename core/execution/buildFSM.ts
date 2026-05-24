@@ -1,19 +1,21 @@
 import type { ExecutionGraph, FsmTransition } from "./executionContract";
 import { sortFsmTransitions } from "./executionContract";
+import {
+  buildFsmGraph,
+  fsmTransitionsFromGraph,
+  type FsmGraph,
+} from "./fsmGraph";
 
-/** Derived FSM view — only `state` edges from ExecutionGraph. */
+export type { FsmGraph } from "./fsmGraph";
+export { buildFsmGraph } from "./fsmGraph";
+
+/** Derived FSM view — transition edges from graph-based FSM model. */
 export function buildFSM(execution: ExecutionGraph): FsmTransition[] {
-  const transitions = execution.edges
-    .filter((e) => e.trigger === "state")
-    .map((e) => ({
-      from: e.from,
-      to: e.to,
-    }));
-
-  return sortFsmTransitions(transitions);
+  const graph = buildFsmGraph(execution);
+  return sortFsmTransitions(fsmTransitionsFromGraph(graph));
 }
 
-/** Independent edge-only projection for invariant checks. */
+/** Independent projection for invariant checks. */
 export function projectFsmFromExecution(
   execution: ExecutionGraph,
 ): FsmTransition[] {

@@ -93,7 +93,12 @@ export function dispatchGraphCommand(projectGraph, command) {
       return { ok: false, error: `Unsupported graph command: ${command?.type || 'unknown'}` };
   }
 }
-import { getBlockDefinition, getBlockFlowConstraints } from '../blockRegistry.js';
+import {
+  getBlockDefinition,
+  getBlockFlowConstraints,
+  getNodeCapabilities,
+} from '../blockRegistry.js';
+import { isAllowedSourcePort } from '../registry/blockCapabilities.js';
 import {
   createProjectGraphState,
   normalizeGraphEdge,
@@ -119,6 +124,8 @@ function fail(graph, reason) {
 }
 
 function maxOutputsFor(node) {
+  const caps = getNodeCapabilities(node?.type);
+  if (caps?.outputs) return caps.outputs.length;
   const flow = getBlockFlowConstraints(node?.type);
   if (Number.isFinite(flow?.maxOutputs)) return Number(flow.maxOutputs);
   return 1;
@@ -183,6 +190,14 @@ export function validateGraphCommand(projectGraph, command = {}) {
     String(edge.label || edge.condition || '') === String(branchLabel)
   ));
   if (duplicate) return { ok: false, reason: 'Connection already exists' };
+
+  const sourcePortId = sourcePort?.transportPort || command.sourcePort || command.sourcePortId || 'flow';
+  if (!isAllowedSourcePort(source.type, sourcePortId)) {
+    return {
+      ok: false,
+      reason: `${source.type}: output port "${sourcePortId}" is not allowed for this block type`,
+    };
+  }
 
   const maxOutputs = maxOutputsFor(source);
   if (maxOutputs <= 0) return { ok: false, reason: `${source.type} has no output port` };

@@ -2,14 +2,14 @@
  * Graph → Normalized AST → Validated AST → Python module (aiogram 3).
  */
 
-import { registerAllBlockCompilers } from './blockCompilers/registerAll.js';
+import { registerAllCapabilityEmitters } from './capabilityEmitters/registerAll.js';
 import { assertCompilableFlow } from '../ir/compileGate.js';
 import {
   issuesToCompileErrors,
   validateAiogram3Graph,
 } from '../rules/aiogram3RuleEngine.js';
 
-registerAllBlockCompilers();
+registerAllCapabilityEmitters();
 import { graphToNormalizedAst, normalizeGraphFlow } from './ast/normalize.js';
 import { bindStacksForCodegen } from './ast/bindKeyboards.js';
 import { buildCallbackMap } from './ast/callbackResolver.js';
@@ -31,6 +31,7 @@ import {
 } from './emptyGraph.js';
 import { isGraphEffectivelyEmpty } from '../../src/constructor/graph_document/graph_canvas_state.js';
 import { strictCompileValidation } from '../../src/constructor/graph_document/graph_validation_pipeline.js';
+import { validateCompile } from '../validation/strictPipeline.ts';
 import {
   filterErrorsForStage,
   includeCallbacksInGraphGate,
@@ -86,6 +87,30 @@ export function compileGraphToPython(flow, options = {}) {
   const validationStage = resolveOptionsStage(options);
 
   if (options.graphDocument && options.skipGraphGate !== true) {
+    if (validationStage === VALIDATION_STAGE.COMPILE) {
+      const strictGate = validateCompile(options.graphDocument, {
+        failFast: false,
+        includeCallbacks: includeCallbacksInGraphGate(validationStage),
+      });
+      if (!strictGate.ok) {
+        const compileErrors = strictGate.errors.map((d) => ({
+          code: d.code || 'GRAPH_COMPILE_GATE',
+          message: d.message,
+          nodeId: d.nodeId,
+          edgeId: d.edgeId,
+        }));
+        return {
+          code: '',
+          compileWarnings: [],
+          transpileTrace: [],
+          compileErrors,
+          ast: [],
+          aborted: true,
+          compileBlocked: true,
+        };
+      }
+    }
+
     const gate = strictCompileValidation(options.graphDocument, {
       strict: validationStage === VALIDATION_STAGE.COMPILE,
       validationStage,

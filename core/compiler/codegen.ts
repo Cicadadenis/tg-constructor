@@ -1,8 +1,20 @@
 import { parseGraph } from "./parser";
 import { normalizeAst } from "./normalizer";
-import { validateGraph } from "./validator";
-import { buildExecutionGraph } from "../execution/buildExecutionGraph";
+import { validateGraph as validateExecutionAst } from "./validator";
+import {
+  buildExecutionGraph,
+  buildExecutionGraphFromBotIR,
+} from "../execution/buildExecutionGraph";
 import { assertExecutionInvariants } from "../execution/assertExecutionInvariants";
+import { graphToBotIR, type GraphDocumentInput } from "../ir/bot_ir";
+import {
+  compileGraphDocumentToPython,
+  lowerGraphDocumentToExecution,
+  type UnifiedCompileOptions,
+  type UnifiedCompileResult,
+} from "./unifiedCompilePipeline";
+import { buildExecutionPlan } from "../runtime/executionPlan";
+import { isGraphDocumentShape } from "../../src/constructor/graph_document/graph_schema.js";
 import {
   DEFAULT_EXECUTION_POLICY,
   prepareExecutionGraph,
@@ -10,14 +22,28 @@ import {
   type ExecutionPolicy,
   type PreparedExecutionGraphResult,
 } from "../execution/prepareExecutionGraph";
-import { buildFSM } from "../execution/buildFSM";
+import { buildFSM, buildFsmGraph } from "../execution/buildFSM";
 import { buildCallbackRoutes } from "../execution/buildCallbackRoutes";
 import { generateAiogramBot } from "../../generators/python_aiogram/generateBot";
+import { buildVisualDbGraphFromBotNodes } from "../db/visual_db_ir";
 import { logStep } from "../debug/compilerLogger";
 import { CURRENT_VERSION } from "../execution/version";
 import type { ExecutionGraph } from "../execution/executionContract";
 
-export interface CompileGraphOptions {
+function visualDbFromExecution(execution: ExecutionGraph) {
+  return buildVisualDbGraphFromBotNodes(
+    execution.nodes.map((node) => ({
+      id: node.id,
+      type: node.type,
+      payload:
+        node.data && typeof node.data === "object"
+          ? { ...(node.data as Record<string, unknown>) }
+          : {},
+    })),
+  );
+}
+
+export interface CompileGraphOptions extends UnifiedCompileOptions {
   /** Skip build/migrate/validate when middleware already prepared the graph. */
   prepared?: PreparedExecutionGraphResult;
   policy?: ExecutionPolicy;
@@ -26,9 +52,22 @@ export interface CompileGraphOptions {
    * API / strict compile must leave this false.
    */
   allowIncomplete?: boolean;
+  /** Canonical GraphDocument input (Visual Graph). */
+  graphDocument?: GraphDocumentInput;
+}
+
+function isGraphDocumentInput(value: unknown): value is GraphDocumentInput {
+  return isGraphDocumentShape(value);
 }
 
 function compileGraphImpl(graph: any, options: CompileGraphOptions = {}) {
+  if (options.graphDocument || isGraphDocumentInput(graph)) {
+    return compileGraphDocumentToPython(
+      (options.graphDocument ?? graph) as GraphDocumentInput,
+      options,
+    );
+  }
+
   const policy = resolveExecutionPolicy(
     options.prepared?.policy ?? options.policy ?? DEFAULT_EXECUTION_POLICY,
   );
@@ -43,20 +82,30 @@ function compileGraphImpl(graph: any, options: CompileGraphOptions = {}) {
 
   logStep("validate");
 
-  validateGraph(normalized);
+  validateExecutionAst(normalized);
+
+  logStep("bot_ir");
+
+  const botIr = graphToBotIR({
+    schema_version: 2,
+    nodes: normalized.nodes,
+    edges: normalized.edges,
+    metadata: { generatedFrom: "legacy_flow" },
+  });
 
   logStep("execution");
 
-  const built = buildExecutionGraph(
-    normalized.nodes,
-    normalized.edges,
-    normalized.version ?? graph.version ?? "1.0",
+  const built = buildExecutionGraphFromBotIR(
+    botIr,
+    normalized.version ?? graph.version ?? CURRENT_VERSION,
   );
 
   if (options.allowIncomplete && built.edges.length === 0) {
     return {
       success: false,
       python: "",
+      botIr,
+      executionPlan: buildExecutionPlan(botIr),
       execution: built,
       policy,
       compatibilityWarnings: [],
@@ -68,7 +117,9 @@ function compileGraphImpl(graph: any, options: CompileGraphOptions = {}) {
       runtime: {
         execution: built,
         fsm: {},
+        fsmGraph: buildFsmGraph(built),
         callbacks: {},
+        visualDb: botIr.visualDb,
       },
       empty: true,
     };
@@ -80,8 +131,10 @@ function compileGraphImpl(graph: any, options: CompileGraphOptions = {}) {
   const { execution, compatibilityWarnings, migration } = prepared;
   assertExecutionInvariants(execution);
 
+  const fsmGraph = buildFsmGraph(execution);
   const fsm = buildFSM(execution);
   const callbacks = buildCallbackRoutes(execution);
+  const visualDb = visualDbFromExecution(execution);
 
   logStep("generate aiogram");
 
@@ -90,6 +143,8 @@ function compileGraphImpl(graph: any, options: CompileGraphOptions = {}) {
   return {
     success: true,
     python,
+    botIr,
+    executionPlan: buildExecutionPlan(botIr),
     execution,
     policy: prepared.policy,
     compatibilityWarnings,
@@ -97,7 +152,9 @@ function compileGraphImpl(graph: any, options: CompileGraphOptions = {}) {
     runtime: {
       execution,
       fsm,
+      fsmGraph,
       callbacks,
+      visualDb: botIr.visualDb,
     },
   };
 }
@@ -116,4 +173,11 @@ export type {
   ExecutionPolicy,
   PreparedExecutionGraphResult,
   CompileGraphOptions,
+  UnifiedCompileOptions,
+  UnifiedCompileResult,
+};
+
+export {
+  compileGraphDocumentToPython,
+  lowerGraphDocumentToExecution,
 };

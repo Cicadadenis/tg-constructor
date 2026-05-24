@@ -1,3 +1,5 @@
+import { resolveFlowNodeType } from '../ir/resolveFlowNodeType.js';
+
 /**
  * Песочница / dry-run планировщика: без исполнения в Telegram, только эвристики политики и согласованности.
  * Не заменяет parser.py и не является семантическим «исполнителем».
@@ -33,8 +35,7 @@ export function dryRunFlowPolicy(flow, policy = {}) {
   let gotoCount = 0;
 
   for (const n of nodes) {
-    const data = /** @type {{ type?: string, props?: Record<string, unknown> }} */ (n?.data || {});
-    const t = data.type || /** @type {{ type?: string }} */ (n)?.type;
+    const t = resolveFlowNodeType(n);
 
     if (t === 'http') httpCount += 1;
     if (t === 'broadcast') broadcastCount += 1;

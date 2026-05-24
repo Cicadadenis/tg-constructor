@@ -1,4 +1,9 @@
 import { CURRENT_VERSION } from "./version";
+import { executionTriggerForSource } from "../registry/blockCapabilities.js";
+import { assertRegisteredBlockType } from "../../src/constructor/graph_document/graph_node_payload.js";
+import { resolveFlowNodeType, resolveFlowNodeProps } from "../ir/resolveFlowNodeType.js";
+import type { BotIRGraph } from "../ir/bot_ir.js";
+import { botIrToExecutionGraph } from "../ir/botIrToExecutionGraph.js";
 import type {
   ExecutionEdge,
   ExecutionGraph,
@@ -6,21 +11,34 @@ import type {
   ExecutionTrigger,
 } from "./executionContract";
 
-function inferTrigger(source: ExecutionNode): ExecutionTrigger {
-  if (source.type === "fsm") return "state";
-  if (source.type === "callback") return "callback";
-  return "next";
+function inferTrigger(
+  source: ExecutionNode,
+  sourcePortId?: string | null,
+): ExecutionTrigger {
+  return executionTriggerForSource(source.type, sourcePortId);
 }
 
 function toExecutionNode(node: any): ExecutionNode {
+  const nodeId = String(node?.id ?? "").trim();
+  const type = assertRegisteredBlockType(resolveFlowNodeType(node), {
+    nodeId: nodeId || undefined,
+  });
+  const props = resolveFlowNodeProps(node);
   return {
-    id: node.id,
-    type: node.type,
-    data: (node.data && typeof node.data === "object" ? node.data : {}) as Record<
-      string,
-      unknown
-    >,
+    id: nodeId,
+    type,
+    data: props as Record<string, unknown>,
   };
+}
+
+/**
+ * Lower Bot IR → Execution Graph (canonical path).
+ */
+export function buildExecutionGraphFromBotIR(
+  botIr: BotIRGraph,
+  version = CURRENT_VERSION,
+): ExecutionGraph {
+  return botIrToExecutionGraph(botIr, version);
 }
 
 export function buildExecutionGraph(
@@ -37,7 +55,10 @@ export function buildExecutionGraph(
     const source = nodeById.get(edge.source);
     if (!source) continue;
 
-    const trigger = inferTrigger(source);
+    const trigger = inferTrigger(
+      source,
+      edge.sourceHandle ?? edge.sourcePort ?? null,
+    );
     const executionEdge: ExecutionEdge = {
       from: edge.source,
       to: edge.target,
@@ -50,7 +71,13 @@ export function buildExecutionGraph(
     }
 
     if (trigger === "state") {
-      const state = String(source.data?.state ?? "");
+      const data = source.data && typeof source.data === "object" ? source.data : {};
+      const state = String(
+        (data as Record<string, unknown>).name
+          ?? (data as Record<string, unknown>).state
+          ?? (data as Record<string, unknown>).event
+          ?? "",
+      );
       if (state) executionEdge.condition = state;
     }
 

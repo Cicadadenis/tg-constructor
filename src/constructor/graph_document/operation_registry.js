@@ -21,6 +21,11 @@ import {
   blockDefinitions,
   getBlockDefinition,
 } from '../../../core/blockRegistry.js';
+import {
+  assertRegisteredBlockType,
+  LEGACY_WRAPPER_TYPES,
+} from './graph_node_payload.js';
+import { isAllowedSourcePort } from '../../../core/registry/blockCapabilities.js';
 import { FLOW_PORTS } from '../../../core/graph/flowPorts.js';
 import {
   isGraphKeyboardNode,
@@ -131,6 +136,14 @@ const INSPECTOR_FIELDS = Object.freeze({
     { key: 'varname', label: 'Переменная', tag: 'input' },
     { key: 'value', label: 'Значение', tag: 'input' },
   ],
+  set_variable: [
+    { key: 'name', label: 'Имя (ctx.vars)', tag: 'input' },
+    { key: 'value', label: 'Значение', tag: 'input' },
+  ],
+  get_variable: [
+    { key: 'name', label: 'Имя в ctx.vars', tag: 'input' },
+    { key: 'varname', label: 'Локальная переменная', tag: 'input' },
+  ],
   get: [
     { key: 'key', label: 'Ключ хранилища', tag: 'input' },
     { key: 'varname', label: 'Переменная', tag: 'input' },
@@ -143,6 +156,20 @@ const INSPECTOR_FIELDS = Object.freeze({
     { key: 'mode', label: 'Режим (count / while)', tag: 'input' },
     { key: 'count', label: 'Количество (если count)', tag: 'input' },
     { key: 'cond', label: 'Условие (если while)', tag: 'input' },
+  ],
+  require_role: [
+    { key: 'role', label: 'Минимальная роль (admin|moderator|user)', tag: 'input' },
+    { key: 'roles', label: 'Роли через запятую (override)', tag: 'input' },
+    { key: 'message', label: 'Сообщение при отказе', tag: 'input' },
+  ],
+  foreach: [
+    { key: 'list', label: 'Список (input)', tag: 'input' },
+    { key: 'var', label: 'Переменная элемента (item context)', tag: 'input' },
+    { key: 'output', label: 'body | inline_keyboard', tag: 'input' },
+    { key: 'labelField', label: 'Поле подписи кнопки', tag: 'input' },
+    { key: 'idField', label: 'Поле id для callback', tag: 'input' },
+    { key: 'callbackPrefix', label: 'Префикс callback', tag: 'input' },
+    { key: 'columns', label: 'Кнопок в ряд', tag: 'input' },
   ],
 
   delay: [{ key: 'seconds', label: 'Секунд ожидания', tag: 'input' }],
@@ -207,6 +234,14 @@ const VALIDATION_RULES = Object.freeze({
   condition_not: (props) => (String(props?.cond ?? '').trim() ? null : 'Условие не может быть пустым'),
   ask: (props) => (String(props?.question ?? '').trim() ? null : 'Вопрос не может быть пустым'),
   remember: (props) => (String(props?.varname ?? '').trim() ? null : 'Укажите имя переменной'),
+  set_variable: (props) => {
+    if (!String(props?.name ?? props?.varname ?? '').trim()) return 'Укажите имя переменной';
+    return null;
+  },
+  get_variable: (props) => {
+    if (!String(props?.name ?? '').trim()) return 'Укажите имя в ctx.vars';
+    return null;
+  },
   get: (props) => (String(props?.key ?? '').trim() ? null : 'Укажите ключ хранилища'),
   save: (props) => (String(props?.key ?? '').trim() ? null : 'Укажите ключ хранилища'),
   goto: (props) => (String(props?.target ?? '').trim() ? null : 'Укажите целевой обработчик'),
@@ -217,6 +252,33 @@ const VALIDATION_RULES = Object.freeze({
       if (!Number.isFinite(n) || n <= 0) return 'Количество итераций должно быть положительным числом';
     } else if (mode === 'while') {
       if (!String(props?.cond ?? '').trim()) return 'Укажите условие цикла';
+    }
+    return null;
+  },
+  require_role: (props) => {
+    const explicit = String(props?.roles ?? '').trim();
+    if (explicit) {
+      const parts = explicit.split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean);
+      const allowed = new Set(['admin', 'moderator', 'user']);
+      for (const p of parts) {
+        if (!allowed.has(p.toLowerCase())) {
+          return `Неизвестная роль «${p}». Допустимо: admin, moderator, user`;
+        }
+      }
+      return null;
+    }
+    const role = String(props?.role ?? 'user').trim().toLowerCase();
+    if (!['admin', 'moderator', 'user'].includes(role)) {
+      return 'Роль должна быть admin, moderator или user';
+    }
+    return null;
+  },
+  foreach: (props) => {
+    if (!String(props?.list ?? props?.collection ?? '').trim()) {
+      return 'Укажите список (list)';
+    }
+    if (!String(props?.var ?? props?.item ?? '').trim()) {
+      return 'Укажите переменную элемента (var)';
     }
     return null;
   },
@@ -253,7 +315,7 @@ function buildOutputPorts(definition) {
       { id: PORT_KINDS.CONDITION_FALSE, transport, kind: PORT_KINDS.CONDITION_FALSE, label: 'FALSE', edgeLabel: 'FALSE' },
     ];
   }
-  if (definition.type === 'loop') {
+  if (definition.type === 'loop' || definition.type === 'foreach') {
     return [
       { id: PORT_KINDS.LOOP_BODY, transport, kind: PORT_KINDS.LOOP_BODY, label: 'BODY', edgeLabel: 'body' },
       { id: PORT_KINDS.LOOP_DONE, transport, kind: PORT_KINDS.LOOP_DONE, label: 'DONE', edgeLabel: 'done' },
@@ -319,6 +381,7 @@ const REGISTRY = Object.freeze(
   ),
 );
 
+/** @deprecated Non-strict UI fallback only — never used when registry enforcement is on. */
 const FALLBACK_CONTRACT = Object.freeze({
   type: 'unknown',
   category: 'action',
@@ -331,9 +394,23 @@ const FALLBACK_CONTRACT = Object.freeze({
   roles: Object.freeze({ isRoot: false, isTerminal: false, isSettings: false }),
 });
 
-/** Lookup an operation contract by node type. */
+/** True when node type is registered (not wrapper / unknown). */
+export function hasOperationContract(nodeType) {
+  const t = String(nodeType ?? '').trim();
+  if (!t || LEGACY_WRAPPER_TYPES.has(t)) return false;
+  return Boolean(REGISTRY[t]);
+}
+
+/** Strict lookup — throws via assertRegisteredBlockType when missing. */
+export function getOperationContractStrict(nodeType, context = {}) {
+  const t = assertRegisteredBlockType(String(nodeType ?? '').trim(), context);
+  return REGISTRY[t];
+}
+
+/** Lookup an operation contract by node type (returns FALLBACK for unknown — prefer hasOperationContract). */
 export function getOperationContract(nodeType) {
-  return REGISTRY[String(nodeType || '').trim()] || FALLBACK_CONTRACT;
+  const t = String(nodeType || '').trim();
+  return REGISTRY[t] || FALLBACK_CONTRACT;
 }
 
 /** All known operation contracts (keyed by type). */
@@ -367,14 +444,22 @@ function categoryAllowed(sourceContract, targetContract) {
  * @returns {{ ok: true } | { ok: false, reason: string }}
  */
 export function canConnect(sourceType, targetType, sourcePortId = null, targetPortId = null) {
+  if (!hasOperationContract(sourceType)) {
+    return {
+      ok: false,
+      reason: `Unknown source node type "${sourceType || ''}"`,
+      code: 'unknown_node_type',
+    };
+  }
+  if (!hasOperationContract(targetType)) {
+    return {
+      ok: false,
+      reason: `Unknown target node type "${targetType || ''}"`,
+      code: 'unknown_node_type',
+    };
+  }
   const source = getOperationContract(sourceType);
   const target = getOperationContract(targetType);
-  if (source === FALLBACK_CONTRACT && !sourceType) {
-    return { ok: false, reason: 'Unknown source node type' };
-  }
-  if (target === FALLBACK_CONTRACT && !targetType) {
-    return { ok: false, reason: 'Unknown target node type' };
-  }
   if (source.roles.isTerminal) {
     return { ok: false, reason: `${source.type}: terminal node has no outputs` };
   }
@@ -387,10 +472,28 @@ export function canConnect(sourceType, targetType, sourcePortId = null, targetPo
   if (target.inputs.length === 0) {
     return { ok: false, reason: `${target.type}: no input ports` };
   }
+  const requestedSourcePort = sourcePortId != null && String(sourcePortId).trim() !== ''
+    ? String(sourcePortId).trim()
+    : null;
+  if (requestedSourcePort && !isAllowedSourcePort(source.type, requestedSourcePort)) {
+    return {
+      ok: false,
+      reason: `${source.type}: output port "${requestedSourcePort}" is not allowed for this block type`,
+      code: 'CAPABILITY_OUTPUT_PORT',
+    };
+  }
   const sourcePort = findPort(source.outputs, sourcePortId);
   const targetPort = findPort(target.inputs, targetPortId);
   if (!sourcePort) return { ok: false, reason: `${source.type}: output port ${sourcePortId} not found` };
   if (!targetPort) return { ok: false, reason: `${target.type}: input port ${targetPortId} not found` };
+  const resolvedSourcePortId = sourcePort.id || sourcePortId || 'flow';
+  if (!isAllowedSourcePort(source.type, resolvedSourcePortId)) {
+    return {
+      ok: false,
+      reason: `${source.type}: output port "${resolvedSourcePortId}" is not allowed for this block type`,
+      code: 'CAPABILITY_OUTPUT_PORT',
+    };
+  }
   const sTrans = sourcePort.transport;
   const tTrans = targetPort.transport;
   if (sTrans !== '*' && tTrans !== '*' && sTrans !== tTrans) {
@@ -487,11 +590,18 @@ export function validateGraph(document) {
   const edges = Object.values(document?.edges || {});
 
   for (const [id, node] of Object.entries(nodes)) {
-    const contract = getOperationContract(node.type);
-    if (contract === FALLBACK_CONTRACT) {
-      errors.push(`Node ${id}: unknown type "${node.type}"`);
+    const rawType = String(node.type ?? '').trim();
+    if (!hasOperationContract(rawType)) {
+      errors.push(`Node ${id}: unknown type "${rawType || '∅'}"`);
       continue;
     }
+    try {
+      assertRegisteredBlockType(rawType, { nodeId: id });
+    } catch (err) {
+      errors.push(`Node ${id}: ${err?.message || 'invalid block type'}`);
+      continue;
+    }
+    const contract = getOperationContract(rawType);
     const reason = validateNodeProps(node.type, node.data);
     if (reason) errors.push(`Node ${id} (${node.type}): ${reason}`);
   }

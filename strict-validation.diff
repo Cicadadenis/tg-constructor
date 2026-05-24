@@ -1,0 +1,1266 @@
+diff --git a/core/codegen/ast/validate.js b/core/codegen/ast/validate.js
+index 510ae1b..e27d845 100644
+--- a/core/codegen/ast/validate.js
++++ b/core/codegen/ast/validate.js
+@@ -8,7 +8,7 @@ import { ROOT_CHUNK_TYPES, EVENT_HANDLER_TYPES } from '../constants.js';
+ 
+ function walk(nodes, errors, path = '') {
+   for (const node of nodes || []) {
+-    const type = node?.type || 'unknown';
++    const type = String(node?.type ?? '').trim();
+     const id = node?.id || '?';
+     const p = path ? `${path}/${id}:${type}` : `${id}:${type}`;
+ 
+@@ -16,6 +16,10 @@ function walk(nodes, errors, path = '') {
+       !ROOT_CHUNK_TYPES.has(type)
+       || type === 'block';
+ 
++    if (!type) {
++      errors.push({ path: p, type: '(missing)', message: 'AST node is missing type' });
++      continue;
++    }
+     if (needsCompiler && !getCompiler(type) && !EVENT_HANDLER_TYPES.has(type) && type !== 'else') {
+       errors.push({ path: p, type, message: `Missing compiler for block type: ${type}` });
+     }
+diff --git a/core/codegen/pipeline.js b/core/codegen/pipeline.js
+index abc83aa..b1d17fb 100644
+--- a/core/codegen/pipeline.js
++++ b/core/codegen/pipeline.js
+@@ -31,6 +31,7 @@ import {
+ } from './emptyGraph.js';
+ import { isGraphEffectivelyEmpty } from '../../src/constructor/graph_document/graph_canvas_state.js';
+ import { strictCompileValidation } from '../../src/constructor/graph_document/graph_validation_pipeline.js';
++import { validateCompile } from '../validation/strictPipeline.ts';
+ import {
+   filterErrorsForStage,
+   includeCallbacksInGraphGate,
+@@ -86,6 +87,30 @@ export function compileGraphToPython(flow, options = {}) {
+   const validationStage = resolveOptionsStage(options);
+ 
+   if (options.graphDocument && options.skipGraphGate !== true) {
++    if (validationStage === VALIDATION_STAGE.COMPILE) {
++      const strictGate = validateCompile(options.graphDocument, {
++        failFast: false,
++        includeCallbacks: includeCallbacksInGraphGate(validationStage),
++      });
++      if (!strictGate.ok) {
++        const compileErrors = strictGate.errors.map((d) => ({
++          code: d.code || 'GRAPH_COMPILE_GATE',
++          message: d.message,
++          nodeId: d.nodeId,
++          edgeId: d.edgeId,
++        }));
++        return {
++          code: '',
++          compileWarnings: [],
++          transpileTrace: [],
++          compileErrors,
++          ast: [],
++          aborted: true,
++          compileBlocked: true,
++        };
++      }
++    }
++
+     const gate = strictCompileValidation(options.graphDocument, {
+       strict: validationStage === VALIDATION_STAGE.COMPILE,
+       validationStage,
+diff --git a/core/validation/index.ts b/core/validation/index.ts
+new file mode 100644
+index 0000000..4a397c7
+--- /dev/null
++++ b/core/validation/index.ts
+@@ -0,0 +1,19 @@
++export {
++  StrictValidationError,
++  type StrictValidationIssue,
++  type StrictValidationStage,
++} from "./strictValidationError.js";
++
++export {
++  validateGraph,
++  validateBotIR,
++  validateCompile,
++  assertCompileReady,
++  type StrictValidationOptions,
++  type StrictValidationResult,
++} from "./strictPipeline.js";
++
++export {
++  collectRegistryViolations,
++  enforceRegistryNodeTypes,
++} from "./registryEnforce.js";
+diff --git a/core/validation/registryEnforce.js b/core/validation/registryEnforce.js
+new file mode 100644
+index 0000000..e4cbcea
+--- /dev/null
++++ b/core/validation/registryEnforce.js
+@@ -0,0 +1,100 @@
++/**
++ * Registry enforcement — fail-fast on unknown / wrapper node types (shared by pipeline stages).
++ */
++
++import {
++  assertRegisteredBlockType,
++  coerceLegacyBlockType,
++  LEGACY_WRAPPER_TYPES,
++  UnknownBlockTypeError,
++} from '../../src/constructor/graph_document/graph_node_payload.js';
++import { hasOperationContract } from '../../src/constructor/graph_document/operation_registry.js';
++
++/**
++ * @typedef {object} RegistryViolation
++ * @property {string} code
++ * @property {string} message
++ * @property {string} [nodeId]
++ * @property {string} [type]
++ */
++
++/**
++ * @param {Record<string, { id?: string, type?: string, data?: object }> | Array<{ id: string, type?: string, data?: object }>} nodes
++ * @returns {RegistryViolation[]}
++ */
++export function collectRegistryViolations(nodes) {
++  /** @type {RegistryViolation[]} */
++  const violations = [];
++  const list = Array.isArray(nodes)
++    ? nodes
++    : Object.entries(nodes || {}).map(([id, node]) => ({
++        id: node?.id ?? id,
++        type: node?.type,
++        data: node?.data,
++      }));
++
++  for (const node of list) {
++    const nodeId = String(node.id || '').trim();
++    const rawType = String(node.type ?? '').trim();
++
++    if (!nodeId) {
++      violations.push({ code: 'missing_node_id', message: 'Graph node is missing id' });
++      continue;
++    }
++
++    if (LEGACY_WRAPPER_TYPES.has(rawType) || rawType === 'unknown') {
++      violations.push({
++        code: 'unknown_block_type',
++        message: `Node "${nodeId}": type "${rawType || '∅'}" is not allowed (registry required)`,
++        nodeId,
++        type: rawType || 'unknown',
++      });
++      continue;
++    }
++
++    try {
++      const resolved = coerceLegacyBlockType(node);
++      assertRegisteredBlockType(resolved, { nodeId });
++      if (!hasOperationContract(resolved)) {
++        violations.push({
++          code: 'unregistered_block_type',
++          message: `Node "${nodeId}": type "${resolved}" is not in operation registry`,
++          nodeId,
++          type: resolved,
++        });
++      }
++    } catch (err) {
++      if (err instanceof UnknownBlockTypeError) {
++        violations.push({
++          code: 'unknown_block_type',
++          message: err.message,
++          nodeId: err.nodeId ?? nodeId,
++          type: err.type ?? rawType,
++        });
++        continue;
++      }
++      throw err;
++    }
++  }
++
++  return violations;
++}
++
++/**
++ * @param {Record<string, { id?: string, type?: string, data?: object }>} nodes
++ * @param {{ failFast?: boolean }} [options]
++ * @returns {RegistryViolation[]}
++ */
++export function enforceRegistryNodeTypes(nodes, options = {}) {
++  const violations = collectRegistryViolations(nodes);
++  if (options.failFast && violations.length > 0) {
++    const first = violations[0];
++    const err = new Error(first.message);
++    err.name = 'RegistryEnforcementError';
++    err.code = first.code;
++    err.nodeId = first.nodeId;
++    err.type = first.type;
++    throw err;
++  }
++  return violations;
++}
+diff --git a/core/validation/strictPipeline.ts b/core/validation/strictPipeline.ts
+new file mode 100644
+index 0000000..2b3fbdf
+--- /dev/null
++++ b/core/validation/strictPipeline.ts
+@@ -0,0 +1,526 @@
++/**
++ * Strict validation pipeline — registry enforcement, fail-fast, no "unknown" fallbacks.
++ *
++ * 1. validateGraph()   — GraphDocument node types + structural pipeline
++ * 2. validateBotIR()   — Bot IR node types + edge integrity
++ * 3. validateCompile() — graph + Bot IR + compile gate (pre-codegen)
++ */
++
++import { createGraphDocument } from "../../src/constructor/graph_document/graph_document.js";
++import {
++  assertRegisteredBlockType,
++  LEGACY_WRAPPER_TYPES,
++  UnknownBlockTypeError,
++} from "../../src/constructor/graph_document/graph_node_payload.js";
++import {
++  hasOperationContract,
++  validateGraph as validateRegistryGraph,
++} from "../../src/constructor/graph_document/operation_registry.js";
++import { collectRegistryViolations } from "./registryEnforce.js";
++import {
++  runGraphValidationPipeline,
++  strictCompileValidation,
++} from "../../src/constructor/graph_document/graph_validation_pipeline.js";
++import { VALIDATION_STAGE } from "../../src/constructor/graph_document/validation_stages.js";
++import { blockRegistry } from "../blockRegistry.js";
++import { graphToBotIR, type BotIRGraph, type GraphDocumentInput } from "../ir/bot_ir.js";
++import {
++  StrictValidationError,
++  type StrictValidationIssue,
++  type StrictValidationStage,
++} from "./strictValidationError.js";
++
++export type { StrictValidationIssue, StrictValidationStage };
++export { StrictValidationError };
++
++export interface StrictValidationOptions {
++  /** Stop on first error (default true). */
++  failFast?: boolean;
++  /** Include callback handler checks in graph pipeline (default true for compile). */
++  includeCallbacks?: boolean;
++}
++
++export interface StrictValidationResult {
++  ok: boolean;
++  stage: StrictValidationStage;
++  errors: StrictValidationIssue[];
++  warnings: StrictValidationIssue[];
++  failFastStopped?: boolean;
++  document?: ReturnType<typeof createGraphDocument>;
++  botIr?: BotIRGraph;
++}
++
++function issue(
++  stage: StrictValidationStage,
++  code: string,
++  message: string,
++  extra: Partial<StrictValidationIssue> = {},
++): StrictValidationIssue {
++  return { stage, code, message, ...extra };
++}
++
++function pushOrThrow(
++  errors: StrictValidationIssue[],
++  next: StrictValidationIssue,
++  failFast: boolean,
++): boolean {
++  errors.push(next);
++  if (failFast) {
++    throw new StrictValidationError(next);
++  }
++  return true;
++}
++
++function fromUnknownBlockTypeError(
++  stage: StrictValidationStage,
++  err: UnknownBlockTypeError,
++): StrictValidationIssue {
++  return issue(stage, "unknown_block_type", err.message, {
++    nodeId: err.nodeId ?? undefined,
++    type: err.type ?? undefined,
++  });
++}
++
++function applyRegistryViolations(
++  nodes: Record<string, { id?: string; type?: string; data?: object }>,
++  stage: StrictValidationStage,
++  errors: StrictValidationIssue[],
++  failFast: boolean,
++): void {
++  for (const v of collectRegistryViolations(nodes)) {
++    pushOrThrow(
++      errors,
++      issue(stage, v.code, v.message, {
++        nodeId: v.nodeId,
++        type: v.type,
++      }),
++      failFast,
++    );
++  }
++}
++
++export { collectRegistryViolations, enforceRegistryNodeTypes } from "./registryEnforce.js";
++
++/**
++ * 1. validateGraph — strict GraphDocument validation (registry + pipeline).
++ */
++export function validateGraph(
++  graphOrDocument: GraphDocumentInput | Record<string, unknown>,
++  options: StrictValidationOptions = {},
++): StrictValidationResult {
++  const failFast = options.failFast !== false;
++  const errors: StrictValidationIssue[] = [];
++  const warnings: StrictValidationIssue[] = [];
++
++  let document: ReturnType<typeof createGraphDocument>;
++  try {
++    document = createGraphDocument(graphOrDocument);
++  } catch (err) {
++    if (err instanceof UnknownBlockTypeError) {
++      const registryIssue = fromUnknownBlockTypeError("graph", err);
++      errors.push(registryIssue);
++      if (failFast) {
++        throw new StrictValidationError(registryIssue);
++      }
++      return {
++        ok: false,
++        stage: "graph",
++        errors,
++        warnings,
++        failFastStopped: false,
++      };
++    }
++    const message = err instanceof Error ? err.message : String(err);
++    pushOrThrow(
++      errors,
++      issue("graph", "invalid_document", message),
++      failFast,
++    );
++    return { ok: false, stage: "graph", errors, warnings, failFastStopped: failFast };
++  }
++
++  try {
++    applyRegistryViolations(document.nodes, "graph", errors, failFast);
++  } catch (e) {
++    if (e instanceof StrictValidationError) {
++      return {
++        ok: false,
++        stage: "graph",
++        errors: [e.issue],
++        warnings,
++        failFastStopped: true,
++        document,
++      };
++    }
++    throw e;
++  }
++
++  const registry = validateRegistryGraph(document);
++  for (const msg of registry.errors || []) {
++    const code = msg.includes("unknown type") ? "unknown_block_type" : "registry_semantic";
++    try {
++      pushOrThrow(errors, issue("graph", code, msg), failFast);
++    } catch (e) {
++      if (e instanceof StrictValidationError) {
++        return {
++          ok: false,
++          stage: "graph",
++          errors: [e.issue],
++          warnings,
++          failFastStopped: true,
++          document,
++        };
++      }
++      throw e;
++    }
++  }
++  for (const msg of registry.warnings || []) {
++    warnings.push(issue("graph", "registry_semantic", msg));
++  }
++
++  const pipeline = runGraphValidationPipeline(document, {
++    strict: true,
++    validationStage: VALIDATION_STAGE.COMPILE,
++    allowMissingCallbackHandlers: false,
++    includeCallbacks: options.includeCallbacks !== false,
++  });
++
++  for (const d of pipeline.errors || []) {
++    try {
++      pushOrThrow(
++        errors,
++        issue("graph", d.code || "validation_error", d.message, {
++          nodeId: d.nodeId ?? undefined,
++          edgeId: d.edgeId ?? undefined,
++        }),
++        failFast,
++      );
++    } catch (e) {
++      if (e instanceof StrictValidationError) {
++        return {
++          ok: false,
++          stage: "graph",
++          errors: [e.issue, ...errors],
++          warnings,
++          failFastStopped: true,
++          document: pipeline.document,
++        };
++      }
++      throw e;
++    }
++  }
++
++  for (const d of pipeline.warnings || []) {
++    warnings.push(
++      issue("graph", d.code || "validation_warning", d.message, {
++        nodeId: d.nodeId ?? undefined,
++        edgeId: d.edgeId ?? undefined,
++      }),
++    );
++  }
++
++  const graphResult = {
++    ok: errors.length === 0,
++    stage: "graph" as const,
++    errors,
++    warnings,
++    document: pipeline.document,
++  };
++  if (failFast && errors.length > 0) {
++    throw new StrictValidationError(errors[0]);
++  }
++  return graphResult;
++}
++
++/**
++ * 2. validateBotIR — strict Bot IR node registry enforcement.
++ */
++export function validateBotIR(
++  botIr: BotIRGraph,
++  options: StrictValidationOptions = {},
++): StrictValidationResult {
++  const failFast = options.failFast !== false;
++  const errors: StrictValidationIssue[] = [];
++  const warnings: StrictValidationIssue[] = [];
++
++  if (!botIr || !Array.isArray(botIr.nodes)) {
++    pushOrThrow(
++      errors,
++      issue("bot_ir", "invalid_bot_ir", "Bot IR graph is missing nodes"),
++      failFast,
++    );
++    return { ok: false, stage: "bot_ir", errors, warnings, failFastStopped: failFast };
++  }
++
++  const nodeIds = new Set<string>();
++
++  for (const node of botIr.nodes) {
++    const nodeId = String(node.id || "").trim();
++    const rawType = String(node.type || "").trim();
++
++    if (!nodeId) {
++      pushOrThrow(
++        errors,
++        issue("bot_ir", "missing_node_id", "Bot IR node is missing id"),
++        failFast,
++      );
++      continue;
++    }
++
++    if (nodeIds.has(nodeId)) {
++      pushOrThrow(
++        errors,
++        issue("bot_ir", "duplicate_node_id", `Duplicate Bot IR node id "${nodeId}"`, {
++          nodeId,
++        }),
++        failFast,
++      );
++    }
++    nodeIds.add(nodeId);
++
++    if (LEGACY_WRAPPER_TYPES.has(rawType) || rawType === "unknown") {
++      pushOrThrow(
++        errors,
++        issue(
++          "bot_ir",
++          "unknown_block_type",
++          `Bot IR node "${nodeId}": type "${rawType || "∅"}" is not allowed`,
++          { nodeId, type: rawType || "unknown" },
++        ),
++        failFast,
++      );
++      continue;
++    }
++
++    try {
++      assertRegisteredBlockType(rawType, { nodeId });
++    } catch (err) {
++      if (err instanceof UnknownBlockTypeError) {
++        pushOrThrow(errors, fromUnknownBlockTypeError("bot_ir", err), failFast);
++        continue;
++      }
++      throw err;
++    }
++
++    if (!blockRegistry[rawType]) {
++      pushOrThrow(
++        errors,
++        issue(
++          "bot_ir",
++          "unregistered_block_type",
++          `Bot IR node "${nodeId}": type "${rawType}" not in blockRegistry`,
++          { nodeId, type: rawType },
++        ),
++        failFast,
++      );
++    }
++
++    if (!hasOperationContract(rawType)) {
++      pushOrThrow(
++        errors,
++        issue(
++          "bot_ir",
++          "unregistered_block_type",
++          `Bot IR node "${nodeId}": type "${rawType}" not in operation registry`,
++          { nodeId, type: rawType },
++        ),
++        failFast,
++      );
++    }
++  }
++
++  for (const edge of botIr.edges || []) {
++    if (!nodeIds.has(edge.source)) {
++      pushOrThrow(
++        errors,
++        issue(
++          "bot_ir",
++          "dangling_edge",
++          `Bot IR edge "${edge.id}": unknown source "${edge.source}"`,
++          { edgeId: edge.id },
++        ),
++        failFast,
++      );
++    }
++    if (!nodeIds.has(edge.target)) {
++      pushOrThrow(
++        errors,
++        issue(
++          "bot_ir",
++          "dangling_edge",
++          `Bot IR edge "${edge.id}": unknown target "${edge.target}"`,
++          { edgeId: edge.id },
++        ),
++        failFast,
++      );
++    }
++  }
++
++  const irResult = { ok: errors.length === 0, stage: "bot_ir" as const, errors, warnings, botIr };
++  if (failFast && errors.length > 0) {
++    throw new StrictValidationError(errors[0]);
++  }
++  return irResult;
++}
++
++/**
++ * 3. validateCompile — full pre-codegen gate (graph → Bot IR → compile validation).
++ */
++export function validateCompile(
++  graphOrDocument: GraphDocumentInput | Record<string, unknown>,
++  options: StrictValidationOptions = {},
++): StrictValidationResult {
++  const failFast = options.failFast !== false;
++  const errors: StrictValidationIssue[] = [];
++  const warnings: StrictValidationIssue[] = [];
++
++  let graphResult: StrictValidationResult;
++  try {
++    graphResult = validateGraph(graphOrDocument, {
++      ...options,
++      failFast,
++      includeCallbacks: options.includeCallbacks !== false,
++    });
++  } catch (e) {
++    if (e instanceof StrictValidationError) {
++      return {
++        ok: false,
++        stage: "compile",
++        errors: [e.issue],
++        warnings,
++        failFastStopped: true,
++      };
++    }
++    throw e;
++  }
++
++  errors.push(...graphResult.errors);
++  warnings.push(...graphResult.warnings);
++  if (!graphResult.ok) {
++    return {
++      ok: false,
++      stage: "compile",
++      errors,
++      warnings,
++      document: graphResult.document,
++      failFastStopped: graphResult.failFastStopped,
++    };
++  }
++
++  const document = graphResult.document!;
++  let botIr: BotIRGraph;
++  try {
++    botIr = graphToBotIR(document);
++  } catch (err) {
++    const message = err instanceof Error ? err.message : String(err);
++    if (failFast) {
++      throw new StrictValidationError(
++        issue("compile", "bot_ir_build_failed", message),
++      );
++    }
++    errors.push(issue("compile", "bot_ir_build_failed", message));
++    return { ok: false, stage: "compile", errors, warnings, document };
++  }
++
++  let irResult: StrictValidationResult;
++  try {
++    irResult = validateBotIR(botIr, { ...options, failFast });
++  } catch (e) {
++    if (e instanceof StrictValidationError) {
++      return {
++        ok: false,
++        stage: "compile",
++        errors: [...errors, e.issue],
++        warnings,
++        document,
++        botIr,
++        failFastStopped: true,
++      };
++    }
++    throw e;
++  }
++
++  errors.push(...irResult.errors);
++  warnings.push(...irResult.warnings);
++  if (!irResult.ok) {
++    return {
++      ok: false,
++      stage: "compile",
++      errors,
++      warnings,
++      document,
++      botIr,
++      failFastStopped: irResult.failFastStopped,
++    };
++  }
++
++  const gate = strictCompileValidation(document, {
++    strict: true,
++    validationStage: VALIDATION_STAGE.COMPILE,
++    includeCallbacks: options.includeCallbacks !== false,
++  });
++
++  const blocking = gate.blocking?.length ? gate.blocking : gate.errors || [];
++  for (const d of blocking) {
++    try {
++      pushOrThrow(
++        errors,
++        issue("compile", d.code || "compile_gate", d.message, {
++          nodeId: d.nodeId ?? undefined,
++          edgeId: d.edgeId ?? undefined,
++        }),
++        failFast,
++      );
++    } catch (e) {
++      if (e instanceof StrictValidationError) {
++        return {
++          ok: false,
++          stage: "compile",
++          errors: [...errors, e.issue],
++          warnings,
++          document,
++          botIr,
++          failFastStopped: true,
++        };
++      }
++      throw e;
++    }
++  }
++
++  for (const d of gate.warnings || []) {
++    warnings.push(
++      issue("compile", d.code || "compile_warning", d.message, {
++        nodeId: d.nodeId ?? undefined,
++        edgeId: d.edgeId ?? undefined,
++      }),
++    );
++  }
++
++  const compileResult = {
++    ok: errors.length === 0 && gate.ok,
++    stage: "compile" as const,
++    errors,
++    warnings,
++    document,
++    botIr,
++  };
++  if (failFast && errors.length > 0) {
++    throw new StrictValidationError(errors[0]);
++  }
++  return compileResult;
++}
++
++/** Assert compile-ready graph; throws StrictValidationError on failure. */
++export function assertCompileReady(
++  graphOrDocument: GraphDocumentInput | Record<string, unknown>,
++  options?: StrictValidationOptions,
++): StrictValidationResult {
++  const result = validateCompile(graphOrDocument, { ...options, failFast: true });
++  if (!result.ok) {
++    const first = result.errors[0];
++    throw new StrictValidationError(
++      first ?? issue("compile", "compile_validation_failed", "Compile validation failed"),
++    );
++  }
++  return result;
++}
+diff --git a/core/validation/strictValidationError.ts b/core/validation/strictValidationError.ts
+new file mode 100644
+index 0000000..304b7bf
+--- /dev/null
++++ b/core/validation/strictValidationError.ts
+@@ -0,0 +1,37 @@
++/**
++ * Fail-fast validation errors for the strict graph → Bot IR → compile pipeline.
++ */
++
++export type StrictValidationStage = "graph" | "bot_ir" | "compile";
++
++export interface StrictValidationIssue {
++  code: string;
++  message: string;
++  stage: StrictValidationStage;
++  nodeId?: string;
++  edgeId?: string;
++  type?: string;
++}
++
++export class StrictValidationError extends Error {
++  readonly stage: StrictValidationStage;
++  readonly code: string;
++  readonly issue: StrictValidationIssue;
++
++  constructor(issue: StrictValidationIssue) {
++    super(issue.message);
++    this.name = "StrictValidationError";
++    this.stage = issue.stage;
++    this.code = issue.code;
++    this.issue = issue;
++  }
++}
++
++export function throwStrict(
++  stage: StrictValidationStage,
++  code: string,
++  message: string,
++  extra: Partial<StrictValidationIssue> = {},
++): never {
++  throw new StrictValidationError({ stage, code, message, ...extra });
++}
+diff --git a/package.json b/package.json
+index fe4edf7..799a29e 100644
+--- a/package.json
++++ b/package.json
+@@ -18,6 +18,16 @@
+     "lint": "eslint src core/tests services scripts server.mjs",
+     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
+     "test:compiler": "tsx tests/compiler/compiler.test.ts",
++    "test:bot-ir": "tsx tests/compiler/bot_ir.test.ts",
++    "test:block-capabilities": "node --test core/tests/block-capabilities.test.mjs",
++    "test:fsm-graph": "tsx tests/compiler/fsmGraph.test.ts",
++    "test:visual-db": "tsx tests/compiler/visual_db.test.ts",
++    "test:foreach": "tsx tests/compiler/foreach.test.ts",
++    "test:runtime-context": "tsx tests/compiler/runtime_context.test.ts",
++    "test:permission": "tsx tests/compiler/permission.test.ts",
++    "test:system-templates": "tsx tests/compiler/system_templates.test.ts",
++    "test:python-bot-import": "tsx tests/compiler/python_bot_import.test.ts",
++    "test:strict-validation": "tsx tests/compiler/strict_validation_pipeline.test.ts",
+     "test:runtime": "tsx tests/compiler/runtime.test.ts",
+     "parser-core-blocks": "node scripts/core-blocks-check.mjs",
+     "jammer:publish": "node scripts/publish-jammer-firmware.mjs",
+diff --git a/src/constructor/graph_document/graph_structural_audit.js b/src/constructor/graph_document/graph_structural_audit.js
+index 275af8b..ab4f51c 100644
+--- a/src/constructor/graph_document/graph_structural_audit.js
++++ b/src/constructor/graph_document/graph_structural_audit.js
+@@ -12,6 +12,7 @@ import {
+   canConnect,
+   validateConnection,
+   getOperationContract,
++  hasOperationContract,
+   validateNodeProps,
+   PORT_KINDS,
+ } from './operation_registry.js';
+@@ -301,7 +302,7 @@ export function validateNodeCompatibility(document) {
+     const contract = getOperationContract(type);
+     const flowPort = FLOW_PORTS[type];
+ 
+-    if (contract.type === 'unknown') {
++    if (!hasOperationContract(type)) {
+       issues.push({
+         code: 'unknown_node_type',
+         severity: 'error',
+diff --git a/src/constructor/graph_document/graph_validation_pipeline.js b/src/constructor/graph_document/graph_validation_pipeline.js
+index 451981e..ba67cb0 100644
+--- a/src/constructor/graph_document/graph_validation_pipeline.js
++++ b/src/constructor/graph_document/graph_validation_pipeline.js
+@@ -9,6 +9,8 @@ import { runGraphStructuralAudit } from './graph_structural_audit.js';
+ import { graphHasDanglingEdges } from './graph_edge_repair.js';
+ import { formatDiagnosticsForUser } from '../../builder/graph_error_messages.js';
+ import { isGraphEffectivelyEmpty } from './graph_canvas_state.js';
++import { validateGraphPermissions } from '../../../core/graph/permissionGraphValidate.js';
++import { collectRegistryViolations } from '../../../core/validation/registryEnforce.js';
+ import {
+   defersCallbackBlocking,
+   isDeferredCallbackError,
+@@ -224,6 +226,32 @@ export function runGraphValidationPipeline(graphOrDocument, options = {}) {
+   const document = createGraphDocument(graphOrDocument);
+   stages.push('hydration');
+ 
++  for (const v of collectRegistryViolations(document.nodes)) {
++    diagnostics.push({
++      code: v.code,
++      severity: 'error',
++      stage: 'registry',
++      message: v.message,
++      nodeId: v.nodeId || null,
++    });
++    if (strict && options.failFast !== false) {
++      return finalizeEarly();
++    }
++  }
++
++  function finalizeEarly() {
++    const errors = diagnostics.filter((d) => d.severity === 'error');
++    return {
++      ok: false,
++      document,
++      diagnostics,
++      errors,
++      warnings: diagnostics.filter((d) => d.severity === 'warning'),
++      stages: [...new Set(stages)],
++      summary: summarizeBySeverity(diagnostics),
++    };
++  }
++
+   const danglingInDoc = graphHasDanglingEdges(document);
+   const hydrationCount = Number(document.metadata?.hydrationDiagnostics?.orphanEdgeCount) || 0;
+   if (danglingInDoc) {
+@@ -283,6 +311,9 @@ export function runGraphValidationPipeline(graphOrDocument, options = {}) {
+   diagnostics.push(...normalizeStructuralItems(structural.errors, 'connections'));
+   diagnostics.push(...normalizeStructuralItems(structural.warnings, 'topology'));
+   checkFsmTransitions(document.nodes, (d) => diagnostics.push(d));
++  for (const d of validateGraphPermissions(document)) {
++    diagnostics.push({ ...d, stage: 'permissions' });
++  }
+ 
+   const softened = applyEditorCallbackSoftening(diagnostics, pipelineOptions);
+   const promoted = applyStrictPromotion(softened, strict);
+diff --git a/src/constructor/graph_document/index.js b/src/constructor/graph_document/index.js
+index c489926..629d6b5 100644
+--- a/src/constructor/graph_document/index.js
++++ b/src/constructor/graph_document/index.js
+@@ -8,6 +8,26 @@ export {
+   isGraphDocumentShape,
+ } from './graph_schema.js';
+ 
++export {
++  UnknownBlockTypeError,
++  assertRegisteredBlockType,
++  assertNodeTypeInRegistry,
++  coerceLegacyBlockType,
++  stripTypeFieldsFromData,
++  attachDeprecatedTypeCache,
++  graphResolveNodeType,
++  resolveCanonicalNodeType,
++  buildGraphNodeData,
++  normalizeGraphNodePayload,
++  blockToNodePayload,
++  buildGraphDocumentNodeRow,
++  resolveStackBlockType,
++  logBlockInsertion,
++  isBlockInsertionDebugEnabled,
++  DEPRECATED_DATA_TYPE_KEY,
++  DEPRECATED_DATA_BLOCK_TYPE_KEY,
++} from './graph_node_payload.js';
++
+ export {
+   createGraphDocument,
+   cloneGraphDocument,
+@@ -97,6 +117,13 @@ export {
+   formatDiagnosticsReport,
+   VALIDATION_STAGES,
+ } from './graph_validation_pipeline.js';
++export {
++  validateGraph as validateGraphStrict,
++  validateBotIR,
++  validateCompile,
++  assertCompileReady,
++  StrictValidationError,
++} from '../../../core/validation/index.ts';
+ export {
+   repairDanglingEdges,
+   listDanglingEdges,
+@@ -179,6 +206,7 @@ export {
+   replayBootstrapOperations,
+ } from './graph_migration.js';
+ export { importGraphFragment, importComposedGraph } from './graph_fragment_import.js';
++export { importPythonBot, importPythonBotIntoGraph } from './import_python_bot.js';
+ export {
+   beginNodeEdit,
+   beginKeyboardInsertion,
+diff --git a/src/constructor/graph_document/operation_registry.js b/src/constructor/graph_document/operation_registry.js
+index e64ff27..a49efff 100644
+--- a/src/constructor/graph_document/operation_registry.js
++++ b/src/constructor/graph_document/operation_registry.js
+@@ -21,6 +21,11 @@ import {
+   blockDefinitions,
+   getBlockDefinition,
+ } from '../../../core/blockRegistry.js';
++import {
++  assertRegisteredBlockType,
++  LEGACY_WRAPPER_TYPES,
++} from './graph_node_payload.js';
++import { isAllowedSourcePort } from '../../../core/registry/blockCapabilities.js';
+ import { FLOW_PORTS } from '../../../core/graph/flowPorts.js';
+ import {
+   isGraphKeyboardNode,
+@@ -131,6 +136,14 @@ const INSPECTOR_FIELDS = Object.freeze({
+     { key: 'varname', label: 'Переменная', tag: 'input' },
+     { key: 'value', label: 'Значение', tag: 'input' },
+   ],
++  set_variable: [
++    { key: 'name', label: 'Имя (ctx.vars)', tag: 'input' },
++    { key: 'value', label: 'Значение', tag: 'input' },
++  ],
++  get_variable: [
++    { key: 'name', label: 'Имя в ctx.vars', tag: 'input' },
++    { key: 'varname', label: 'Локальная переменная', tag: 'input' },
++  ],
+   get: [
+     { key: 'key', label: 'Ключ хранилища', tag: 'input' },
+     { key: 'varname', label: 'Переменная', tag: 'input' },
+@@ -144,6 +157,20 @@ const INSPECTOR_FIELDS = Object.freeze({
+     { key: 'count', label: 'Количество (если count)', tag: 'input' },
+     { key: 'cond', label: 'Условие (если while)', tag: 'input' },
+   ],
++  require_role: [
++    { key: 'role', label: 'Минимальная роль (admin|moderator|user)', tag: 'input' },
++    { key: 'roles', label: 'Роли через запятую (override)', tag: 'input' },
++    { key: 'message', label: 'Сообщение при отказе', tag: 'input' },
++  ],
++  foreach: [
++    { key: 'list', label: 'Список (input)', tag: 'input' },
++    { key: 'var', label: 'Переменная элемента (item context)', tag: 'input' },
++    { key: 'output', label: 'body | inline_keyboard', tag: 'input' },
++    { key: 'labelField', label: 'Поле подписи кнопки', tag: 'input' },
++    { key: 'idField', label: 'Поле id для callback', tag: 'input' },
++    { key: 'callbackPrefix', label: 'Префикс callback', tag: 'input' },
++    { key: 'columns', label: 'Кнопок в ряд', tag: 'input' },
++  ],
+ 
+   delay: [{ key: 'seconds', label: 'Секунд ожидания', tag: 'input' }],
+   pause: [{ key: 'seconds', label: 'Секунд ожидания', tag: 'input' }],
+@@ -207,6 +234,14 @@ const VALIDATION_RULES = Object.freeze({
+   condition_not: (props) => (String(props?.cond ?? '').trim() ? null : 'Условие не может быть пустым'),
+   ask: (props) => (String(props?.question ?? '').trim() ? null : 'Вопрос не может быть пустым'),
+   remember: (props) => (String(props?.varname ?? '').trim() ? null : 'Укажите имя переменной'),
++  set_variable: (props) => {
++    if (!String(props?.name ?? props?.varname ?? '').trim()) return 'Укажите имя переменной';
++    return null;
++  },
++  get_variable: (props) => {
++    if (!String(props?.name ?? '').trim()) return 'Укажите имя в ctx.vars';
++    return null;
++  },
+   get: (props) => (String(props?.key ?? '').trim() ? null : 'Укажите ключ хранилища'),
+   save: (props) => (String(props?.key ?? '').trim() ? null : 'Укажите ключ хранилища'),
+   goto: (props) => (String(props?.target ?? '').trim() ? null : 'Укажите целевой обработчик'),
+@@ -220,6 +255,33 @@ const VALIDATION_RULES = Object.freeze({
+     }
+     return null;
+   },
++  require_role: (props) => {
++    const explicit = String(props?.roles ?? '').trim();
++    if (explicit) {
++      const parts = explicit.split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean);
++      const allowed = new Set(['admin', 'moderator', 'user']);
++      for (const p of parts) {
++        if (!allowed.has(p.toLowerCase())) {
++          return `Неизвестная роль «${p}». Допустимо: admin, moderator, user`;
++        }
++      }
++      return null;
++    }
++    const role = String(props?.role ?? 'user').trim().toLowerCase();
++    if (!['admin', 'moderator', 'user'].includes(role)) {
++      return 'Роль должна быть admin, moderator или user';
++    }
++    return null;
++  },
++  foreach: (props) => {
++    if (!String(props?.list ?? props?.collection ?? '').trim()) {
++      return 'Укажите список (list)';
++    }
++    if (!String(props?.var ?? props?.item ?? '').trim()) {
++      return 'Укажите переменную элемента (var)';
++    }
++    return null;
++  },
+   bot: (props) => (String(props?.token ?? '').trim() ? null : 'Токен бота обязателен'),
+   version: (props) => (String(props?.version ?? '').trim() ? null : 'Укажите версию'),
+ });
+@@ -253,7 +315,7 @@ function buildOutputPorts(definition) {
+       { id: PORT_KINDS.CONDITION_FALSE, transport, kind: PORT_KINDS.CONDITION_FALSE, label: 'FALSE', edgeLabel: 'FALSE' },
+     ];
+   }
+-  if (definition.type === 'loop') {
++  if (definition.type === 'loop' || definition.type === 'foreach') {
+     return [
+       { id: PORT_KINDS.LOOP_BODY, transport, kind: PORT_KINDS.LOOP_BODY, label: 'BODY', edgeLabel: 'body' },
+       { id: PORT_KINDS.LOOP_DONE, transport, kind: PORT_KINDS.LOOP_DONE, label: 'DONE', edgeLabel: 'done' },
+@@ -319,6 +381,7 @@ const REGISTRY = Object.freeze(
+   ),
+ );
+ 
++/** @deprecated Non-strict UI fallback only — never used when registry enforcement is on. */
+ const FALLBACK_CONTRACT = Object.freeze({
+   type: 'unknown',
+   category: 'action',
+@@ -331,9 +394,23 @@ const FALLBACK_CONTRACT = Object.freeze({
+   roles: Object.freeze({ isRoot: false, isTerminal: false, isSettings: false }),
+ });
+ 
+-/** Lookup an operation contract by node type. */
++/** True when node type is registered (not wrapper / unknown). */
++export function hasOperationContract(nodeType) {
++  const t = String(nodeType ?? '').trim();
++  if (!t || LEGACY_WRAPPER_TYPES.has(t)) return false;
++  return Boolean(REGISTRY[t]);
++}
++
++/** Strict lookup — throws via assertRegisteredBlockType when missing. */
++export function getOperationContractStrict(nodeType, context = {}) {
++  const t = assertRegisteredBlockType(String(nodeType ?? '').trim(), context);
++  return REGISTRY[t];
++}
++
++/** Lookup an operation contract by node type (returns FALLBACK for unknown — prefer hasOperationContract). */
+ export function getOperationContract(nodeType) {
+-  return REGISTRY[String(nodeType || '').trim()] || FALLBACK_CONTRACT;
++  const t = String(nodeType || '').trim();
++  return REGISTRY[t] || FALLBACK_CONTRACT;
+ }
+ 
+ /** All known operation contracts (keyed by type). */
+@@ -367,14 +444,22 @@ function categoryAllowed(sourceContract, targetContract) {
+  * @returns {{ ok: true } | { ok: false, reason: string }}
+  */
+ export function canConnect(sourceType, targetType, sourcePortId = null, targetPortId = null) {
+-  const source = getOperationContract(sourceType);
+-  const target = getOperationContract(targetType);
+-  if (source === FALLBACK_CONTRACT && !sourceType) {
+-    return { ok: false, reason: 'Unknown source node type' };
++  if (!hasOperationContract(sourceType)) {
++    return {
++      ok: false,
++      reason: `Unknown source node type "${sourceType || ''}"`,
++      code: 'unknown_node_type',
++    };
+   }
+-  if (target === FALLBACK_CONTRACT && !targetType) {
+-    return { ok: false, reason: 'Unknown target node type' };
++  if (!hasOperationContract(targetType)) {
++    return {
++      ok: false,
++      reason: `Unknown target node type "${targetType || ''}"`,
++      code: 'unknown_node_type',
++    };
+   }
++  const source = getOperationContract(sourceType);
++  const target = getOperationContract(targetType);
+   if (source.roles.isTerminal) {
+     return { ok: false, reason: `${source.type}: terminal node has no outputs` };
+   }
+@@ -387,10 +472,28 @@ export function canConnect(sourceType, targetType, sourcePortId = null, targetPo
+   if (target.inputs.length === 0) {
+     return { ok: false, reason: `${target.type}: no input ports` };
+   }
++  const requestedSourcePort = sourcePortId != null && String(sourcePortId).trim() !== ''
++    ? String(sourcePortId).trim()
++    : null;
++  if (requestedSourcePort && !isAllowedSourcePort(source.type, requestedSourcePort)) {
++    return {
++      ok: false,
++      reason: `${source.type}: output port "${requestedSourcePort}" is not allowed for this block type`,
++      code: 'CAPABILITY_OUTPUT_PORT',
++    };
++  }
+   const sourcePort = findPort(source.outputs, sourcePortId);
+   const targetPort = findPort(target.inputs, targetPortId);
+   if (!sourcePort) return { ok: false, reason: `${source.type}: output port ${sourcePortId} not found` };
+   if (!targetPort) return { ok: false, reason: `${target.type}: input port ${targetPortId} not found` };
++  const resolvedSourcePortId = sourcePort.id || sourcePortId || 'flow';
++  if (!isAllowedSourcePort(source.type, resolvedSourcePortId)) {
++    return {
++      ok: false,
++      reason: `${source.type}: output port "${resolvedSourcePortId}" is not allowed for this block type`,
++      code: 'CAPABILITY_OUTPUT_PORT',
++    };
++  }
+   const sTrans = sourcePort.transport;
+   const tTrans = targetPort.transport;
+   if (sTrans !== '*' && tTrans !== '*' && sTrans !== tTrans) {
+@@ -487,11 +590,18 @@ export function validateGraph(document) {
+   const edges = Object.values(document?.edges || {});
+ 
+   for (const [id, node] of Object.entries(nodes)) {
+-    const contract = getOperationContract(node.type);
+-    if (contract === FALLBACK_CONTRACT) {
+-      errors.push(`Node ${id}: unknown type "${node.type}"`);
++    const rawType = String(node.type ?? '').trim();
++    if (!hasOperationContract(rawType)) {
++      errors.push(`Node ${id}: unknown type "${rawType || '∅'}"`);
++      continue;
++    }
++    try {
++      assertRegisteredBlockType(rawType, { nodeId: id });
++    } catch (err) {
++      errors.push(`Node ${id}: ${err?.message || 'invalid block type'}`);
+       continue;
+     }
++    const contract = getOperationContract(rawType);
+     const reason = validateNodeProps(node.type, node.data);
+     if (reason) errors.push(`Node ${id} (${node.type}): ${reason}`);
+   }
+diff --git a/tests/compiler/strict_validation_pipeline.test.ts b/tests/compiler/strict_validation_pipeline.test.ts
+new file mode 100644
+index 0000000..e68b36f
+--- /dev/null
++++ b/tests/compiler/strict_validation_pipeline.test.ts
+@@ -0,0 +1,112 @@
++import assert from "node:assert/strict";
++
++import { createGraphDocument } from "../../src/constructor/graph_document/graph_document.js";
++import { buildGraphNodeData } from "../../src/constructor/graph_document/graph_node_payload.js";
++import {
++  validateGraph,
++  validateBotIR,
++  validateCompile,
++  StrictValidationError,
++} from "../../core/validation/index.ts";
++import { graphToBotIR } from "../../core/ir/bot_ir";
++import { hasOperationContract } from "../../src/constructor/graph_document/operation_registry.js";
++
++const goodDoc = createGraphDocument({
++  schema_version: 2,
++  nodes: [
++    {
++      id: "s1",
++      type: "start",
++      position: { x: 0, y: 0 },
++      data: buildGraphNodeData("start", { cmd: "start" }),
++    },
++    {
++      id: "m1",
++      type: "message",
++      position: { x: 200, y: 0 },
++      data: buildGraphNodeData("message", { text: "hi" }),
++    },
++    {
++      id: "stop1",
++      type: "stop",
++      position: { x: 400, y: 0 },
++      data: buildGraphNodeData("stop", {}),
++    },
++  ],
++  edges: [
++    {
++      id: "e1",
++      source: "s1",
++      target: "m1",
++      sourcePort: "flow",
++      targetPort: "flow",
++    },
++    {
++      id: "e2",
++      source: "m1",
++      target: "stop1",
++      sourcePort: "flow",
++      targetPort: "flow",
++    },
++  ],
++});
++
++const graphOk = validateGraph(goodDoc);
++assert.equal(graphOk.ok, true, graphOk.errors.map((e) => e.message).join("; "));
++
++const ir = graphToBotIR(goodDoc);
++const irOk = validateBotIR(ir);
++assert.equal(irOk.ok, true);
++
++const compileOk = validateCompile(goodDoc, { failFast: false });
++assert.equal(compileOk.ok, true, compileOk.errors.map((e) => e.message).join("; "));
++
++const badUnknown = {
++  schema_version: 2,
++  nodes: {
++    bad: {
++      id: "bad",
++      type: "unknown",
++      position: { x: 0, y: 0 },
++      data: {},
++    },
++  },
++  edges: {},
++};
++
++assert.throws(
++  () => validateGraph(badUnknown, { failFast: true }),
++  (err: unknown) => {
++    assert.ok(err instanceof StrictValidationError);
++    assert.equal(err.code, "unknown_block_type");
++    return true;
++  },
++);
++
++const badGraph = validateGraph(badUnknown, { failFast: false });
++assert.equal(badGraph.ok, false);
++assert.ok(badGraph.errors.some((e) => e.code === "unknown_block_type"));
++
++assert.equal(hasOperationContract("start"), true);
++assert.equal(hasOperationContract("unknown"), false);
++assert.equal(hasOperationContract("not_a_real_block_xyz"), false);
++
++const badIr = {
++  ...ir,
++  nodes: [
++    ...ir.nodes,
++    {
++      id: "x",
++      type: "unknown",
++      inputs: [],
++      outputs: [],
++      capabilities: { async: false, outputs: [] },
++      payload: {},
++    },
++  ],
++};
++const irBad = validateBotIR(badIr as typeof ir, { failFast: false });
++assert.equal(irBad.ok, false);
++assert.ok(irBad.errors.some((e) => e.code === "unknown_block_type"));
++
++console.log("strict_validation_pipeline.test.ts OK");

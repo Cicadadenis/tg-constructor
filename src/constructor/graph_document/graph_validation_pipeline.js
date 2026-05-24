@@ -9,6 +9,8 @@ import { runGraphStructuralAudit } from './graph_structural_audit.js';
 import { graphHasDanglingEdges } from './graph_edge_repair.js';
 import { formatDiagnosticsForUser } from '../../builder/graph_error_messages.js';
 import { isGraphEffectivelyEmpty } from './graph_canvas_state.js';
+import { validateGraphPermissions } from '../../../core/graph/permissionGraphValidate.js';
+import { collectRegistryViolations } from '../../../core/validation/registryEnforce.js';
 import {
   defersCallbackBlocking,
   isDeferredCallbackError,
@@ -224,6 +226,32 @@ export function runGraphValidationPipeline(graphOrDocument, options = {}) {
   const document = createGraphDocument(graphOrDocument);
   stages.push('hydration');
 
+  for (const v of collectRegistryViolations(document.nodes)) {
+    diagnostics.push({
+      code: v.code,
+      severity: 'error',
+      stage: 'registry',
+      message: v.message,
+      nodeId: v.nodeId || null,
+    });
+    if (strict && options.failFast !== false) {
+      return finalizeEarly();
+    }
+  }
+
+  function finalizeEarly() {
+    const errors = diagnostics.filter((d) => d.severity === 'error');
+    return {
+      ok: false,
+      document,
+      diagnostics,
+      errors,
+      warnings: diagnostics.filter((d) => d.severity === 'warning'),
+      stages: [...new Set(stages)],
+      summary: summarizeBySeverity(diagnostics),
+    };
+  }
+
   const danglingInDoc = graphHasDanglingEdges(document);
   const hydrationCount = Number(document.metadata?.hydrationDiagnostics?.orphanEdgeCount) || 0;
   if (danglingInDoc) {
@@ -283,6 +311,9 @@ export function runGraphValidationPipeline(graphOrDocument, options = {}) {
   diagnostics.push(...normalizeStructuralItems(structural.errors, 'connections'));
   diagnostics.push(...normalizeStructuralItems(structural.warnings, 'topology'));
   checkFsmTransitions(document.nodes, (d) => diagnostics.push(d));
+  for (const d of validateGraphPermissions(document)) {
+    diagnostics.push({ ...d, stage: 'permissions' });
+  }
 
   const softened = applyEditorCallbackSoftening(diagnostics, pipelineOptions);
   const promoted = applyStrictPromotion(softened, strict);

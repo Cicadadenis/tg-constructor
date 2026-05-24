@@ -1,0 +1,1030 @@
+diff --git a/core/import/aiogramExtractToBotIR.ts b/core/import/aiogramExtractToBotIR.ts
+new file mode 100644
+index 0000000..46f2886
+--- /dev/null
++++ b/core/import/aiogramExtractToBotIR.ts
+@@ -0,0 +1,253 @@
++/**
++ * Aiogram AST extract JSON → Bot IR graph (nodes + edges).
++ */
++
++import { buildVisualDbGraphFromBotNodes } from "../db/visual_db_ir.js";
++import { BOT_IR_VERSION, type BotIRGraph, type BotIREdge, type BotIRNode } from "../ir/bot_ir.js";
++import { graphToBotIR } from "../ir/bot_ir.js";
++import { getNodeCapabilities } from "../blockRegistry.js";
++import { getNodePortDescriptors } from "../../src/constructor/graph_document/operation_registry.js";
++import { botIRToGraphDocument } from "../templates/botIrToGraphDocument.js";
++import type { GraphDocumentInput } from "../ir/bot_ir.js";
++
++export interface AiogramExtractAction {
++  type: string;
++  text?: string;
++  state?: string;
++  target?: string;
++  expr?: string;
++}
++
++export interface AiogramExtractHandler {
++  name: string;
++  file: string;
++  line: number;
++  channel: string;
++  kind: string;
++  filters: Record<string, unknown>[];
++  payload: Record<string, unknown>;
++  actions: AiogramExtractAction[];
++  async?: boolean;
++}
++
++export interface AiogramFsmState {
++  name: string;
++  line?: number;
++}
++
++export interface AiogramFsmGroup {
++  name: string;
++  line?: number;
++  states: AiogramFsmState[];
++}
++
++export interface AiogramExtractResult {
++  ok: boolean;
++  error?: string;
++  files?: string[];
++  handlers?: AiogramExtractHandler[];
++  fsm?: { groups: AiogramFsmGroup[] };
++  botToken?: string | null;
++}
++
++function slug(value: string): string {
++  return String(value || "node")
++    .replace(/[^a-zA-Z0-9_]+/g, "_")
++    .replace(/^_+|_+$/g, "")
++    .slice(0, 48) || "node";
++}
++
++function mapPorts(type: string) {
++  const { inputs, outputs } = getNodePortDescriptors(type);
++  const map = (ports: readonly { id: string; kind?: string; label?: string }[]) =>
++    ports.map((p) => ({
++      id: String(p.id),
++      ...(p.kind != null ? { kind: String(p.kind) } : {}),
++      ...(p.label != null ? { label: String(p.label) } : {}),
++    }));
++  return {
++    inputs: Object.freeze(map(inputs)),
++    outputs: Object.freeze(map(outputs)),
++  };
++}
++
++function makeNode(
++  id: string,
++  type: string,
++  payload: Record<string, unknown>,
++  layoutIndex: number,
++): BotIRNode {
++  const ports = mapPorts(type);
++  return {
++    id,
++    type,
++    inputs: ports.inputs,
++    outputs: ports.outputs,
++    capabilities: Object.freeze({ ...getNodeCapabilities(type) }),
++    payload: Object.freeze({ ...payload }),
++  };
++}
++
++function makeEdge(id: string, source: string, target: string): BotIREdge {
++  return {
++    id,
++    source,
++    target,
++    sourcePort: "flow",
++    targetPort: "flow",
++  };
++}
++
++function resolveHandlerBlockType(kind: string): string {
++  if (kind === "start") return "start";
++  if (kind === "command") return "command";
++  if (kind === "callback") return "callback";
++  return "on_message";
++}
++
++function stripQuotes(value: string): string {
++  const t = value.trim();
++  if (
++    (t.startsWith('"') && t.endsWith('"')) ||
++    (t.startsWith("'") && t.endsWith("'"))
++  ) {
++    return t.slice(1, -1);
++  }
++  return t;
++}
++
++/**
++ * Build Bot IR from Python AST extract payload.
++ */
++export function aiogramExtractToBotIR(extract: AiogramExtractResult): BotIRGraph {
++  const nodes: BotIRNode[] = [];
++  const edges: BotIREdge[] = [];
++  const positions: Record<string, { x: number; y: number }> = {};
++  let layout = 0;
++
++  const place = (id: string) => {
++    const col = layout % 3;
++    const row = Math.floor(layout / 3);
++    positions[id] = { x: col * 280, y: row * 140 };
++    layout += 1;
++  };
++
++  if (extract.botToken) {
++    const id = "bot_imported";
++    nodes.push(makeNode(id, "bot", { token: extract.botToken }, layout));
++    place(id);
++  }
++
++  const fsmGroups = extract.fsm?.groups || [];
++  const stateIdByKey = new Map<string, string>();
++
++  for (const group of fsmGroups) {
++    for (const st of group.states || []) {
++      const id = `fsm_${slug(group.name)}_${slug(st.name)}`;
++      stateIdByKey.set(`${group.name}.${st.name}`, id);
++      nodes.push(
++        makeNode(id, "fsm.state", {
++          group: group.name,
++          name: st.name,
++          importedFrom: "python",
++        }, layout),
++      );
++      place(id);
++    }
++  }
++
++  const handlers = extract.handlers || [];
++  for (let hi = 0; hi < handlers.length; hi += 1) {
++    const h = handlers[hi];
++    const blockType = resolveHandlerBlockType(h.kind);
++    const handlerId = `h_${slug(h.name)}_${hi}`;
++    const handlerPayload: Record<string, unknown> = {
++      ...h.payload,
++      handlerName: h.name,
++      sourceFile: h.file,
++      sourceLine: h.line,
++      importedFrom: "python",
++    };
++    if (blockType === "command" && !handlerPayload.cmd) {
++      handlerPayload.cmd = h.name.replace(/^cmd_/, "").replace(/^handle_/, "");
++    }
++
++    nodes.push(makeNode(handlerId, blockType, handlerPayload, layout));
++    place(handlerId);
++
++    let prevId = handlerId;
++    const actions = h.actions || [];
++    for (let ai = 0; ai < actions.length; ai += 1) {
++      const act = actions[ai];
++      if (act.type === "set_state" && act.state) {
++        const key = act.state.split("(")[0]?.trim() || act.state;
++        const stateNodeId = stateIdByKey.get(key) || stateIdByKey.get(key.split(".").slice(-2).join("."));
++        if (stateNodeId) {
++          edges.push(makeEdge(`e_${slug(prevId)}_fsm_${ai}`, prevId, stateNodeId));
++          prevId = stateNodeId;
++        }
++        continue;
++      }
++      if (act.type === "clear_state") {
++        continue;
++      }
++      if (act.type === "answer" || act.type === "edit_text") {
++        const msgId = `msg_${slug(h.name)}_${ai}`;
++        nodes.push(
++          makeNode(msgId, "message", {
++            text: stripQuotes(act.text || ""),
++            importedFrom: "python",
++            ...(act.type === "edit_text" ? { edit: true } : {}),
++          }, layout),
++        );
++        place(msgId);
++        edges.push(makeEdge(`e_${slug(prevId)}_${msgId}`, prevId, msgId));
++        prevId = msgId;
++      }
++    }
++  }
++
++  const ir: BotIRGraph = {
++    version: BOT_IR_VERSION,
++    nodes,
++    edges,
++    visualDb: buildVisualDbGraphFromBotNodes(nodes),
++    context: {
++      schemaVersion: 2,
++      viewport: { x: 0, y: 0, zoom: 1 },
++      metadata: {
++        importedFrom: "aiogram3_python",
++        importSourceFiles: extract.files || [],
++        handlerCount: handlers.length,
++        fsmGroupCount: fsmGroups.length,
++        nodePositions: positions,
++      },
++      nodeCount: nodes.length,
++      edgeCount: edges.length,
++    },
++  };
++
++  return ir;
++}
++
++/**
++ * Full pipeline: extract JSON → Bot IR → GraphDocument input.
++ */
++export function aiogramExtractToGraphDocument(
++  extract: AiogramExtractResult,
++): GraphDocumentInput {
++  const ir = aiogramExtractToBotIR(extract);
++  return botIRToGraphDocument(ir);
++}
++
++/** Round-trip sanity: extract → IR → graph → IR preserves node count. */
++export function verifyImportRoundTrip(extract: AiogramExtractResult): {
++  ir: BotIRGraph;
++  graph: GraphDocumentInput;
++  roundIr: BotIRGraph;
++} {
++  const ir = aiogramExtractToBotIR(extract);
++  const graph = botIRToGraphDocument(ir);
++  const roundIr = graphToBotIR(graph);
++  return { ir, graph, roundIr };
++}
+diff --git a/core/import/importPythonBot.ts b/core/import/importPythonBot.ts
+new file mode 100644
+index 0000000..d748daf
+--- /dev/null
++++ b/core/import/importPythonBot.ts
+@@ -0,0 +1,116 @@
++/**
++ * importPythonBot(zip) — parse aiogram3 Python bot archive → Bot IR → GraphDocument.
++ */
++
++import { execFileSync } from "node:child_process";
++import { mkdtempSync, writeFileSync, unlinkSync, rmSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { join, dirname } from "node:path";
++import { fileURLToPath } from "node:url";
++
++import { createGraphDocument } from "../../src/constructor/graph_document/graph_document.js";
++import type { GraphDocumentInput } from "../ir/bot_ir.js";
++import { graphToBotIR, type BotIRGraph } from "../ir/bot_ir.js";
++import {
++  aiogramExtractToBotIR,
++  aiogramExtractToGraphDocument,
++  type AiogramExtractResult,
++} from "./aiogramExtractToBotIR.js";
++
++const __dirname = dirname(fileURLToPath(import.meta.url));
++const PARSER_SCRIPT = join(__dirname, "parse_aiogram_ast.py");
++
++export type ImportPythonBotInput = Buffer | Uint8Array | string;
++
++export interface ImportPythonBotResult {
++  ok: boolean;
++  error?: string;
++  extract?: AiogramExtractResult;
++  botIr?: BotIRGraph;
++  graphDocument?: GraphDocumentInput;
++  /** Canonical GraphDocument instance (normalized nodes/edges maps). */
++  document?: ReturnType<typeof createGraphDocument>;
++}
++
++function toBuffer(input: ImportPythonBotInput): Buffer {
++  if (typeof input === "string") {
++    if (/^[A-Za-z0-9+/=\s]+$/.test(input.trim()) && input.trim().length > 40) {
++      return Buffer.from(input.trim(), "base64");
++    }
++    return Buffer.from(input, "utf8");
++  }
++  return Buffer.from(input);
++}
++
++function runPythonAstParser(zipBuffer: Buffer): AiogramExtractResult {
++  const dir = mkdtempSync(join(tmpdir(), "tg-import-"));
++  const zipPath = join(dir, "bot.zip");
++  try {
++    writeFileSync(zipPath, zipBuffer);
++    const out = execFileSync("python3", [PARSER_SCRIPT, zipPath], {
++      encoding: "utf8",
++      maxBuffer: 16 * 1024 * 1024,
++    });
++    const parsed = JSON.parse(out) as AiogramExtractResult;
++    return parsed;
++  } catch (err) {
++    const message = err instanceof Error ? err.message : String(err);
++    return { ok: false, error: `python_ast_parse_failed: ${message}` };
++  } finally {
++    try {
++      unlinkSync(zipPath);
++    } catch {
++      /* ignore */
++    }
++    try {
++      rmSync(dir, { recursive: true, force: true });
++    } catch {
++      /* ignore */
++    }
++  }
++}
++
++/**
++ * Parse zip (or raw .py bytes), build Bot IR and GraphDocument.
++ */
++export function importPythonBot(zip: ImportPythonBotInput): ImportPythonBotResult {
++  const buffer = toBuffer(zip);
++  if (!buffer.length) {
++    return { ok: false, error: "empty_input" };
++  }
++
++  const extract = runPythonAstParser(buffer);
++  if (!extract.ok) {
++    return { ok: false, error: extract.error || "parse_failed", extract };
++  }
++
++  const botIr = aiogramExtractToBotIR(extract);
++  const graphDocument = aiogramExtractToGraphDocument(extract);
++  const document = createGraphDocument(graphDocument);
++
++  return {
++    ok: true,
++    extract,
++    botIr,
++    graphDocument,
++    document,
++  };
++}
++
++/**
++ * Parse in-memory extract (tests / fixtures without Python when pre-baked).
++ */
++export function importPythonBotFromExtract(
++  extract: AiogramExtractResult,
++): ImportPythonBotResult {
++  if (!extract.ok) {
++    return { ok: false, error: extract.error || "extract_not_ok", extract };
++  }
++  const botIr = aiogramExtractToBotIR(extract);
++  const graphDocument = aiogramExtractToGraphDocument(extract);
++  const document = createGraphDocument(graphDocument);
++  return { ok: true, extract, botIr, graphDocument, document };
++}
++
++/** Re-export for callers that only need IR. */
++export { aiogramExtractToBotIR, aiogramExtractToGraphDocument, graphToBotIR };
+diff --git a/core/import/index.ts b/core/import/index.ts
+new file mode 100644
+index 0000000..fd96170
+--- /dev/null
++++ b/core/import/index.ts
+@@ -0,0 +1,14 @@
++export {
++  importPythonBot,
++  importPythonBotFromExtract,
++  type ImportPythonBotInput,
++  type ImportPythonBotResult,
++} from "./importPythonBot.js";
++
++export {
++  aiogramExtractToBotIR,
++  aiogramExtractToGraphDocument,
++  verifyImportRoundTrip,
++  type AiogramExtractResult,
++  type AiogramExtractHandler,
++} from "./aiogramExtractToBotIR.js";
+diff --git a/core/import/parse_aiogram_ast.py b/core/import/parse_aiogram_ast.py
+new file mode 100644
+index 0000000..591a51a
+--- /dev/null
++++ b/core/import/parse_aiogram_ast.py
+@@ -0,0 +1,384 @@
++#!/usr/bin/env python3
++"""
++Parse aiogram 3 bot Python sources via AST.
++Reads a .zip archive or a single .py file; emits JSON on stdout.
++"""
++
++from __future__ import annotations
++
++import ast
++import io
++import json
++import re
++import sys
++import zipfile
++from pathlib import PurePosixPath
++from typing import Any
++
++
++def _unparse(node: ast.AST | None) -> str:
++    if node is None:
++        return ""
++    try:
++        return ast.unparse(node)
++    except Exception:
++        return ""
++
++
++def _const_str(node: ast.AST | None) -> str | None:
++    if isinstance(node, ast.Constant) and isinstance(node.value, str):
++        return node.value
++    return None
++
++
++def _call_name(node: ast.AST | None) -> str | None:
++    if isinstance(node, ast.Name):
++        return node.id
++    if isinstance(node, ast.Attribute):
++        base = _call_name(node.value)
++        return f"{base}.{node.attr}" if base else node.attr
++    if isinstance(node, ast.Call):
++        return _call_name(node.func)
++    return None
++
++
++def _decorator_router_kind(dec: ast.AST) -> dict[str, Any] | None:
++    """@router.message(...) / @router.callback_query(...)"""
++    if not isinstance(dec, ast.Call):
++        return None
++    fn = dec.func
++    if not isinstance(fn, ast.Attribute):
++        return None
++    if not isinstance(fn.value, ast.Name) or fn.value.id != "router":
++        return None
++    channel = fn.attr
++    if channel not in ("message", "callback_query", "edited_message", "inline_query"):
++        return None
++
++    filters: list[dict[str, Any]] = []
++    for arg in dec.args:
++        parsed = _parse_filter_expr(arg)
++        if parsed:
++            filters.append(parsed)
++    for kw in dec.keywords:
++        parsed = _parse_filter_expr(kw.value)
++        if parsed:
++            filters.append(parsed)
++
++    return {"channel": channel, "filters": filters}
++
++
++def _parse_filter_expr(node: ast.AST) -> dict[str, Any] | None:
++    if isinstance(node, ast.Call):
++        name = _call_name(node.func)
++        if name == "CommandStart":
++            return {"kind": "CommandStart"}
++        if name == "Command":
++            cmd = None
++            if node.args:
++                cmd = _const_str(node.args[0])
++            return {"kind": "Command", "cmd": cmd or _unparse(node.args[0]) if node.args else ""}
++        if name == "StateFilter":
++            return {"kind": "StateFilter", "expr": _unparse(node)}
++        if name and name.startswith("F."):
++            return {"kind": "F", "expr": _unparse(node)}
++        return {"kind": "Call", "name": name or _unparse(node.func), "expr": _unparse(node)}
++    if isinstance(node, ast.Compare):
++        left = _unparse(node.left)
++        for op, comp in zip(node.ops, node.comparators):
++            if isinstance(op, ast.Eq):
++                right = _const_str(comp) or _unparse(comp)
++                if "F.data" in left or left.strip() == "F.data":
++                    return {"kind": "callback_data", "op": "==", "value": right}
++                if "startswith" in left or (
++                    isinstance(node.left, ast.Call)
++                    and getattr(getattr(node.left, "func", None), "attr", None) == "startswith"
++                ):
++                    return {"kind": "callback_data", "op": "startswith", "value": right}
++        return {"kind": "Compare", "expr": _unparse(node)}
++    if isinstance(node, ast.Attribute) and _call_name(node) == "F.text":
++        return {"kind": "F", "expr": "F.text"}
++    return {"kind": "expr", "expr": _unparse(node)}
++
++
++def _extract_actions(body: list[ast.stmt]) -> list[dict[str, Any]]:
++    actions: list[dict[str, Any]] = []
++
++    def walk(stmts: list[ast.stmt]) -> None:
++        for stmt in stmts:
++            if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Await):
++                act = _action_from_await(stmt.value.value)
++                if act:
++                    actions.append(act)
++            elif isinstance(stmt, ast.Await):
++                act = _action_from_await(stmt.value)
++                if act:
++                    actions.append(act)
++            elif isinstance(stmt, ast.If):
++                walk(stmt.body)
++                walk(stmt.orelse)
++            elif isinstance(stmt, ast.Try):
++                walk(stmt.body)
++                for h in stmt.handlers:
++                    walk(h.body)
++                walk(stmt.orelse)
++                walk(stmt.finalbody)
++            elif isinstance(stmt, ast.With):
++                walk(stmt.body)
++            elif isinstance(stmt, ast.For):
++                walk(stmt.body)
++            elif isinstance(stmt, ast.While):
++                walk(stmt.body)
++            elif isinstance(stmt, ast.Assign):
++                pass
++
++    walk(body)
++    return actions
++
++
++def _action_from_await(node: ast.AST) -> dict[str, Any] | None:
++    if not isinstance(node, ast.Call):
++        return None
++    target = _unparse(node.func)
++    if not target:
++        return None
++
++    kwargs = {kw.arg: _unparse(kw.value) for kw in node.keywords if kw.arg}
++    text = kwargs.get("text")
++    if text is None and node.args:
++        text = _const_str(node.args[0]) or _unparse(node.args[0])
++
++    if target.endswith(".answer") or target.endswith(".reply"):
++        return {"type": "answer", "text": text or "", "target": target}
++    if target.endswith(".edit_text"):
++        return {"type": "edit_text", "text": text or "", "target": target}
++    if target.endswith(".set_state"):
++        state_expr = _unparse(node.args[0]) if node.args else kwargs.get("state", "")
++        return {"type": "set_state", "state": state_expr}
++    if target.endswith(".clear"):
++        return {"type": "clear_state"}
++    if target.endswith(".update_data"):
++        return {"type": "update_data", "expr": _unparse(node)}
++    return {"type": "call", "target": target, "expr": _unparse(node)}
++
++
++def _class_bases_name(node: ast.ClassDef) -> list[str]:
++    names = []
++    for base in node.bases:
++        n = _call_name(base) or _unparse(base)
++        if n:
++            names.append(n)
++    return names
++
++
++def _extract_fsm_classes(tree: ast.Module) -> list[dict[str, Any]]:
++    groups: list[dict[str, Any]] = []
++    for node in tree.body:
++        if not isinstance(node, ast.ClassDef):
++            continue
++        bases = _class_bases_name(node)
++        if not any("StatesGroup" in b for b in bases):
++            continue
++        states = []
++        for item in node.body:
++            if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
++                states.append({"name": item.target.id, "line": item.lineno})
++            elif isinstance(item, ast.Assign):
++                for tgt in item.targets:
++                    if isinstance(tgt, ast.Name):
++                        val = _call_name(item.value) if isinstance(item.value, ast.Call) else None
++                        if val == "State" or (val and val.endswith(".State")):
++                            states.append({"name": tgt.id, "line": item.lineno})
++        groups.append(
++            {
++                "name": node.name,
++                "line": node.lineno,
++                "states": states,
++            }
++        )
++    return groups
++
++
++def _handler_kind(channel: str, filters: list[dict[str, Any]]) -> str:
++    if channel == "callback_query":
++        for f in filters:
++            if f.get("kind") == "callback_data":
++                return "callback"
++            if f.get("kind") == "F" and "data" in str(f.get("expr", "")):
++                return "callback"
++        return "callback"
++    for f in filters:
++        if f.get("kind") == "CommandStart":
++            return "start"
++        if f.get("kind") == "Command":
++            return "command"
++        if f.get("kind") == "callback_data":
++            return "callback"
++        if f.get("kind") == "F" and "text" in str(f.get("expr", "")):
++            return "callback"
++    return "on_message"
++
++
++def _handler_payload(kind: str, filters: list[dict[str, Any]]) -> dict[str, Any]:
++    payload: dict[str, Any] = {}
++    if kind == "command":
++        for f in filters:
++            if f.get("kind") == "Command" and f.get("cmd"):
++                payload["cmd"] = f["cmd"]
++                break
++    if kind == "callback":
++        for f in filters:
++            if f.get("kind") == "callback_data":
++                if f.get("op") == "startswith":
++                    payload["dataPrefix"] = f.get("value", "")
++                else:
++                    payload["data"] = f.get("value", "")
++                break
++    if kind == "start":
++        payload["cmd"] = "start"
++    return payload
++
++
++def _extract_handlers(tree: ast.Module, filename: str) -> list[dict[str, Any]]:
++    handlers: list[dict[str, Any]] = []
++    for node in tree.body:
++        if not isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):
++            continue
++        router_dec = None
++        for dec in node.decorator_list:
++            parsed = _decorator_router_kind(dec)
++            if parsed:
++                router_dec = parsed
++                break
++        if not router_dec:
++            continue
++        channel = router_dec["channel"]
++        filters = router_dec.get("filters") or []
++        kind = _handler_kind(channel, filters)
++        handlers.append(
++            {
++                "name": node.name,
++                "file": filename,
++                "line": node.lineno,
++                "channel": channel,
++                "kind": kind,
++                "filters": filters,
++                "payload": _handler_payload(kind, filters),
++                "actions": _extract_actions(node.body),
++                "async": isinstance(node, ast.AsyncFunctionDef),
++            }
++        )
++    return handlers
++
++
++def _extract_bot_token(source: str) -> str | None:
++    m = re.search(r'BOT_TOKEN\s*=\s*["\']([^"\']+)["\']', source)
++    if m:
++        return m.group(1)
++    m = re.search(
++        r'getenv\s*\(\s*["\']BOT_TOKEN["\']\s*,\s*["\']([^"\']+)["\']',
++        source,
++    )
++    if m:
++        return m.group(1)
++    m = re.search(r'Token\s*\(\s*["\']([^"\']+)["\']', source)
++    if m:
++        return m.group(1)
++    return None
++
++
++def parse_python_source(source: str, filename: str) -> dict[str, Any]:
++    tree = ast.parse(source, filename=filename)
++    return {
++        "file": filename,
++        "handlers": _extract_handlers(tree, filename),
++        "fsm": {"groups": _extract_fsm_classes(tree)},
++        "botToken": _extract_bot_token(source),
++    }
++
++
++def _is_python_path(path: str) -> bool:
++    name = PurePosixPath(path.replace("\\", "/")).name
++    return name.endswith(".py") and not name.startswith("__")
++
++
++def _score_entrypoint(path: str) -> int:
++    name = PurePosixPath(path.replace("\\", "/")).name.lower()
++    score = 0
++    if name == "bot.py":
++        score += 100
++    if name == "main.py":
++        score += 80
++    if "bot" in name:
++        score += 40
++    if name == "__init__.py":
++        score -= 50
++    depth = len(PurePosixPath(path.replace("\\", "/")).parts)
++    score -= depth
++    return score
++
++
++def load_sources_from_zip(data: bytes) -> list[tuple[str, str]]:
++    out: list[tuple[str, str]] = []
++    with zipfile.ZipFile(io.BytesIO(data)) as zf:
++        names = sorted(
++            (n for n in zf.namelist() if _is_python_path(n) and not n.endswith("/")),
++            key=lambda p: (-_score_entrypoint(p), p),
++        )
++        for name in names:
++            try:
++                raw = zf.read(name).decode("utf-8")
++            except UnicodeDecodeError:
++                raw = zf.read(name).decode("utf-8", errors="replace")
++            out.append((name.replace("\\", "/"), raw))
++    return out
++
++
++def parse_archive(data: bytes) -> dict[str, Any]:
++    if data[:2] == b"PK":
++        sources = load_sources_from_zip(data)
++    else:
++        try:
++            text = data.decode("utf-8")
++        except UnicodeDecodeError:
++            text = data.decode("utf-8", errors="replace")
++        sources = [("bot.py", text)]
++
++    if not sources:
++        return {"ok": False, "error": "no_python_sources", "files": [], "handlers": [], "fsm": {"groups": []}}
++
++    files: list[str] = []
++    handlers: list[dict[str, Any]] = []
++    fsm_groups: list[dict[str, Any]] = []
++    bot_token: str | None = None
++
++    for path, source in sources:
++        files.append(path)
++        parsed = parse_python_source(source, path)
++        if parsed.get("botToken") and not bot_token:
++            bot_token = parsed["botToken"]
++        handlers.extend(parsed["handlers"])
++        fsm_groups.extend(parsed["fsm"]["groups"])
++
++    return {
++        "ok": True,
++        "files": files,
++        "handlers": handlers,
++        "fsm": {"groups": fsm_groups},
++        "botToken": bot_token,
++    }
++
++
++def main() -> None:
++    if len(sys.argv) < 2:
++        data = sys.stdin.buffer.read()
++    else:
++        path = sys.argv[1]
++        with open(path, "rb") as f:
++            data = f.read()
++    result = parse_archive(data)
++    json.dump(result, sys.stdout, ensure_ascii=False)
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/package.json b/package.json
+index fe4edf7..94607d1 100644
+--- a/package.json
++++ b/package.json
+@@ -18,6 +18,15 @@
+     "lint": "eslint src core/tests services scripts server.mjs",
+     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
+     "test:compiler": "tsx tests/compiler/compiler.test.ts",
++    "test:bot-ir": "tsx tests/compiler/bot_ir.test.ts",
++    "test:block-capabilities": "node --test core/tests/block-capabilities.test.mjs",
++    "test:fsm-graph": "tsx tests/compiler/fsmGraph.test.ts",
++    "test:visual-db": "tsx tests/compiler/visual_db.test.ts",
++    "test:foreach": "tsx tests/compiler/foreach.test.ts",
++    "test:runtime-context": "tsx tests/compiler/runtime_context.test.ts",
++    "test:permission": "tsx tests/compiler/permission.test.ts",
++    "test:system-templates": "tsx tests/compiler/system_templates.test.ts",
++    "test:python-bot-import": "tsx tests/compiler/python_bot_import.test.ts",
+     "test:runtime": "tsx tests/compiler/runtime.test.ts",
+     "parser-core-blocks": "node scripts/core-blocks-check.mjs",
+     "jammer:publish": "node scripts/publish-jammer-firmware.mjs",
+diff --git a/src/constructor/graph_document/graph_schema.js b/src/constructor/graph_document/graph_schema.js
+index 02da978..3342210 100644
+--- a/src/constructor/graph_document/graph_schema.js
++++ b/src/constructor/graph_document/graph_schema.js
+@@ -2,6 +2,12 @@
+  * GraphDocument schema — canonical constructor graph model (structural only).
+  */
+ 
++import {
++  assertRegisteredBlockType,
++  coerceLegacyBlockType,
++  stripTypeFieldsFromData,
++} from './graph_node_payload.js';
++
+ export const GRAPH_DOCUMENT_SCHEMA_VERSION = 2;
+ 
+ /** Runtime editor operations (event-sourced; no snapshot replace). */
+@@ -63,28 +69,23 @@ export function normalizeUiState(uiState) {
+ export function normalizeGraphDocumentNode(node) {
+   if (!node?.id) return null;
+   const position = node.position || {};
+-  const rawData = asRecord(node.data ?? node.props);
+-  const rawType = String(node.type ?? 'unknown');
+-  const blockType = (rawType === 'cicada' || rawType === 'unknown')
+-    ? String(rawData.type || rawData.blockType || rawType).trim() || 'message'
+-    : rawType;
+-  let props = rawData;
+-  if (rawData.props && typeof rawData.props === 'object' && !Array.isArray(rawData.props)) {
+-    props = { ...rawData.props };
+-  } else if (rawType === 'cicada' || rawData.type || rawData.blockType) {
+-    props = { ...rawData };
+-    delete props.type;
+-    delete props.blockType;
+-    delete props.props;
+-  }
++  const nodeId = String(node.id);
++  const blockType = assertRegisteredBlockType(
++    coerceLegacyBlockType({
++      id: nodeId,
++      type: node.type,
++      data: asRecord(node.data ?? node.props),
++    }),
++    { nodeId },
++  );
+   return {
+-    id: String(node.id),
++    id: nodeId,
+     type: blockType,
+     position: {
+       x: Number.isFinite(Number(position.x)) ? Number(position.x) : 0,
+       y: Number.isFinite(Number(position.y)) ? Number(position.y) : 0,
+     },
+-    data: props,
++    data: stripTypeFieldsFromData(asRecord(node.data ?? node.props)),
+     meta: asRecord(node.meta),
+   };
+ }
+@@ -124,13 +125,19 @@ export function normalizeGraphDocumentEdge(edge, nodeIds = null) {
+ 
+ export function normalizeMetadata(metadata) {
+   const m = asRecord(metadata);
+-  return {
++  const base = {
+     name: String(m.name ?? 'untitled'),
+     createdAt: m.createdAt ?? null,
+     updatedAt: m.updatedAt ?? null,
+     revision: Number.isFinite(Number(m.revision)) ? Number(m.revision) : 0,
+     tags: Array.isArray(m.tags) ? m.tags.map(String) : [],
+   };
++  const reserved = new Set(['name', 'createdAt', 'updatedAt', 'revision', 'tags']);
++  const extra = {};
++  for (const [key, value] of Object.entries(m)) {
++    if (!reserved.has(key)) extra[key] = value;
++  }
++  return { ...base, ...extra };
+ }
+ 
+ export function isGraphDocumentShape(value) {
+diff --git a/src/constructor/graph_document/index.js b/src/constructor/graph_document/index.js
+index c489926..4cd82b9 100644
+--- a/src/constructor/graph_document/index.js
++++ b/src/constructor/graph_document/index.js
+@@ -8,6 +8,26 @@ export {
+   isGraphDocumentShape,
+ } from './graph_schema.js';
+ 
++export {
++  UnknownBlockTypeError,
++  assertRegisteredBlockType,
++  assertNodeTypeInRegistry,
++  coerceLegacyBlockType,
++  stripTypeFieldsFromData,
++  attachDeprecatedTypeCache,
++  graphResolveNodeType,
++  resolveCanonicalNodeType,
++  buildGraphNodeData,
++  normalizeGraphNodePayload,
++  blockToNodePayload,
++  buildGraphDocumentNodeRow,
++  resolveStackBlockType,
++  logBlockInsertion,
++  isBlockInsertionDebugEnabled,
++  DEPRECATED_DATA_TYPE_KEY,
++  DEPRECATED_DATA_BLOCK_TYPE_KEY,
++} from './graph_node_payload.js';
++
+ export {
+   createGraphDocument,
+   cloneGraphDocument,
+@@ -179,6 +199,7 @@ export {
+   replayBootstrapOperations,
+ } from './graph_migration.js';
+ export { importGraphFragment, importComposedGraph } from './graph_fragment_import.js';
++export { importPythonBot, importPythonBotIntoGraph } from './import_python_bot.js';
+ export {
+   beginNodeEdit,
+   beginKeyboardInsertion,
+diff --git a/tests/compiler/python_bot_import.test.ts b/tests/compiler/python_bot_import.test.ts
+new file mode 100644
+index 0000000..410d44a
+--- /dev/null
++++ b/tests/compiler/python_bot_import.test.ts
+@@ -0,0 +1,96 @@
++import assert from "node:assert/strict";
++import { execFileSync } from "node:child_process";
++import { readFileSync, mkdtempSync, writeFileSync, unlinkSync, rmSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { join, dirname } from "node:path";
++import { fileURLToPath } from "node:url";
++
++import {
++  importPythonBot,
++  importPythonBotFromExtract,
++  aiogramExtractToBotIR,
++  verifyImportRoundTrip,
++} from "../../core/import/index.ts";
++import { graphToBotIR } from "../../core/ir/bot_ir";
++
++const __dirname = dirname(fileURLToPath(import.meta.url));
++const FIXTURE_PY = join(__dirname, "../fixtures/aiogram3_minimal/bot.py");
++const PARSER = join(__dirname, "../../core/import/parse_aiogram_ast.py");
++
++function makeZipFromPy(pyPath: string): Buffer {
++  const dir = mkdtempSync(join(tmpdir(), "tg-import-test-"));
++  const zipPath = join(dir, "bot.zip");
++  try {
++    execFileSync(
++      "python3",
++      [
++        "-c",
++        `import zipfile,sys; z=zipfile.ZipFile(sys.argv[1],'w'); z.writestr('bot.py', open(sys.argv[2]).read()); z.close()`,
++        zipPath,
++        pyPath,
++      ],
++      { encoding: "utf8" },
++    );
++    return readFileSync(zipPath);
++  } finally {
++    try {
++      unlinkSync(zipPath);
++    } catch {
++      /* ignore */
++    }
++    rmSync(dir, { recursive: true, force: true });
++  }
++}
++
++function parseFixtureZip(): ReturnType<typeof JSON.parse> {
++  const zip = makeZipFromPy(FIXTURE_PY);
++  const dir = mkdtempSync(join(tmpdir(), "tg-parse-"));
++  const zipPath = join(dir, "bot.zip");
++  writeFileSync(zipPath, zip);
++  try {
++    const out = execFileSync("python3", [PARSER, zipPath], { encoding: "utf8" });
++    return JSON.parse(out);
++  } finally {
++    rmSync(dir, { recursive: true, force: true });
++  }
++}
++
++const extract = parseFixtureZip();
++assert.equal(extract.ok, true);
++assert.ok(extract.handlers.length >= 4);
++assert.ok(extract.fsm.groups.some((g: { name: string }) => g.name === "OrderStates"));
++assert.equal(extract.fsm.groups[0].states.length, 2);
++
++const startHandler = extract.handlers.find((h: { kind: string }) => h.kind === "start");
++assert.ok(startHandler);
++assert.ok(startHandler.actions.some((a: { type: string }) => a.type === "answer"));
++
++const ir = aiogramExtractToBotIR(extract);
++assert.ok(ir.nodes.some((n) => n.type === "start"));
++assert.ok(ir.nodes.some((n) => n.type === "command"));
++assert.ok(ir.nodes.some((n) => n.type === "callback"));
++assert.ok(ir.nodes.some((n) => n.type === "fsm.state"));
++assert.ok(ir.nodes.some((n) => n.type === "message"));
++if (extract.botToken) {
++  assert.ok(ir.nodes.some((n) => n.type === "bot"));
++}
++
++const { roundIr } = verifyImportRoundTrip(extract);
++assert.equal(roundIr.nodes.length, ir.nodes.length);
++
++const fromExtract = importPythonBotFromExtract(extract);
++assert.equal(fromExtract.ok, true);
++assert.ok(fromExtract.document);
++const docNodes = Object.values(fromExtract.document!.nodes);
++assert.ok(docNodes.some((n) => n.type === "start"));
++
++const zip = makeZipFromPy(FIXTURE_PY);
++const imported = importPythonBot(zip);
++assert.equal(imported.ok, true);
++assert.ok(imported.botIr);
++assert.ok(imported.graphDocument);
++const back = graphToBotIR(imported.graphDocument!);
++assert.ok(back.nodes.length >= 4);
++assert.equal(back.context.metadata?.importedFrom, "aiogram3_python");
++
++console.log("python_bot_import.test.ts OK");

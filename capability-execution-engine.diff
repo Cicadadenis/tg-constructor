@@ -1,0 +1,2704 @@
+diff --git a/core/capabilities/capabilityIds.ts b/core/capabilities/capabilityIds.ts
+new file mode 100644
+index 0000000..b2fcd51
+--- /dev/null
++++ b/core/capabilities/capabilityIds.ts
+@@ -0,0 +1,73 @@
++/**
++ * Canonical capability identifiers (actions + transport triggers).
++ * Compilers and runtime dispatch by capability id — never by node.type switch.
++ */
++
++export const CAPABILITY_ACTIONS = Object.freeze({
++  NOOP: "noop",
++  ROUTE: "route",
++  SEND_MESSAGE: "send_message",
++  SEND_MEDIA: "send_media",
++  SEND_PHOTO: "send_photo",
++  SEND_VIDEO: "send_video",
++  SEND_AUDIO: "send_audio",
++  SEND_DOCUMENT: "send_document",
++  SEND_STICKER: "send_sticker",
++  SEND_CONTACT: "send_contact",
++  SEND_LOCATION: "send_location",
++  SEND_POLL: "send_poll",
++  ATTACH_INLINE_KEYBOARD: "attach_inline_keyboard",
++  ATTACH_REPLY_KEYBOARD: "attach_reply_keyboard",
++  BRANCH: "branch",
++  BRANCH_FALLBACK: "branch_fallback",
++  PROMPT: "prompt",
++  STORE_INPUT: "store_input",
++  STORE_SESSION: "store_session",
++  CTX_SET_VAR: "ctx_set_var",
++  CTX_GET_VAR: "ctx_get_var",
++  LOAD_STORAGE: "load_storage",
++  SAVE_STORAGE: "save_storage",
++  JUMP: "jump",
++  LOOP: "loop",
++  FOREACH: "foreach",
++  INLINE_FROM_LIST: "inline_from_list",
++  SLEEP: "sleep",
++  CHAT_ACTION: "chat_action",
++  HALT: "halt",
++  LOG: "log",
++  SET_GLOBAL: "set_global",
++  FSM_STATE: "fsm_state",
++  FSM_INPUT: "fsm_input",
++  FSM_TRANSITION: "fsm_transition",
++  DB_READ: "db_read",
++  DB_WRITE: "db_write",
++  DB_QUERY: "db_query",
++  DB_INSERT: "db_insert",
++  DB_UPDATE: "db_update",
++  REQUIRE_ROLE: "require_role",
++  DECLARE_VERSION: "declare_version",
++  DECLARE_BOT: "declare_bot",
++  DECLARE_COMMANDS: "declare_commands",
++  DECLARE_GLOBAL: "declare_global",
++} as const);
++
++export const CAPABILITY_TRIGGERS = Object.freeze({
++  TELEGRAM_COMMAND_START: "telegram.command.start",
++  TELEGRAM_COMMAND: "telegram.command",
++  TELEGRAM_CALLBACK_QUERY: "telegram.callback_query",
++  TELEGRAM_MESSAGE_TEXT: "telegram.message.text",
++  TELEGRAM_MESSAGE_PHOTO: "telegram.message.photo",
++  TELEGRAM_MESSAGE_VOICE: "telegram.message.voice",
++  TELEGRAM_MESSAGE_DOCUMENT: "telegram.message.document",
++  TELEGRAM_MESSAGE_STICKER: "telegram.message.sticker",
++  TELEGRAM_MESSAGE_LOCATION: "telegram.message.location",
++  TELEGRAM_MESSAGE_CONTACT: "telegram.message.contact",
++} as const);
++
++export type CapabilityActionId =
++  (typeof CAPABILITY_ACTIONS)[keyof typeof CAPABILITY_ACTIONS];
++
++export type CapabilityTriggerId =
++  (typeof CAPABILITY_TRIGGERS)[keyof typeof CAPABILITY_TRIGGERS];
++
++export type CapabilityId = CapabilityActionId | CapabilityTriggerId | string;
+diff --git a/core/capabilities/index.ts b/core/capabilities/index.ts
+new file mode 100644
+index 0000000..8459eb7
+--- /dev/null
++++ b/core/capabilities/index.ts
+@@ -0,0 +1,14 @@
++export {
++  CAPABILITY_ACTIONS,
++  CAPABILITY_TRIGGERS,
++  type CapabilityActionId,
++  type CapabilityTriggerId,
++  type CapabilityId,
++} from "./capabilityIds.js";
++
++export {
++  resolveNodeCapability,
++  resolveHandlerTriggerCapability,
++  assertNodeCapabilityRegistered,
++  type ResolvedNodeCapability,
++} from "./resolveNodeCapability.js";
+diff --git a/core/capabilities/nodeCapabilities.ts b/core/capabilities/nodeCapabilities.ts
+index 55fabb9..68529a3 100644
+--- a/core/capabilities/nodeCapabilities.ts
++++ b/core/capabilities/nodeCapabilities.ts
+@@ -1,21 +1,8 @@
+-export const NODE_CAPABILITIES = {
+-  command: {
+-    outputs: ["next"],
+-    inputs: [],
+-  },
+-
+-  message: {
+-    outputs: ["next"],
+-    inputs: ["input"],
+-  },
+-
+-  callback: {
+-    outputs: ["next"],
+-    inputs: ["input"],
+-  },
+-
+-  fsm: {
+-    outputs: ["success", "fail"],
+-    inputs: ["input"],
+-  },
+-};
++/**
++ * @deprecated Use `getBlockCapabilities` from `core/registry/blockCapabilities.js`.
++ * Kept for backward-compatible imports only.
++ */
++export {
++  getBlockCapabilities as getNodeCapabilitiesLegacy,
++  blockCapabilitiesByType as NODE_CAPABILITIES,
++} from "../registry/blockCapabilities.js";
+diff --git a/core/capabilities/resolveNodeCapability.ts b/core/capabilities/resolveNodeCapability.ts
+new file mode 100644
+index 0000000..2bd937a
+--- /dev/null
++++ b/core/capabilities/resolveNodeCapability.ts
+@@ -0,0 +1,70 @@
++/**
++ * Resolve block type → capability contract (no node.type switches downstream).
++ */
++
++import {
++  assertBlockCapabilitiesRegistered,
++  getBlockCapabilities,
++  getBlockCapabilitiesStrict,
++} from "../registry/blockCapabilities.js";
++
++export interface ResolvedNodeCapability {
++  blockType: string;
++  /** Primary action for body / runtime execution. */
++  primaryAction: string;
++  actions: readonly string[];
++  triggers: readonly string[];
++  async: boolean;
++  outputs: readonly string[];
++}
++
++/**
++ * @param {string} blockType
++ * @param {{ nodeId?: string, strict?: boolean }} [options]
++ */
++export function resolveNodeCapability(
++  blockType: string,
++  options: { nodeId?: string; strict?: boolean } = {},
++): ResolvedNodeCapability {
++  const caps = options.strict
++    ? getBlockCapabilitiesStrict(blockType, { nodeId: options.nodeId })
++    : getBlockCapabilities(blockType);
++
++  const actions = caps.actions ?? [];
++  const triggers = caps.triggers ?? [];
++  const primaryAction = actions[0] ?? triggers[0] ?? "noop";
++
++  return Object.freeze({
++    blockType: String(blockType || "").trim(),
++    primaryAction,
++    actions: Object.freeze([...actions]),
++    triggers: Object.freeze([...triggers]),
++    async: Boolean(caps.async),
++    outputs: Object.freeze([...(caps.outputs ?? [])]),
++  });
++}
++
++/**
++ * Handler nodes: compile / bind transport via trigger capability.
++ */
++export function resolveHandlerTriggerCapability(
++  blockType: string,
++  options: { nodeId?: string } = {},
++): string | null {
++  const resolved = resolveNodeCapability(blockType, {
++    ...options,
++    strict: true,
++  });
++  return resolved.triggers[0] ?? null;
++}
++
++/**
++ * Fail-fast registry assert for compile/runtime pipelines.
++ */
++export function assertNodeCapabilityRegistered(
++  blockType: string,
++  nodeId?: string,
++): ResolvedNodeCapability {
++  assertBlockCapabilitiesRegistered(blockType);
++  return resolveNodeCapability(blockType, { nodeId, strict: true });
++}
+diff --git a/core/codegen/capabilityEmitters/registerAll.js b/core/codegen/capabilityEmitters/registerAll.js
+new file mode 100644
+index 0000000..4c08572
+--- /dev/null
++++ b/core/codegen/capabilityEmitters/registerAll.js
+@@ -0,0 +1,54 @@
++/**
++ * Bootstrap capability emitters (triggers + shared actions + block registry).
++ */
++
++import { registerCapabilityEmitter } from '../capabilityPythonRegistry.js';
++import { registerAllBlockCompilers } from '../blockCompilers/registerAll.js';
++import { registerTelegramTriggerEmitters } from './telegramTriggers.js';
++import { registerDbCapabilityEmitters } from '../../db/dbCapabilityCodegen.js';
++import {
++  blockCapabilitiesByType,
++} from '../../registry/blockCapabilities.js';
++import { getCompiler } from '../registry.js';
++import { compileReply } from '../blockCompilers/message.js';
++
++let registered = false;
++
++/** Shared actions used by multiple block types — explicit primary emitter. */
++const SHARED_ACTION_EMITTERS = Object.freeze([
++  ['send_message', compileReply],
++]);
++
++function registerSharedActionEmitters() {
++  for (const [actionId, fn] of SHARED_ACTION_EMITTERS) {
++    registerCapabilityEmitter(actionId, fn);
++  }
++}
++
++/**
++ * Per-block-type: register action emitters not yet taken (block-specific compilers).
++ */
++function registerBlockActionEmitters() {
++  for (const [blockType, caps] of Object.entries(blockCapabilitiesByType)) {
++    const compiler = getCompiler(blockType);
++    if (!compiler) continue;
++    for (const actionId of caps.actions || []) {
++      if (!SHARED_ACTION_EMITTERS.some(([id]) => id === actionId)) {
++        registerCapabilityEmitter(actionId, compiler);
++      }
++    }
++  }
++}
++
++/**
++ * Single bootstrap: block type compilers + capability emitter registry.
++ */
++export function registerAllCapabilityEmitters() {
++  if (registered) return;
++  registerAllBlockCompilers();
++  registerTelegramTriggerEmitters();
++  registerDbCapabilityEmitters();
++  registerSharedActionEmitters();
++  registerBlockActionEmitters();
++  registered = true;
++}
+diff --git a/core/codegen/capabilityEmitters/telegramTriggers.js b/core/codegen/capabilityEmitters/telegramTriggers.js
+new file mode 100644
+index 0000000..244f5be
+--- /dev/null
++++ b/core/codegen/capabilityEmitters/telegramTriggers.js
+@@ -0,0 +1,92 @@
++/**
++ * Telegram transport trigger capability emitters (decorators).
++ */
++
++import { pyQuote } from '../utils.js';
++import { callbackKeysMatch, normalizeCallbackData } from '../callbackDataNormalize.js';
++import { registerCapabilityEmitter } from '../capabilityPythonRegistry.js';
++import { CAPABILITY_TRIGGERS } from '../../capabilities/capabilityIds.ts';
++
++function blockProps(block) {
++  return block?.props ?? block?.payload ?? {};
++}
++
++function emitCommandStart() {
++  return '@router.message(CommandStart())';
++}
++
++function emitCommand(block, _ctx) {
++  const props = blockProps(block);
++  const cmd = String(props.cmd || 'start').replace(/^\//, '');
++  return `@router.message(Command(${pyQuote(cmd)}))`;
++}
++
++function emitCallback(block, ctx) {
++  const props = blockProps(block);
++  const data = normalizeCallbackData(props.data || props.callbackData || '');
++  const prefix = normalizeCallbackData(props.dataPrefix || props.callbackPrefix || '');
++  const label = normalizeCallbackData(props.label || '');
++  const inlineCallbacks = ctx?.inlineCallbackData;
++
++  if (data) {
++    return `@router.callback_query(F.data == ${pyQuote(data)})`;
++  }
++  if (prefix) {
++    return `@router.callback_query(F.data.startswith(${pyQuote(prefix)}))`;
++  }
++  if (label && inlineCallbacks?.size) {
++    for (const cb of inlineCallbacks) {
++      if (callbackKeysMatch(cb, label)) {
++        return `@router.callback_query(F.data == ${pyQuote(cb)})`;
++      }
++    }
++  }
++  if (label) {
++    return `@router.message(F.text == ${pyQuote(label)})`;
++  }
++  return '@router.callback_query()';
++}
++
++/** Register telegram.* trigger capability → aiogram decorator emitters. */
++export function registerTelegramTriggerEmitters() {
++  registerCapabilityEmitter(
++    CAPABILITY_TRIGGERS.TELEGRAM_COMMAND_START,
++    emitCommandStart,
++  );
++  registerCapabilityEmitter(
++    CAPABILITY_TRIGGERS.TELEGRAM_COMMAND,
++    emitCommand,
++  );
++  registerCapabilityEmitter(
++    CAPABILITY_TRIGGERS.TELEGRAM_CALLBACK_QUERY,
++    emitCallback,
++  );
++  registerCapabilityEmitter(
++    CAPABILITY_TRIGGERS.TELEGRAM_MESSAGE_VOICE,
++    () => '@router.message(F.voice)',
++  );
++  registerCapabilityEmitter(
++    CAPABILITY_TRIGGERS.TELEGRAM_MESSAGE_STICKER,
++    () => '@router.message(F.sticker)',
++  );
++  registerCapabilityEmitter(
++    CAPABILITY_TRIGGERS.TELEGRAM_MESSAGE_TEXT,
++    () => '@router.message(StateFilter(None), F.text)',
++  );
++  registerCapabilityEmitter(
++    CAPABILITY_TRIGGERS.TELEGRAM_MESSAGE_PHOTO,
++    () => '@router.message(F.photo)',
++  );
++  registerCapabilityEmitter(
++    CAPABILITY_TRIGGERS.TELEGRAM_MESSAGE_DOCUMENT,
++    () => '@router.message(F.document)',
++  );
++  registerCapabilityEmitter(
++    CAPABILITY_TRIGGERS.TELEGRAM_MESSAGE_LOCATION,
++    () => '@router.message(F.location)',
++  );
++  registerCapabilityEmitter(
++    CAPABILITY_TRIGGERS.TELEGRAM_MESSAGE_CONTACT,
++    () => '@router.message(F.contact)',
++  );
++}
+diff --git a/core/codegen/capabilityPythonRegistry.js b/core/codegen/capabilityPythonRegistry.js
+new file mode 100644
+index 0000000..86ad07a
+--- /dev/null
++++ b/core/codegen/capabilityPythonRegistry.js
+@@ -0,0 +1,84 @@
++/**
++ * Capability-based Python codegen registry — dispatch by capability id, not node.type switch.
++ */
++
++import { MissingCompilerError } from './errors.js';
++import { getBlockCapabilities } from '../registry/blockCapabilities.js';
++import { resolveHandlerTriggerCapability } from '../capabilities/resolveNodeCapability.ts';
++
++/** @type {Map<string, (block: object, ctx: object) => string>} */
++const capabilityEmitters = new Map();
++
++/** @type {Map<string, string>} blockType → primary capability id (cache) */
++const blockTypePrimaryCapability = new Map();
++
++/**
++ * @param {string} capabilityId
++ * @param {(block: object, ctx: object) => string} fn
++ */
++export function registerCapabilityEmitter(capabilityId, fn) {
++  const id = String(capabilityId || '').trim();
++  if (!id || typeof fn !== 'function') {
++    throw new Error('registerCapabilityEmitter(id, fn) requires id and function');
++  }
++  capabilityEmitters.set(id, fn);
++}
++
++/** @param {string} capabilityId */
++export function getCapabilityEmitter(capabilityId) {
++  return capabilityEmitters.get(String(capabilityId || '').trim()) || null;
++}
++
++/** @param {string} blockType */
++export function primaryCapabilityForBlockType(blockType) {
++  const key = String(blockType || '').trim();
++  if (blockTypePrimaryCapability.has(key)) {
++    return blockTypePrimaryCapability.get(key);
++  }
++  const caps = getBlockCapabilities(key);
++  const primary = caps.actions?.[0] ?? caps.triggers?.[0] ?? 'noop';
++  blockTypePrimaryCapability.set(key, primary);
++  return primary;
++}
++
++/**
++ * @param {string} capabilityId
++ * @param {object} block
++ * @param {object} [ctx]
++ */
++export function emitCapabilityPython(capabilityId, block, ctx = {}) {
++  const id = String(capabilityId || '').trim();
++  const fn = capabilityEmitters.get(id);
++  if (!fn) {
++    throw new MissingCompilerError(id, block?.id ?? block?.props?.nodeId);
++  }
++  return fn(block, ctx);
++}
++
++/**
++ * Compile block via capability contract (handler → trigger, body → primary action).
++ * @param {{ type?: string, props?: object, payload?: object, id?: string }} block
++ * @param {object} [ctx]
++ */
++export function compileBlockViaCapability(block, ctx = {}) {
++  const type = String(block?.type || '').trim();
++  if (!type) {
++    throw new MissingCompilerError('(missing)', block?.id);
++  }
++
++  if (ctx?.emitHandlerDecorator) {
++    const trigger = resolveHandlerTriggerCapability(type, {
++      nodeId: block?.id ?? block?.props?.nodeId,
++    });
++    if (trigger) {
++      return emitCapabilityPython(trigger, block, ctx);
++    }
++  }
++
++  const capabilityId = primaryCapabilityForBlockType(type);
++  return emitCapabilityPython(capabilityId, block, ctx);
++}
++
++export function listCapabilityEmitters() {
++  return [...capabilityEmitters.keys()].sort();
++}
+diff --git a/core/codegen/compileCore.js b/core/codegen/compileCore.js
+index 19f8cba..055049a 100644
+--- a/core/codegen/compileCore.js
++++ b/core/codegen/compileCore.js
+@@ -16,6 +16,7 @@ import {
+ } from './constants.js';
+ import { ROLE_FSM } from '../rules/aiogram3BlockRoles.js';
+ import { compileBlock, getCompiler, BLOCK_TO_PYTHON_COMPILER } from './registry.js';
++import { compileBlockViaCapability } from './capabilityPythonRegistry.js';
+ import { isStacksEmptyForCodegen } from './emptyGraph.js';
+ import { bindStacksForCodegen } from './ast/bindKeyboards.js';
+ import { boundKeyboardParts, getAnswerTarget } from './ast/keyboardMarkup.js';
+@@ -28,6 +29,36 @@ import {
+   emitInlineKeyboard,
+ } from './keyboards.js';
+ import { callbackKeysMatch, normalizeCallbackData } from './callbackDataNormalize.js';
++import { buildFsmGraphFromStacks, emitFsmPythonFromGraph } from './fsmCodegen.js';
++import {
++  stackHasVisualDb,
++  emitSqliteDbRuntime,
++  emitVisualDbManifest,
++} from '../db/dbCodegen.js';
++import { compileForeachBlock, isForeachKeyboardOutput } from './foreachCodegen.js';
++import {
++  emitRuntimeContextRuntime,
++  emitRuntimeContextDefaults,
++  emitHandlerContextPreamble,
++  emitCtxLocalAliases,
++} from './runtimeContextCodegen.js';
++import {
++  compileSetVariable,
++  compileGetVariable,
++  compileRememberCtx,
++  compileGetCtx,
++  compileSaveCtx,
++  compileSetGlobalCtx,
++  compileSaveGlobalCtx,
++} from './variableCompilers.js';
++import {
++  emitPermissionMiddlewareRuntime,
++  emitPermissionMiddlewareRegistration,
++  emitCtxRoleFromMiddleware,
++  compileRequireRole,
++  stackHasRequireRole,
++  collectRequireRoleIssues,
++} from './permissionCodegen.js';
+ 
+ export { parseButtonRows, parseInlineRows, emitReplyKeyboard, emitInlineKeyboard } from './keyboards.js';
+ 
+@@ -338,73 +369,22 @@ export function compileDeleteKey(block, ctx) {
+   const key = block?.props?.key ?? block?.payload?.key ?? '';
+   const storage = ctx.storage ?? 'fsm_pop';
+   const ind = pyIndent(ctx.indent);
+-  if (storage === 'fsm_update_data') {
+-    return `${ind}await state.update_data(${escapePyKey(key)}=None)`;
+-  }
+   const k = pyQuote(String(key).trim());
+   return [
+-    `${ind}data = await state.get_data()`,
+-    `${ind}data.pop(${k}, None)`,
+-    `${ind}await state.set_data(data)`,
++    `${ind}_st = ctx["state"]`,
++    `${ind}if _st is not None:`,
++    `${ind}    _data = await _st.get_data()`,
++    `${ind}    _data.pop(${k}, None)`,
++    `${ind}    await _st.set_data(_data)`,
++    `${ind}ctx["vars"].pop(${k}, None)`,
+   ].join('\n');
+ }
+ 
+ export function compileEventDecorator(type, props = {}, ctx = {}) {
+-  switch (type) {
+-    case 'on_voice':
+-    case 'voice_received':
+-      return '@router.message(F.voice)';
+-    case 'on_sticker':
+-    case 'sticker_received':
+-      return '@router.message(F.sticker)';
+-    case 'on_text':
+-      return '@router.message(StateFilter(None), F.text)';
+-    case 'on_photo':
+-    case 'photo_received':
+-      return '@router.message(F.photo)';
+-    case 'on_document':
+-    case 'document_received':
+-      return '@router.message(F.document)';
+-    case 'on_location':
+-    case 'location_received':
+-      return '@router.message(F.location)';
+-    case 'on_contact':
+-    case 'contact_received':
+-      return '@router.message(F.contact)';
+-    case 'start':
+-      return '@router.message(CommandStart())';
+-    case 'command': {
+-      const cmd = String(props.cmd || 'start').replace(/^\//, '');
+-      return `@router.message(Command(${pyQuote(cmd)}))`;
+-    }
+-    case 'callback': {
+-      const data = normalizeCallbackData(props.data || props.callbackData || '');
+-      const prefix = normalizeCallbackData(props.dataPrefix || props.callbackPrefix || '');
+-      const label = normalizeCallbackData(props.label || '');
+-      const inlineCallbacks = ctx.inlineCallbackData;
+-      if (data) {
+-        return `@router.callback_query(F.data == ${pyQuote(data)})`;
+-      }
+-      if (prefix) {
+-        return `@router.callback_query(F.data.startswith(${pyQuote(prefix)}))`;
+-      }
+-      if (label && inlineCallbacks?.size) {
+-        for (const cb of inlineCallbacks) {
+-          if (callbackKeysMatch(cb, label)) {
+-            return `@router.callback_query(F.data == ${pyQuote(cb)})`;
+-          }
+-        }
+-      }
+-      if (label) {
+-        return `@router.message(F.text == ${pyQuote(label)})`;
+-      }
+-      return '@router.callback_query()';
+-    }
+-    case 'else':
+-      return '@router.message()';
+-    default:
+-      return '@router.message()';
+-  }
++  return compileBlockViaCapability(
++    { type, props, payload: props },
++    { ...ctx, emitHandlerDecorator: true },
++  );
+ }
+ 
+ export function compileVoiceEvent(block, ctx) {
+@@ -442,43 +422,28 @@ export function compileElseEvent(block, ctx) {
+ }
+ 
+ export function compileRemember(block, ctx) {
+-  const varname = escapePyKey(block?.props?.varname || 'var');
+-  const value = dslRhsToPython(block?.props?.value);
+-  return `${pyIndent(ctx.indent)}${varname} = ${value}`;
++  return compileRememberCtx(block, ctx);
+ }
+ 
+ export function compileGet(block, ctx) {
+-  const key = block?.props?.key || '';
+-  const varname = escapePyKey(block?.props?.varname || 'var');
+-  const ind = pyIndent(ctx.indent);
+-  const k = pyQuote(String(key).trim());
+-  return [
+-    `${ind}data = await state.get_data()`,
+-    `${ind}${varname} = data.get(${k})`,
+-  ].join('\n');
++  return compileGetCtx(block, ctx);
+ }
+ 
+ export function compileSave(block, ctx) {
+-  const key = block?.props?.key || '';
+-  const value = dslRhsToPython(block?.props?.value);
+-  const ind = pyIndent(ctx.indent);
+-  const k = escapePyKey(String(key).trim());
+-  return `${ind}await state.update_data(${k}=${value})`;
++  return compileSaveCtx(block, ctx);
+ }
+ 
+ export function compileSaveGlobal(block, ctx) {
+-  const key = block?.props?.key || '';
+-  const value = dslRhsToPython(block?.props?.value);
+-  const ind = pyIndent(ctx.indent);
+-  return `${ind}GLOBAL_STORE[${pyQuote(String(key).trim())}] = ${value}`;
++  return compileSaveGlobalCtx(block, ctx);
+ }
+ 
+ export function compileSetGlobal(block, ctx) {
+-  const varname = escapePyKey(block?.props?.varname || 'var');
+-  const value = dslRhsToPython(block?.props?.value);
+-  return `${pyIndent(ctx.indent)}${varname} = ${value}`;
++  return compileSetGlobalCtx(block, ctx);
+ }
+ 
++export { compileSetVariable, compileGetVariable } from './variableCompilers.js';
++export { compileRequireRole } from './permissionCodegen.js';
++
+ export function compileAsk(block, ctx) {
+   const question = dslTextToPythonFString(block?.props?.question || '');
+   const field = toPyIdent(block?.props?.varname || 'field');
+@@ -553,6 +518,12 @@ export function compileStop(block, ctx) {
+   return `${ind}return`;
+ }
+ 
++export function compileForeach(block, ctx) {
++  return compileForeachBlock(block, ctx);
++}
++
++export { isForeachKeyboardOutput } from './foreachCodegen.js';
++
+ export function compileLoop(block, ctx) {
+   const p = block?.props || {};
+   const mode = p.mode || 'count';
+@@ -768,8 +739,10 @@ export function compileAllKeys(block, ctx) {
+   const vn = escapePyKey(block?.props?.varname || 'keys');
+   const ind = pyIndent(ctx.indent);
+   return [
+-    `${ind}data = await state.get_data()`,
+-    `${ind}${vn} = list(data.keys())`,
++    `${ind}_st = ctx["state"]`,
++    `${ind}_data = await _st.get_data() if _st is not None else {}`,
++    `${ind}${vn} = list(_data.keys())`,
++    `${ind}ctx_set_var(ctx, ${pyQuote(vn)}, ${vn})`,
+   ].join('\n');
+ }
+ export function compileCallBlock(block, ctx) {
+@@ -805,7 +778,9 @@ export function compileNodeToPython(node, context = {}) {
+   if (stmt) lines.push(stmt);
+ 
+   const childIndent =
+-    isConditionLikeType(type) || type === 'else' || type === 'loop' ? ctx.indent + 1 : ctx.indent;
++    isConditionLikeType(type) || type === 'else' || type === 'loop' || type === 'foreach'
++      ? ctx.indent + 1
++      : ctx.indent;
+ 
+   for (const child of node?.children || []) {
+     lines.push(compileNodeToPython(child, { ...ctx, indent: childIndent }));
+@@ -817,7 +792,12 @@ function compileStatementBlock(block, ctx) {
+   if (isEventHandlerType(block.type) || block.type === 'else') {
+     return compileHandlerFromRoot(block, [], { ...ctx, indent: ctx.indent });
+   }
+-  if (isConditionLikeType(block.type) || block.type === 'else' || block.type === 'loop') {
++  if (
++    isConditionLikeType(block.type)
++    || block.type === 'else'
++    || block.type === 'loop'
++    || block.type === 'foreach'
++  ) {
+     return compileControlBlock(block, ctx);
+   }
+   return transpileBlockToPython(block, ctx);
+@@ -878,10 +858,20 @@ function compileHandlerTree(rootBlock, bodyBlocks, ctx) {
+   lines.push(`${pyIndent(indent)}async def ${handlerName}(${params}):`);
+ 
+   const bodyIndent = indent + 1;
++  lines.push(emitHandlerContextPreamble(isCallback, bodyIndent));
++  if (ctx?.needsPermissionMiddleware) {
++    lines.push(emitCtxRoleFromMiddleware(bodyIndent));
++  }
++  const defaultVarNames = ctx?.ctxDefaultVarNames || [];
++  if (defaultVarNames.length) {
++    lines.push(emitCtxLocalAliases(defaultVarNames, bodyIndent));
++  }
++
+   const bodyCtx = {
+     ...ctx,
+     indent: bodyIndent,
+     inCallbackHandler: isCallback,
++    hasRuntimeCtx: true,
+   };
+ 
+   const { events, bodies, parentTail } = distributeEventChainBodies(bodyBlocks);
+@@ -903,7 +893,12 @@ function compileHandlerTree(rootBlock, bodyBlocks, ctx) {
+ 
+   for (let si = 0; si < statements.length; si += 1) {
+     const block = statements[si];
+-    if (isConditionLikeType(block.type) || block.type === 'else' || block.type === 'loop') {
++    if (
++      isConditionLikeType(block.type)
++      || block.type === 'else'
++      || block.type === 'loop'
++      || block.type === 'foreach'
++    ) {
+       lines.push(compileConditionSequence(statements, si, bodyCtx));
+       break;
+     }
+@@ -928,7 +923,12 @@ function compileConditionSequence(allBlocks, startIndex, ctx) {
+   while (i < allBlocks.length) {
+     const b = allBlocks[i];
+     if (i > startIndex && (isEventHandlerType(b.type) || isRootChunkType(b.type))) break;
+-    if (isConditionLikeType(b.type) || b.type === 'else' || b.type === 'loop') {
++    if (
++      isConditionLikeType(b.type)
++      || b.type === 'else'
++      || b.type === 'loop'
++      || b.type === 'foreach'
++    ) {
+       lines.push(transpileBlockToPython(b, ctx));
+       i += 1;
+       const branchCtx = { ...ctx, indent: ctx.indent + 1 };
+@@ -937,6 +937,7 @@ function compileConditionSequence(allBlocks, startIndex, ctx) {
+         !isConditionLikeType(allBlocks[i].type) &&
+         allBlocks[i].type !== 'else' &&
+         allBlocks[i].type !== 'loop' &&
++        allBlocks[i].type !== 'foreach' &&
+         !isEventHandlerType(allBlocks[i].type)
+       ) {
+         lines.push(compileStatement(allBlocks[i], branchCtx));
+@@ -960,7 +961,7 @@ function compileStackBody(blocks, ctx) {
+     const lines = [];
+     const bodyCtx = { ...ctx };
+     for (const b of blocks) {
+-      if (isConditionLikeType(b.type) || b.type === 'loop') {
++      if (isConditionLikeType(b.type) || b.type === 'loop' || b.type === 'foreach') {
+         lines.push(compileConditionSequence(blocks, blocks.indexOf(b), bodyCtx));
+         break;
+       }
+@@ -1013,11 +1014,14 @@ function collectModuleMeta(stacks) {
+     version: '1.0',
+     botToken: 'YOUR_BOT_TOKEN',
+     globals: [],
++    ctxDefaults: {},
+     commands: [],
+-    fsmStates: new Map(),
++    fsmGraph: null,
+     blockFuncs: [],
+     needsAiohttp: false,
+     needsDb: false,
++    needsSqlite: false,
++    needsPermissionMiddleware: false,
+   };
+ 
+   for (const stack of stacks || []) {
+@@ -1026,12 +1030,6 @@ function collectModuleMeta(stacks) {
+     const root = blocks[0];
+     if (root.type === 'version') meta.version = root.props?.version || meta.version;
+     if (root.type === 'bot') meta.botToken = String(root.props?.token || meta.botToken).trim() || meta.botToken;
+-    if (root.type === 'global' || root.type === 'set_global') {
+-      meta.globals.push({
+-        name: root.props?.varname || 'var',
+-        value: dslRhsToPython(root.props?.value),
+-      });
+-    }
+     if (root.type === 'commands') {
+       meta.commands.push(...parseCommandLines(root.props?.commands));
+     }
+@@ -1039,56 +1037,18 @@ function collectModuleMeta(stacks) {
+       meta.blockFuncs.push(compileBlockDefinition(root, blocks.slice(1), { indent: 0 }));
+     }
+     for (const b of blocks) {
+-      if (b.type === 'ask') {
+-        const field = toPyIdent(b.props?.varname || 'field');
+-        if (!meta.fsmStates.has('Form')) meta.fsmStates.set('Form', new Set());
+-        meta.fsmStates.get('Form').add(field);
++      if (b.type === 'global' || b.type === 'set_global') {
++        const name = String(b.props?.varname || 'var').trim();
++        meta.ctxDefaults[name] = dslRhsToPython(b.props?.value);
++        meta.globals.push({ name, value: meta.ctxDefaults[name] });
+       }
+       if (b.type === 'http') meta.needsAiohttp = true;
+       if (b.type === 'inline_db') meta.needsDb = true;
+-      if (b.type === 'scenario') {
+-        const sc = toPascalCase(b.props?.name || 'Scenario');
+-        if (!meta.fsmStates.has(sc)) meta.fsmStates.set(sc, new Set());
+-      }
+-      if (b.type === 'step') {
+-        const sc = toPascalCase(b.props?.scenario || 'Scenario');
+-        if (!meta.fsmStates.has(sc)) meta.fsmStates.set(sc, new Set());
+-        meta.fsmStates.get(sc).add(toPyIdent(b.props?.name || 'step'));
+-      }
+-      // FIX: Track goto targets to automatically create FSM states
+-      if (b.type === 'goto' || b.type === 'run') {
+-        const target = b?.props?.target ?? b?.props?.label ?? b?.props?.name ?? b?.props?.scenario ?? 'main';
+-        const parts = String(target).split(/[./]/).filter(Boolean);
+-        const scenario = parts[0] || 'Scenario';
+-        const step = parts[1] || parts[0] || 'step';
+-        const sc = toPascalCase(scenario);
+-        if (!meta.fsmStates.has(sc)) meta.fsmStates.set(sc, new Set());
+-        if (parts.length > 1) {
+-          meta.fsmStates.get(sc).add(toPyIdent(step));
+-        } else {
+-          // Single-part target like 'main' becomes a state in Scenario
+-          const defaultScenario = toPascalCase('Scenario');
+-          if (!meta.fsmStates.has(defaultScenario)) meta.fsmStates.set(defaultScenario, new Set());
+-          meta.fsmStates.get(defaultScenario).add(toPyIdent(target));
+-        }
+-      }
++      if (b.type === 'require_role') meta.needsPermissionMiddleware = true;
+     }
+   }
+-  return meta;
+-}
+ 
+-function emitFsmStates(fsmStates) {
+-  const lines = [];
+-  for (const [group, fields] of fsmStates.entries()) {
+-    // Skip emitting empty State groups — avoid dead / unused FSM classes
+-    if (!fields || fields.size === 0) continue;
+-    lines.push(`class ${group}(StatesGroup):`);
+-    for (const f of fields) {
+-      lines.push(`    ${f} = State()`);
+-    }
+-    lines.push('');
+-  }
+-  return lines.join('\n');
++  return meta;
+ }
+ 
+ function emitSetCommands(commands) {
+@@ -1157,6 +1117,17 @@ export function buildPythonModule(stacks, options = {}) {
+     });
+   }
+   stacks = bind.stacks;
++  const meta = collectModuleMeta(stacks);
++
++  const permissionIssues = collectRequireRoleIssues(stacks);
++  if (permissionIssues.length) {
++    const first = permissionIssues[0];
++    throw new CodegenError(first.message, {
++      code: first.code || 'INVALID_REQUIRE_ROLE',
++      nodeId: first.nodeId,
++      blockType: 'require_role',
++    });
++  }
+ 
+   assertCallbackResolution(stacks, options.flow || null);
+ 
+@@ -1190,7 +1161,25 @@ export function buildPythonModule(stacks, options = {}) {
+     const pb = HANDLER_EMIT_ORDER[tb] ?? (isEventHandlerType(tb) ? 20 : 100);
+     return pa - pb;
+   });
+-  const meta = collectModuleMeta(stacks);
++  for (const stack of stacks) {
++    for (const b of stack?.blocks || []) {
++      if (b.type === 'http') meta.needsAiohttp = true;
++      if (b.type === 'inline_db') meta.needsDb = true;
++    }
++  }
++  meta.needsSqlite = stackHasVisualDb(stacks);
++  meta.needsPermissionMiddleware = meta.needsPermissionMiddleware || stackHasRequireRole(stacks);
++  meta.fsmGraph = buildFsmGraphFromStacks(stacks);
++  meta.fsmStates = new Map();
++  for (const state of meta.fsmGraph.states || []) {
++    if (!meta.fsmStates.has(state.group)) meta.fsmStates.set(state.group, new Set());
++    meta.fsmStates.get(state.group).add(state.name);
++  }
++  for (const input of meta.fsmGraph.inputs || []) {
++    if (!meta.fsmStates.has(input.group)) meta.fsmStates.set(input.group, new Set());
++    meta.fsmStates.get(input.group).add(input.field);
++  }
++
+   const handlerBodies = [];
+ 
+   const imports = [
+@@ -1212,21 +1201,29 @@ export function buildPythonModule(stacks, options = {}) {
+     ')',
+   ];
+   if (meta.needsAiohttp) imports.splice(4, 0, 'import aiohttp');
+-  if (meta.needsDb) imports.push('', '# project DB adapter', 'db = {}  # replace with real db.get()');
++  if (meta.needsDb && !meta.needsSqlite) {
++    imports.push('', '# project DB adapter', 'db = {}  # replace with real db.get()');
++  }
+ 
+   const parts = [
+     imports.join('\n'),
+     '',
+-    `GLOBAL_STORE: dict = {}`,
++    emitRuntimeContextDefaults(meta.ctxDefaults),
++    emitRuntimeContextRuntime(),
+     '',
+   ];
+ 
+-  for (const g of meta.globals) {
+-    parts.push(`${escapePyKey(g.name)} = ${g.value}`);
++  if (meta.needsSqlite) {
++    parts.push(emitSqliteDbRuntime());
++    parts.push('');
++  }
++
++  if (meta.needsPermissionMiddleware) {
++    parts.push(emitPermissionMiddlewareRuntime());
++    parts.push('');
+   }
+-  if (meta.globals.length) parts.push('');
+ 
+-  const fsmCode = emitFsmStates(meta.fsmStates);
++  const fsmCode = emitFsmPythonFromGraph(meta.fsmGraph);
+   if (fsmCode.trim()) {
+     // ensure State/StatesGroup import present when FSM states are emitted
+     const stateImport = 'from aiogram.fsm.state import State, StatesGroup';
+@@ -1251,6 +1248,11 @@ export function buildPythonModule(stacks, options = {}) {
+   parts.push('router = Router()');
+   parts.push('');
+ 
++  if (meta.needsPermissionMiddleware) {
++    parts.push(emitPermissionMiddlewareRegistration());
++    parts.push('');
++  }
++
+   const setCmd = emitSetCommands(meta.commands);
+   if (setCmd) parts.push(setCmd);
+ 
+@@ -1270,6 +1272,8 @@ export function buildPythonModule(stacks, options = {}) {
+         indent: 0,
+         handlerNames,
+         fsmStates: meta.fsmStates,
++        ctxDefaultVarNames: Object.keys(meta.ctxDefaults || {}),
++        needsPermissionMiddleware: meta.needsPermissionMiddleware,
+         transpileTrace,
+       });
+       if (h?.trim()) {
+diff --git a/core/codegen/pipeline.js b/core/codegen/pipeline.js
+index abc83aa..6c24006 100644
+--- a/core/codegen/pipeline.js
++++ b/core/codegen/pipeline.js
+@@ -2,14 +2,14 @@
+  * Graph → Normalized AST → Validated AST → Python module (aiogram 3).
+  */
+ 
+-import { registerAllBlockCompilers } from './blockCompilers/registerAll.js';
++import { registerAllCapabilityEmitters } from './capabilityEmitters/registerAll.js';
+ import { assertCompilableFlow } from '../ir/compileGate.js';
+ import {
+   issuesToCompileErrors,
+   validateAiogram3Graph,
+ } from '../rules/aiogram3RuleEngine.js';
+ 
+-registerAllBlockCompilers();
++registerAllCapabilityEmitters();
+ import { graphToNormalizedAst, normalizeGraphFlow } from './ast/normalize.js';
+ import { bindStacksForCodegen } from './ast/bindKeyboards.js';
+ import { buildCallbackMap } from './ast/callbackResolver.js';
+@@ -31,6 +31,7 @@ import {
+ } from './emptyGraph.js';
+ import { isGraphEffectivelyEmpty } from '../../src/constructor/graph_document/graph_canvas_state.js';
+ import { strictCompileValidation } from '../../src/constructor/graph_document/graph_validation_pipeline.js';
++import { validateCompile } from '../validation/strictPipeline.ts';
+ import {
+   filterErrorsForStage,
+   includeCallbacksInGraphGate,
+@@ -86,6 +87,30 @@ export function compileGraphToPython(flow, options = {}) {
+   const validationStage = resolveOptionsStage(options);
+ 
+   if (options.graphDocument && options.skipGraphGate !== true) {
++    if (validationStage === VALIDATION_STAGE.COMPILE) {
++      const strictGate = validateCompile(options.graphDocument, {
++        failFast: false,
++        includeCallbacks: includeCallbacksInGraphGate(validationStage),
++      });
++      if (!strictGate.ok) {
++        const compileErrors = strictGate.errors.map((d) => ({
++          code: d.code || 'GRAPH_COMPILE_GATE',
++          message: d.message,
++          nodeId: d.nodeId,
++          edgeId: d.edgeId,
++        }));
++        return {
++          code: '',
++          compileWarnings: [],
++          transpileTrace: [],
++          compileErrors,
++          ast: [],
++          aborted: true,
++          compileBlocked: true,
++        };
++      }
++    }
++
+     const gate = strictCompileValidation(options.graphDocument, {
+       strict: validationStage === VALIDATION_STAGE.COMPILE,
+       validationStage,
+diff --git a/core/codegen/registry.js b/core/codegen/registry.js
+index 925928e..fb727bd 100644
+--- a/core/codegen/registry.js
++++ b/core/codegen/registry.js
+@@ -3,6 +3,7 @@
+  */
+ 
+ import { MissingCompilerError } from './errors.js';
++import { compileBlockViaCapability } from './capabilityPythonRegistry.js';
+ 
+ /** @type {Map<string, (block: object, ctx: object) => string>} */
+ const compilers = new Map();
+@@ -39,7 +40,13 @@ export function getCompilerRegistrySnapshot() {
+  * @param {object} context
+  */
+ export function compileBlock(block, context = {}) {
+-  const type = block?.type || 'message';
++  const type = String(block?.type ?? '').trim();
++  if (!type) {
++    throw new MissingCompilerError('(missing)', block?.id ?? block?.props?.nodeId);
++  }
++  if (context?.emitHandlerDecorator) {
++    return compileBlockViaCapability(block, context);
++  }
+   const fn = getCompiler(type);
+   if (!fn) {
+     throw new MissingCompilerError(type, block?.id ?? block?.props?.nodeId);
+diff --git a/core/compiler/capabilityCompilePipeline.ts b/core/compiler/capabilityCompilePipeline.ts
+new file mode 100644
+index 0000000..95df05f
+--- /dev/null
++++ b/core/compiler/capabilityCompilePipeline.ts
+@@ -0,0 +1,45 @@
++/**
++ * Capability-based compile pipeline:
++ *   Visual Graph → Bot IR → Execution Plan → Execution Graph → aiogram3
++ */
++
++import type { GraphDocumentInput } from "../ir/bot_ir.js";
++import { graphToBotIR } from "../ir/bot_ir.js";
++import { buildExecutionPlan, type BotExecutionPlan } from "../runtime/executionPlan.js";
++import {
++  compileGraphDocumentToPython,
++  type UnifiedCompileOptions,
++  type UnifiedCompileResult,
++} from "./unifiedCompilePipeline.js";
++import { registerAllCapabilityEmitters } from "../codegen/capabilityEmitters/registerAll.js";
++
++let emittersReady = false;
++
++function ensureCapabilityCodegen(): void {
++  if (emittersReady) return;
++  registerAllCapabilityEmitters();
++  emittersReady = true;
++}
++
++export interface CapabilityCompileResult extends UnifiedCompileResult {
++  executionPlan: BotExecutionPlan;
++}
++
++/**
++ * Full capability compile: validates, builds immutable plan, emits Python.
++ */
++export function compileViaCapabilities(
++  graphDocument: GraphDocumentInput,
++  options: UnifiedCompileOptions = {},
++): CapabilityCompileResult {
++  ensureCapabilityCodegen();
++  const result = compileGraphDocumentToPython(graphDocument, options);
++  const botIr = result.botIr;
++  const executionPlan = buildExecutionPlan(botIr);
++  return {
++    ...result,
++    executionPlan,
++  };
++}
++
++export { buildExecutionPlan, type BotExecutionPlan };
+diff --git a/core/compiler/codegen.ts b/core/compiler/codegen.ts
+index 74ae23e..3c4bec3 100644
+--- a/core/compiler/codegen.ts
++++ b/core/compiler/codegen.ts
+@@ -1,8 +1,20 @@
+ import { parseGraph } from "./parser";
+ import { normalizeAst } from "./normalizer";
+-import { validateGraph } from "./validator";
+-import { buildExecutionGraph } from "../execution/buildExecutionGraph";
++import { validateGraph as validateExecutionAst } from "./validator";
++import {
++  buildExecutionGraph,
++  buildExecutionGraphFromBotIR,
++} from "../execution/buildExecutionGraph";
+ import { assertExecutionInvariants } from "../execution/assertExecutionInvariants";
++import { graphToBotIR, type GraphDocumentInput } from "../ir/bot_ir";
++import {
++  compileGraphDocumentToPython,
++  lowerGraphDocumentToExecution,
++  type UnifiedCompileOptions,
++  type UnifiedCompileResult,
++} from "./unifiedCompilePipeline";
++import { buildExecutionPlan } from "../runtime/executionPlan";
++import { isGraphDocumentShape } from "../../src/constructor/graph_document/graph_schema.js";
+ import {
+   DEFAULT_EXECUTION_POLICY,
+   prepareExecutionGraph,
+@@ -10,14 +22,28 @@ import {
+   type ExecutionPolicy,
+   type PreparedExecutionGraphResult,
+ } from "../execution/prepareExecutionGraph";
+-import { buildFSM } from "../execution/buildFSM";
++import { buildFSM, buildFsmGraph } from "../execution/buildFSM";
+ import { buildCallbackRoutes } from "../execution/buildCallbackRoutes";
+ import { generateAiogramBot } from "../../generators/python_aiogram/generateBot";
++import { buildVisualDbGraphFromBotNodes } from "../db/visual_db_ir";
+ import { logStep } from "../debug/compilerLogger";
+ import { CURRENT_VERSION } from "../execution/version";
+ import type { ExecutionGraph } from "../execution/executionContract";
+ 
+-export interface CompileGraphOptions {
++function visualDbFromExecution(execution: ExecutionGraph) {
++  return buildVisualDbGraphFromBotNodes(
++    execution.nodes.map((node) => ({
++      id: node.id,
++      type: node.type,
++      payload:
++        node.data && typeof node.data === "object"
++          ? { ...(node.data as Record<string, unknown>) }
++          : {},
++    })),
++  );
++}
++
++export interface CompileGraphOptions extends UnifiedCompileOptions {
+   /** Skip build/migrate/validate when middleware already prepared the graph. */
+   prepared?: PreparedExecutionGraphResult;
+   policy?: ExecutionPolicy;
+@@ -26,9 +52,22 @@ export interface CompileGraphOptions {
+    * API / strict compile must leave this false.
+    */
+   allowIncomplete?: boolean;
++  /** Canonical GraphDocument input (Visual Graph). */
++  graphDocument?: GraphDocumentInput;
++}
++
++function isGraphDocumentInput(value: unknown): value is GraphDocumentInput {
++  return isGraphDocumentShape(value);
+ }
+ 
+ function compileGraphImpl(graph: any, options: CompileGraphOptions = {}) {
++  if (options.graphDocument || isGraphDocumentInput(graph)) {
++    return compileGraphDocumentToPython(
++      (options.graphDocument ?? graph) as GraphDocumentInput,
++      options,
++    );
++  }
++
+   const policy = resolveExecutionPolicy(
+     options.prepared?.policy ?? options.policy ?? DEFAULT_EXECUTION_POLICY,
+   );
+@@ -43,20 +82,30 @@ function compileGraphImpl(graph: any, options: CompileGraphOptions = {}) {
+ 
+   logStep("validate");
+ 
+-  validateGraph(normalized);
++  validateExecutionAst(normalized);
++
++  logStep("bot_ir");
++
++  const botIr = graphToBotIR({
++    schema_version: 2,
++    nodes: normalized.nodes,
++    edges: normalized.edges,
++    metadata: { generatedFrom: "legacy_flow" },
++  });
+ 
+   logStep("execution");
+ 
+-  const built = buildExecutionGraph(
+-    normalized.nodes,
+-    normalized.edges,
+-    normalized.version ?? graph.version ?? "1.0",
++  const built = buildExecutionGraphFromBotIR(
++    botIr,
++    normalized.version ?? graph.version ?? CURRENT_VERSION,
+   );
+ 
+   if (options.allowIncomplete && built.edges.length === 0) {
+     return {
+       success: false,
+       python: "",
++      botIr,
++      executionPlan: buildExecutionPlan(botIr),
+       execution: built,
+       policy,
+       compatibilityWarnings: [],
+@@ -68,7 +117,9 @@ function compileGraphImpl(graph: any, options: CompileGraphOptions = {}) {
+       runtime: {
+         execution: built,
+         fsm: {},
++        fsmGraph: buildFsmGraph(built),
+         callbacks: {},
++        visualDb: botIr.visualDb,
+       },
+       empty: true,
+     };
+@@ -80,8 +131,10 @@ function compileGraphImpl(graph: any, options: CompileGraphOptions = {}) {
+   const { execution, compatibilityWarnings, migration } = prepared;
+   assertExecutionInvariants(execution);
+ 
++  const fsmGraph = buildFsmGraph(execution);
+   const fsm = buildFSM(execution);
+   const callbacks = buildCallbackRoutes(execution);
++  const visualDb = visualDbFromExecution(execution);
+ 
+   logStep("generate aiogram");
+ 
+@@ -90,6 +143,8 @@ function compileGraphImpl(graph: any, options: CompileGraphOptions = {}) {
+   return {
+     success: true,
+     python,
++    botIr,
++    executionPlan: buildExecutionPlan(botIr),
+     execution,
+     policy: prepared.policy,
+     compatibilityWarnings,
+@@ -97,7 +152,9 @@ function compileGraphImpl(graph: any, options: CompileGraphOptions = {}) {
+     runtime: {
+       execution,
+       fsm,
++      fsmGraph,
+       callbacks,
++      visualDb: botIr.visualDb,
+     },
+   };
+ }
+@@ -116,4 +173,11 @@ export type {
+   ExecutionPolicy,
+   PreparedExecutionGraphResult,
+   CompileGraphOptions,
++  UnifiedCompileOptions,
++  UnifiedCompileResult,
++};
++
++export {
++  compileGraphDocumentToPython,
++  lowerGraphDocumentToExecution,
+ };
+diff --git a/core/compiler/index.ts b/core/compiler/index.ts
+index 44339eb..3bda667 100644
+--- a/core/compiler/index.ts
++++ b/core/compiler/index.ts
+@@ -3,3 +3,5 @@ export * from "./normalizer";
+ export * from "./validator";
+ export * from "./dependencyResolver";
+ export * from "./codegen";
++export * from "./unifiedCompilePipeline";
++export * from "./capabilityCompilePipeline";
+diff --git a/core/compiler/unifiedCompilePipeline.ts b/core/compiler/unifiedCompilePipeline.ts
+new file mode 100644
+index 0000000..a7dac5b
+--- /dev/null
++++ b/core/compiler/unifiedCompilePipeline.ts
+@@ -0,0 +1,188 @@
++/**
++ * Unified compile pipeline:
++ *   Visual Graph (GraphDocument) → Bot IR → Execution Graph → aiogram3 Python
++ */
++
++import { graphToBotIR, type BotIRGraph, type GraphDocumentInput } from "../ir/bot_ir.js";
++import { botIrToExecutionGraph } from "../ir/botIrToExecutionGraph.js";
++import {
++  buildExecutionPlan,
++  type BotExecutionPlan,
++} from "../runtime/executionPlan.js";
++import { registerAllCapabilityEmitters } from "../codegen/capabilityEmitters/registerAll.js";
++import {
++  assertCompileReady,
++  validateBotIR,
++  validateCompile,
++  type StrictValidationOptions,
++} from "../validation/strictPipeline.js";
++import { assertExecutionInvariants } from "../execution/assertExecutionInvariants.js";
++import {
++  DEFAULT_EXECUTION_POLICY,
++  prepareExecutionGraph,
++  resolveExecutionPolicy,
++  type ExecutionPolicy,
++  type PreparedExecutionGraphResult,
++} from "../execution/prepareExecutionGraph.js";
++import { buildFSM, buildFsmGraph } from "../execution/buildFSM.js";
++import { buildCallbackRoutes } from "../execution/buildCallbackRoutes.js";
++import { generateAiogramBot } from "../../generators/python_aiogram/generateBot.js";
++import { CURRENT_VERSION } from "../execution/version.js";
++import type { ExecutionGraph } from "../execution/executionContract.js";
++import { logStep } from "../debug/compilerLogger.js";
++import type { VisualDbGraph } from "../db/visual_db_ir.js";
++
++export interface UnifiedCompileOptions extends StrictValidationOptions {
++  policy?: ExecutionPolicy;
++  /** UI preview: allow empty / edge-less graphs. */
++  allowIncomplete?: boolean;
++  /** Skip validateCompile gate (tests only). */
++  skipValidation?: boolean;
++  prepared?: PreparedExecutionGraphResult;
++}
++
++export interface UnifiedCompileResult {
++  success: boolean;
++  python: string;
++  botIr: BotIRGraph;
++  executionPlan: BotExecutionPlan;
++  execution: ExecutionGraph;
++  policy: ExecutionPolicy;
++  compatibilityWarnings: string[];
++  migration: PreparedExecutionGraphResult["migration"];
++  runtime: {
++    execution: ExecutionGraph;
++    fsm: ReturnType<typeof buildFSM>;
++    fsmGraph: ReturnType<typeof buildFsmGraph>;
++    callbacks: ReturnType<typeof buildCallbackRoutes>;
++    visualDb: VisualDbGraph;
++  };
++  empty?: boolean;
++}
++
++/**
++ * Visual Graph → Bot IR → Execution Graph (validated).
++ */
++export function lowerGraphDocumentToExecution(
++  graphDocument: GraphDocumentInput,
++  options: UnifiedCompileOptions = {},
++): { botIr: BotIRGraph; execution: ExecutionGraph; prepared: PreparedExecutionGraphResult } {
++  const policy = resolveExecutionPolicy(
++    options.prepared?.policy ?? options.policy ?? DEFAULT_EXECUTION_POLICY,
++  );
++
++  logStep("bot_ir");
++  const botIr = graphToBotIR(graphDocument);
++
++  if (options.skipValidation !== true) {
++    logStep("validate_bot_ir");
++    const irGate = validateBotIR(botIr, {
++      failFast: options.failFast !== false,
++    });
++    if (!irGate.ok) {
++      const first = irGate.errors[0];
++      throw new Error(first?.message || "Bot IR validation failed");
++    }
++  }
++
++  logStep("execution_graph");
++  const built = botIrToExecutionGraph(botIr, CURRENT_VERSION);
++
++  if (options.allowIncomplete && built.edges.length === 0) {
++    return {
++      botIr,
++      execution: built,
++      prepared: {
++        execution: built,
++        policy,
++        compatibilityWarnings: [],
++        migration: {
++          migratedFrom: built.version,
++          migratedTo: built.version,
++          stepsApplied: [],
++        },
++      },
++    };
++  }
++
++  const prepared =
++    options.prepared ?? prepareExecutionGraph(built, CURRENT_VERSION, policy);
++
++  assertExecutionInvariants(prepared.execution);
++
++  return { botIr, execution: prepared.execution, prepared };
++}
++
++/**
++ * Full pipeline through aiogram3 codegen.
++ */
++export function compileGraphDocumentToPython(
++  graphDocument: GraphDocumentInput,
++  options: UnifiedCompileOptions = {},
++): UnifiedCompileResult {
++  registerAllCapabilityEmitters();
++
++  if (options.skipValidation !== true) {
++    logStep("validate_compile");
++    if (options.failFast !== false) {
++      assertCompileReady(graphDocument, options);
++    } else {
++      const gate = validateCompile(graphDocument, options);
++      if (!gate.ok) {
++        const first = gate.errors[0];
++        throw new Error(first?.message || "Compile validation failed");
++      }
++    }
++  }
++
++  const { botIr, execution, prepared } = lowerGraphDocumentToExecution(
++    graphDocument,
++    options,
++  );
++  const executionPlan = buildExecutionPlan(botIr);
++
++  if (options.allowIncomplete && execution.edges.length === 0) {
++    return {
++      success: false,
++      python: "",
++      botIr,
++      executionPlan,
++      execution,
++      policy: prepared.policy,
++      compatibilityWarnings: prepared.compatibilityWarnings,
++      migration: prepared.migration,
++      runtime: {
++        execution,
++        fsm: {},
++        fsmGraph: buildFsmGraph(execution),
++        callbacks: {},
++        visualDb: botIr.visualDb,
++      },
++      empty: true,
++    };
++  }
++
++  logStep("generate aiogram");
++  const fsmGraph = buildFsmGraph(execution);
++  const fsm = buildFSM(execution);
++  const callbacks = buildCallbackRoutes(execution);
++  const python = generateAiogramBot(execution, prepared.policy);
++
++  return {
++    success: true,
++    python,
++    botIr,
++    executionPlan,
++    execution,
++    policy: prepared.policy,
++    compatibilityWarnings: prepared.compatibilityWarnings,
++    migration: prepared.migration,
++    runtime: {
++      execution,
++      fsm,
++      fsmGraph,
++      callbacks,
++      visualDb: botIr.visualDb,
++    },
++  };
++}
+diff --git a/core/db/dbCapabilityCodegen.js b/core/db/dbCapabilityCodegen.js
+new file mode 100644
+index 0000000..7e9fec8
+--- /dev/null
++++ b/core/db/dbCapabilityCodegen.js
+@@ -0,0 +1,96 @@
++/**
++ * Visual DB capabilities — Python emit by db_* action id (no node.type switch).
++ */
++
++import { pyIndent, pyQuote, escapePyKey } from '../codegen/utils.js';
++import {
++  emitCapabilityPython,
++  registerCapabilityEmitter,
++} from '../codegen/capabilityPythonRegistry.js';
++import { CAPABILITY_ACTIONS } from '../capabilities/capabilityIds.ts';
++
++function dbNodePayload(block) {
++  const p = block?.payload ?? block?.props ?? block ?? {};
++  return p;
++}
++
++function emitDbRead(block, ctx = {}) {
++  const ind = pyIndent(ctx.indent ?? 0);
++  const node = dbNodePayload(block);
++  const varname = escapePyKey(node.varname || 'value');
++  const key = pyQuote(node.key || node.id);
++  return `${ind}${varname} = await db_get(${key})`;
++}
++
++function emitDbWrite(block, ctx = {}) {
++  const ind = pyIndent(ctx.indent ?? 0);
++  const node = dbNodePayload(block);
++  const key = pyQuote(node.key || node.id);
++  const value = node.value !== undefined ? node.value : '';
++  return `${ind}await db_set(${key}, ${pyQuote(String(value))})`;
++}
++
++function emitDbQuery(block, ctx = {}) {
++  const ind = pyIndent(ctx.indent ?? 0);
++  const node = dbNodePayload(block);
++  const varname = escapePyKey(node.varname || 'rows');
++  const sql = pyQuote(node.sql || 'SELECT 1');
++  return `${ind}${varname} = await db_query(${sql})`;
++}
++
++function emitDbInsert(block, ctx = {}) {
++  const ind = pyIndent(ctx.indent ?? 0);
++  const node = dbNodePayload(block);
++  const table = pyQuote(node.table || 'records');
++  const values = node.values || {};
++  const cols = Object.keys(values);
++  const vals = cols.map((c) => pyQuote(values[c]));
++  return `${ind}await db_insert(${table}, ${pyQuote(cols)}, [${vals.join(', ')}])`;
++}
++
++function emitDbUpdate(block, ctx = {}) {
++  const ind = pyIndent(ctx.indent ?? 0);
++  const node = dbNodePayload(block);
++  const table = pyQuote(node.table || 'records');
++  const values = node.values || {};
++  const setParts = Object.entries(values).map(
++    ([k, v]) => `${k} = ${pyQuote(String(v))}`,
++  );
++  const setClause = setParts.join(', ') || 'value = value';
++  const where = node.where || '1=1';
++  return `${ind}await db_update(${table}, ${pyQuote(setClause)}, ${pyQuote(where)})`;
++}
++
++export function registerDbCapabilityEmitters() {
++  registerCapabilityEmitter(CAPABILITY_ACTIONS.DB_READ, emitDbRead);
++  registerCapabilityEmitter(CAPABILITY_ACTIONS.DB_WRITE, emitDbWrite);
++  registerCapabilityEmitter(CAPABILITY_ACTIONS.DB_QUERY, emitDbQuery);
++  registerCapabilityEmitter(CAPABILITY_ACTIONS.DB_INSERT, emitDbInsert);
++  registerCapabilityEmitter(CAPABILITY_ACTIONS.DB_UPDATE, emitDbUpdate);
++}
++
++/**
++ * @param {import('./visual_db_ir.ts').VisualDbNode} node
++ * @param {{ indent?: number }} [ctx]
++ */
++const DB_TYPE_TO_CAPABILITY = Object.freeze({
++  'db.get': CAPABILITY_ACTIONS.DB_READ,
++  'db.set': CAPABILITY_ACTIONS.DB_WRITE,
++  'db.query': CAPABILITY_ACTIONS.DB_QUERY,
++  'db.insert': CAPABILITY_ACTIONS.DB_INSERT,
++  'db.update': CAPABILITY_ACTIONS.DB_UPDATE,
++});
++
++export function compileVisualDbNodeViaCapability(node, ctx = {}) {
++  const capabilityId = DB_TYPE_TO_CAPABILITY[node.type];
++  if (!capabilityId) {
++    throw new Error(`Unknown visual DB node type: ${node.type}`);
++  }
++  const block = {
++    type: node.type,
++    id: node.id,
++    payload: { ...node.payload, ...node },
++    props: { ...node.payload, ...node },
++  };
++  return emitCapabilityPython(capabilityId, block, ctx);
++}
+diff --git a/core/db/dbCodegen.js b/core/db/dbCodegen.js
+new file mode 100644
+index 0000000..b3467f0
+--- /dev/null
++++ b/core/db/dbCodegen.js
+@@ -0,0 +1,199 @@
++/**
++ * Visual DB nodes → sqlite + aiogram async snippets.
++ */
++
++import { compileVisualDbNodeViaCapability } from './dbCapabilityCodegen.js';
++
++const DB_NODE_TYPES = new Set([
++  'db.get',
++  'db.set',
++  'db.query',
++  'db.insert',
++  'db.update',
++]);
++
++/** @param {string} type */
++function isDbNodeType(type) {
++  return DB_NODE_TYPES.has(String(type || '').trim());
++}
++
++function pyQuote(s) {
++  return JSON.stringify(String(s ?? ''));
++}
++
++function pyIndent(n) {
++  return '    '.repeat(Math.max(0, n || 0));
++}
++
++function escapePyKey(key) {
++  const raw = String(key || 'var').trim();
++  return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(raw) ? raw : `_${raw.replace(/[^a-zA-Z0-9_]/g, '_')}`;
++}
++
++function normalizeBlockToVisualDb(block) {
++  const payload = block?.props && typeof block.props === 'object' ? block.props : {};
++  const type = String(block?.type || '').trim();
++  if (!isDbNodeType(type)) return null;
++
++  switch (type) {
++    case 'db.get':
++      return {
++        id: block.id,
++        type,
++        key: String(payload.key ?? payload.name ?? block.id),
++        varname: String(payload.varname ?? payload.var ?? 'value'),
++        table: String(payload.table || 'kv_store'),
++        payload,
++      };
++    case 'db.set':
++      return {
++        id: block.id,
++        type,
++        key: String(payload.key ?? payload.name ?? block.id),
++        table: String(payload.table || 'kv_store'),
++        values: payload.value !== undefined ? { value: payload.value } : { ...payload.values },
++        payload,
++      };
++    case 'db.query':
++      return {
++        id: block.id,
++        type,
++        sql: String(payload.sql ?? payload.query ?? ''),
++        varname: String(payload.varname ?? payload.var ?? 'rows'),
++        payload,
++      };
++    case 'db.insert':
++      return {
++        id: block.id,
++        type,
++        table: String(payload.table || 'records'),
++        values: { ...(payload.values || payload.row || {}) },
++        payload,
++      };
++    case 'db.update':
++      return {
++        id: block.id,
++        type,
++        table: String(payload.table || 'records'),
++        where: String(payload.where ?? payload.condition ?? '1=1'),
++        values: { ...(payload.values || payload.set || {}) },
++        payload,
++      };
++    default:
++      return null;
++  }
++}
++
++/**
++ * SQLite runtime helpers injected once per generated bot module.
++ */
++export function emitSqliteDbRuntime() {
++  return [
++    'import aiosqlite',
++    '',
++    'DB_PATH = "bot_data.sqlite"',
++    '',
++    'async def _db_connect():',
++    '    return await aiosqlite.connect(DB_PATH)',
++    '',
++    'async def db_get(key: str, default=None):',
++    '    async with await _db_connect() as db:',
++    '        await db.execute(',
++    '            "CREATE TABLE IF NOT EXISTS kv_store (key TEXT PRIMARY KEY, value TEXT)"',
++    '        )',
++    '        cur = await db.execute("SELECT value FROM kv_store WHERE key = ?", (key,))',
++    '        row = await cur.fetchone()',
++    '        await db.commit()',
++    '    return row[0] if row else default',
++    '',
++    'async def db_set(key: str, value):',
++    '    async with await _db_connect() as db:',
++    '        await db.execute(',
++    '            "CREATE TABLE IF NOT EXISTS kv_store (key TEXT PRIMARY KEY, value TEXT)"',
++    '        )',
++    '        await db.execute(',
++    '            "INSERT INTO kv_store(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",',
++    '            (key, str(value)),',
++    '        )',
++    '        await db.commit()',
++    '',
++    'async def db_query(sql: str, params=()):',
++    '    async with await _db_connect() as db:',
++    '        cur = await db.execute(sql, params)',
++    '        rows = await cur.fetchall()',
++    '        await db.commit()',
++    '    return rows',
++    '',
++    'async def db_insert(table: str, columns: list, values: list):',
++    '    cols = ", ".join(columns)',
++    '    placeholders = ", ".join("?" for _ in values)',
++    '    sql = f"INSERT INTO {table} ({cols}) VALUES ({placeholders})"',
++    '    async with await _db_connect() as db:',
++    '        await db.execute(sql, values)',
++    '        await db.commit()',
++    '',
++    'async def db_update(table: str, set_clause: str, where_clause: str, params=()):',
++    '    sql = f"UPDATE {table} SET {set_clause} WHERE {where_clause}"',
++    '    async with await _db_connect() as db:',
++    '        await db.execute(sql, params)',
++    '        await db.commit()',
++    '',
++  ].join('\n');
++}
++
++/**
++ * @param {import('./visual_db_ir.ts').VisualDbGraph} graph
++ */
++export function emitVisualDbManifest(graph) {
++  if (!graph?.nodes?.length) return '';
++  const lines = ['# --- Visual DB IR ---'];
++  for (const node of graph.nodes) {
++    lines.push(
++      `# DB ${node.type} ${node.id} table=${node.table ?? '-'} key=${node.key ?? '-'}`,
++    );
++  }
++  return `${lines.join('\n')}\n`;
++}
++
++/**
++ * @param {import('./visual_db_ir.ts').VisualDbNode} node
++ * @param {{ indent?: number }} [ctx]
++ */
++export function compileVisualDbNode(node, ctx = {}) {
++  return compileVisualDbNodeViaCapability(node, ctx);
++}
++
++export function compileDbBlock(block, ctx = {}) {
++  const normalized = normalizeBlockToVisualDb({
++    id: block?.id || 'db',
++    type: block?.type,
++    props: block?.props,
++  });
++  if (!normalized) return '';
++  return compileVisualDbNode(normalized, ctx);
++}
++
++export function compileDbGet(block, ctx) {
++  return compileDbBlock({ ...block, type: 'db.get' }, ctx);
++}
++export function compileDbSet(block, ctx) {
++  return compileDbBlock({ ...block, type: 'db.set' }, ctx);
++}
++export function compileDbQuery(block, ctx) {
++  return compileDbBlock({ ...block, type: 'db.query' }, ctx);
++}
++export function compileDbInsert(block, ctx) {
++  return compileDbBlock({ ...block, type: 'db.insert' }, ctx);
++}
++export function compileDbUpdate(block, ctx) {
++  return compileDbBlock({ ...block, type: 'db.update' }, ctx);
++}
++
++export function stackHasVisualDb(stacks) {
++  for (const stack of stacks || []) {
++    for (const b of stack?.blocks || []) {
++      if (isDbNodeType(b?.type)) return true;
++    }
++  }
++  return false;
++}
+diff --git a/core/runtime/capabilityExecutors.ts b/core/runtime/capabilityExecutors.ts
+new file mode 100644
+index 0000000..64b668c
+--- /dev/null
++++ b/core/runtime/capabilityExecutors.ts
+@@ -0,0 +1,155 @@
++/**
++ * Capability executors — runtime dispatch by capability id (not node.type).
++ */
++
++import type { BotRuntimeContext } from "./runtimeContext.js";
++import type { TransportAdapter } from "../transport/transportAdapter.js";
++import { CAPABILITY_ACTIONS } from "../capabilities/capabilityIds.js";
++
++export interface CapabilityExecuteContext {
++  runtime: BotRuntimeContext;
++  transport: TransportAdapter;
++  payload: Readonly<Record<string, unknown>>;
++  nodeId?: string;
++  stepId?: string;
++}
++
++export interface CapabilityExecuteResult {
++  ok: boolean;
++  capabilityId: string;
++  halt?: boolean;
++  nextPort?: string;
++  error?: string;
++}
++
++export type CapabilityExecutorFn = (
++  ctx: CapabilityExecuteContext,
++) => Promise<CapabilityExecuteResult> | CapabilityExecuteResult;
++
++const executors = new Map<string, CapabilityExecutorFn>();
++
++export class UnknownCapabilityExecutorError extends Error {
++  readonly capabilityId: string;
++
++  constructor(capabilityId: string) {
++    super(`No capability executor registered for "${capabilityId}"`);
++    this.name = "UnknownCapabilityExecutorError";
++    this.capabilityId = capabilityId;
++  }
++}
++
++export function registerCapabilityExecutor(
++  capabilityId: string,
++  fn: CapabilityExecutorFn,
++): void {
++  const id = String(capabilityId || "").trim();
++  if (!id || typeof fn !== "function") {
++    throw new Error("registerCapabilityExecutor(id, fn) requires id and function");
++  }
++  executors.set(id, fn);
++}
++
++export function hasCapabilityExecutor(capabilityId: string): boolean {
++  return executors.has(String(capabilityId || "").trim());
++}
++
++export function listCapabilityExecutors(): string[] {
++  return [...executors.keys()].sort();
++}
++
++async function runExecutor(
++  capabilityId: string,
++  ctx: CapabilityExecuteContext,
++): Promise<CapabilityExecuteResult> {
++  const fn = executors.get(capabilityId);
++  if (!fn) {
++    throw new UnknownCapabilityExecutorError(capabilityId);
++  }
++  const result = await fn(ctx);
++  return { ...result, capabilityId };
++}
++
++/** Execute a single capability (fail-fast if unregistered). */
++export async function executeCapability(
++  capabilityId: string,
++  ctx: CapabilityExecuteContext,
++): Promise<CapabilityExecuteResult> {
++  return runExecutor(String(capabilityId || "").trim(), ctx);
++}
++
++function registerCoreExecutors(): void {
++  registerCapabilityExecutor(CAPABILITY_ACTIONS.NOOP, () => ({
++    ok: true,
++    capabilityId: CAPABILITY_ACTIONS.NOOP,
++  }));
++
++  registerCapabilityExecutor(CAPABILITY_ACTIONS.ROUTE, () => ({
++    ok: true,
++    capabilityId: CAPABILITY_ACTIONS.ROUTE,
++  }));
++
++  registerCapabilityExecutor(CAPABILITY_ACTIONS.SEND_MESSAGE, async ({
++    runtime,
++    transport,
++    payload,
++  }) => {
++    const text = String(payload.text ?? "").trim();
++    if (text) {
++      await transport.sendMessage(runtime, text);
++    }
++    return { ok: true, capabilityId: CAPABILITY_ACTIONS.SEND_MESSAGE };
++  });
++
++  registerCapabilityExecutor(CAPABILITY_ACTIONS.CTX_SET_VAR, ({ runtime, payload }) => {
++    const name = String(payload.varname ?? payload.name ?? "").trim();
++    if (name) {
++      runtime.vars[name] = payload.value ?? null;
++    }
++    return { ok: true, capabilityId: CAPABILITY_ACTIONS.CTX_SET_VAR };
++  });
++
++  registerCapabilityExecutor(CAPABILITY_ACTIONS.CTX_GET_VAR, ({ runtime, payload }) => {
++    const name = String(payload.varname ?? payload.name ?? "").trim();
++    const into = String(payload.into ?? payload.target ?? name).trim();
++    if (into && name) {
++      runtime.vars[into] = runtime.vars[name];
++    }
++    return { ok: true, capabilityId: CAPABILITY_ACTIONS.CTX_GET_VAR };
++  });
++
++  registerCapabilityExecutor(CAPABILITY_ACTIONS.HALT, () => ({
++    ok: true,
++    capabilityId: CAPABILITY_ACTIONS.HALT,
++    halt: true,
++  }));
++
++  registerCapabilityExecutor(CAPABILITY_ACTIONS.LOG, ({ payload }) => {
++    const message = String(payload.message ?? payload.text ?? "");
++    if (message) {
++      console.log("[bot]", message);
++    }
++    return { ok: true, capabilityId: CAPABILITY_ACTIONS.LOG };
++  });
++
++  registerCapabilityExecutor(CAPABILITY_ACTIONS.SLEEP, async () => {
++    return { ok: true, capabilityId: CAPABILITY_ACTIONS.SLEEP };
++  });
++
++  registerCapabilityExecutor(CAPABILITY_ACTIONS.BRANCH, () => ({
++    ok: true,
++    capabilityId: CAPABILITY_ACTIONS.BRANCH,
++  }));
++
++  registerCapabilityExecutor(CAPABILITY_ACTIONS.BRANCH_FALLBACK, () => ({
++    ok: true,
++    capabilityId: CAPABILITY_ACTIONS.BRANCH_FALLBACK,
++  }));
++}
++
++let bootstrapped = false;
++
++export function ensureCapabilityExecutorsRegistered(): void {
++  if (bootstrapped) return;
++  registerCoreExecutors();
++  bootstrapped = true;
++}
+diff --git a/core/runtime/executionPlan.ts b/core/runtime/executionPlan.ts
+new file mode 100644
+index 0000000..413c3dd
+--- /dev/null
++++ b/core/runtime/executionPlan.ts
+@@ -0,0 +1,159 @@
++/**
++ * Immutable Bot IR execution plan — capability steps (not block-type switches).
++ */
++
++import type { BotIRGraph, BotIREdge, BotIRNode } from "../ir/bot_ir.js";
++import { resolveNodeCapability } from "../capabilities/resolveNodeCapability.js";
++import { BOT_IR_VERSION } from "../ir/bot_ir.js";
++
++export const EXECUTION_PLAN_VERSION = "1.0";
++
++export interface PlanEdgeRef {
++  readonly targetStepId: string;
++  readonly port: string;
++  readonly condition?: string;
++}
++
++export interface CapabilityPlanStep {
++  readonly stepId: string;
++  readonly nodeId: string;
++  readonly blockType: string;
++  readonly capabilityId: string;
++  readonly capabilityIds: readonly string[];
++  readonly triggerIds: readonly string[];
++  readonly async: boolean;
++  readonly payload: Readonly<Record<string, unknown>>;
++  readonly outgoing: readonly PlanEdgeRef[];
++}
++
++export interface BotExecutionPlan {
++  readonly version: string;
++  readonly planVersion: string;
++  readonly steps: readonly CapabilityPlanStep[];
++  readonly stepByNodeId: Readonly<Record<string, string>>;
++  readonly entryStepIds: readonly string[];
++  readonly metadata: Readonly<Record<string, unknown>>;
++}
++
++function freezePlanEdge(edge: PlanEdgeRef): PlanEdgeRef {
++  return Object.freeze({ ...edge });
++}
++
++function freezeStep(step: CapabilityPlanStep): CapabilityPlanStep {
++  return Object.freeze({
++    ...step,
++    capabilityIds: Object.freeze([...step.capabilityIds]),
++    triggerIds: Object.freeze([...step.triggerIds]),
++    payload: Object.freeze({ ...step.payload }),
++    outgoing: Object.freeze(step.outgoing.map(freezePlanEdge)),
++  });
++}
++
++function buildOutgoing(
++  nodeId: string,
++  edges: BotIREdge[],
++  stepByNodeId: Map<string, string>,
++): PlanEdgeRef[] {
++  const out: PlanEdgeRef[] = [];
++  for (const edge of edges) {
++    if (edge.source !== nodeId) continue;
++    const targetStepId = stepByNodeId.get(edge.target);
++    if (!targetStepId) continue;
++    out.push(
++      freezePlanEdge({
++        targetStepId,
++        port: edge.sourcePort || "flow",
++        ...(edge.condition ? { condition: edge.condition } : {}),
++      }),
++    );
++  }
++  return out.sort((a, b) => a.targetStepId.localeCompare(b.targetStepId));
++}
++
++function isEntryNode(node: BotIRNode, incoming: Map<string, number>): boolean {
++  const count = incoming.get(node.id) ?? 0;
++  if (count === 0) return true;
++  return (node.capabilities.triggers?.length ?? 0) > 0;
++}
++
++/**
++ * Lower Bot IR → immutable capability execution plan.
++ */
++export function buildExecutionPlan(botIr: BotIRGraph): BotExecutionPlan {
++  const steps: CapabilityPlanStep[] = [];
++  const stepByNodeId = new Map<string, string>();
++  const incoming = new Map<string, number>();
++
++  for (const edge of botIr.edges) {
++    incoming.set(edge.target, (incoming.get(edge.target) ?? 0) + 1);
++  }
++
++  for (const node of botIr.nodes) {
++    const resolved = resolveNodeCapability(node.type, {
++      nodeId: node.id,
++      strict: true,
++    });
++    const stepId = `step_${node.id}`;
++    stepByNodeId.set(node.id, stepId);
++
++    steps.push(
++      freezeStep({
++        stepId,
++        nodeId: node.id,
++        blockType: node.type,
++        capabilityId: resolved.primaryAction,
++        capabilityIds: resolved.actions,
++        triggerIds: resolved.triggers,
++        async: resolved.async,
++        payload: { ...node.payload },
++        outgoing: [],
++      }),
++    );
++  }
++
++  const stepsWithEdges = steps.map((step) =>
++    freezeStep({
++      ...step,
++      outgoing: buildOutgoing(step.nodeId, botIr.edges, stepByNodeId),
++    }),
++  );
++
++  const entryStepIds = botIr.nodes
++    .filter((node) => isEntryNode(node, incoming))
++    .map((node) => stepByNodeId.get(node.id)!)
++    .filter(Boolean)
++    .sort();
++
++  const stepByNodeIdRecord: Record<string, string> = {};
++  for (const [nodeId, stepId] of stepByNodeId) {
++    stepByNodeIdRecord[nodeId] = stepId;
++  }
++
++  return Object.freeze({
++    version: botIr.version || BOT_IR_VERSION,
++    planVersion: EXECUTION_PLAN_VERSION,
++    steps: Object.freeze(stepsWithEdges),
++    stepByNodeId: Object.freeze(stepByNodeIdRecord),
++    entryStepIds: Object.freeze(entryStepIds),
++    metadata: Object.freeze({
++      ...botIr.context.metadata,
++      nodeCount: stepsWithEdges.length,
++      edgeCount: botIr.edges.length,
++    }),
++  });
++}
++
++export function getPlanStep(
++  plan: BotExecutionPlan,
++  stepId: string,
++): CapabilityPlanStep | undefined {
++  return plan.steps.find((s) => s.stepId === stepId);
++}
++
++export function getPlanStepByNodeId(
++  plan: BotExecutionPlan,
++  nodeId: string,
++): CapabilityPlanStep | undefined {
++  const stepId = plan.stepByNodeId[nodeId];
++  return stepId ? getPlanStep(plan, stepId) : undefined;
++}
+diff --git a/core/runtime/index.ts b/core/runtime/index.ts
+new file mode 100644
+index 0000000..d9a56dc
+--- /dev/null
++++ b/core/runtime/index.ts
+@@ -0,0 +1,33 @@
++export {
++  RUNTIME_CTX_VERSION,
++  type BotRuntimeContext,
++  type RuntimeContextNodeSource,
++} from "./runtimeContext.js";
++
++export {
++  EXECUTION_PLAN_VERSION,
++  buildExecutionPlan,
++  getPlanStep,
++  getPlanStepByNodeId,
++  type BotExecutionPlan,
++  type CapabilityPlanStep,
++  type PlanEdgeRef,
++} from "./executionPlan.js";
++
++export {
++  registerCapabilityExecutor,
++  executeCapability,
++  ensureCapabilityExecutorsRegistered,
++  hasCapabilityExecutor,
++  listCapabilityExecutors,
++  UnknownCapabilityExecutorError,
++  type CapabilityExecuteContext,
++  type CapabilityExecuteResult,
++} from "./capabilityExecutors.js";
++
++export {
++  createRuntimeEngine,
++  execute,
++  type RuntimeEngine,
++  type RuntimeExecuteOptions,
++} from "./runtimeEngine.js";
+diff --git a/core/runtime/runtimeContext.ts b/core/runtime/runtimeContext.ts
+new file mode 100644
+index 0000000..8bc7d93
+--- /dev/null
++++ b/core/runtime/runtimeContext.ts
+@@ -0,0 +1,48 @@
++/**
++ * Unified runtime context — single bag for handler execution (codegen + IR).
++ */
++
++export const RUNTIME_CTX_VERSION = "1.0";
++
++/** Canonical runtime context shape emitted into generated Python handlers. */
++export interface BotRuntimeContext {
++  user: unknown;
++  message: unknown;
++  callback: unknown;
++  state: unknown;
++  vars: Record<string, unknown>;
++}
++
++/** Default variable seeds from `global` / project settings blocks. */
++export interface RuntimeContextDefaults {
++  [name: string]: unknown;
++}
++
++/** Minimal node shape for variable extraction from Bot IR / execution graph. */
++export interface RuntimeContextNodeSource {
++  id: string;
++  type: string;
++  payload: Record<string, unknown>;
++}
++
++export const SET_VARIABLE_TYPE = "set_variable";
++export const GET_VARIABLE_TYPE = "get_variable";
++
++export function isVariableNodeType(type: string): boolean {
++  const t = String(type || "").trim();
++  return (
++    t === SET_VARIABLE_TYPE
++    || t === GET_VARIABLE_TYPE
++    || t === "remember"
++    || t === "set_global"
++    || t === "get"
++  );
++}
++
++export function extractCtxDefaultsFromPayload(
++  payload: Record<string, unknown>,
++): RuntimeContextDefaults | null {
++  const name = String(payload.varname ?? payload.name ?? "").trim();
++  if (!name) return null;
++  return { [name]: payload.value ?? null };
++}
+diff --git a/core/runtime/runtimeEngine.ts b/core/runtime/runtimeEngine.ts
+new file mode 100644
+index 0000000..7f1707e
+--- /dev/null
++++ b/core/runtime/runtimeEngine.ts
+@@ -0,0 +1,117 @@
++/**
++ * Capability execution engine — runtime.execute(capability).
++ */
++
++import type { BotExecutionPlan, CapabilityPlanStep } from "./executionPlan.js";
++import { buildExecutionPlan } from "./executionPlan.js";
++import type { BotIRGraph } from "../ir/bot_ir.js";
++import type { BotRuntimeContext } from "./runtimeContext.js";
++import { createTransport, type TransportAdapter } from "../transport/transportAdapter.js";
++import { TELEGRAM_TRANSPORT_ID } from "../transport/telegramAdapter.js";
++import {
++  ensureCapabilityExecutorsRegistered,
++  executeCapability,
++  type CapabilityExecuteResult,
++} from "./capabilityExecutors.js";
++
++export interface RuntimeExecuteOptions {
++  transport?: TransportAdapter;
++  transportId?: string;
++  nodeId?: string;
++  stepId?: string;
++}
++
++export interface RuntimeEngine {
++  readonly plan: BotExecutionPlan;
++  execute(
++    capabilityId: string,
++    payload?: Record<string, unknown>,
++    options?: RuntimeExecuteOptions,
++  ): Promise<CapabilityExecuteResult>;
++  executeStep(
++    stepId: string,
++    runtime: BotRuntimeContext,
++    options?: RuntimeExecuteOptions,
++  ): Promise<CapabilityExecuteResult>;
++}
++
++function mergePayload(
++  base: Readonly<Record<string, unknown>>,
++  extra?: Record<string, unknown>,
++): Readonly<Record<string, unknown>> {
++  if (!extra || !Object.keys(extra).length) return base;
++  return Object.freeze({ ...base, ...extra });
++}
++
++/**
++ * Create engine from Bot IR (builds immutable execution plan).
++ */
++export function createRuntimeEngine(
++  botIr: BotIRGraph,
++  options: { transportId?: string } = {},
++): RuntimeEngine {
++  ensureCapabilityExecutorsRegistered();
++  const plan = buildExecutionPlan(botIr);
++  const defaultTransportId = options.transportId ?? TELEGRAM_TRANSPORT_ID;
++
++  const resolveTransport = (opts?: RuntimeExecuteOptions): TransportAdapter =>
++    opts?.transport ?? createTransport(opts?.transportId ?? defaultTransportId);
++
++  return Object.freeze({
++    plan,
++    async execute(capabilityId, payload = {}, options = {}) {
++      const runtime = payload._runtime as BotRuntimeContext | undefined;
++      if (!runtime) {
++        throw new Error(
++          "runtime.execute(capability): pass BotRuntimeContext via payload._runtime",
++        );
++      }
++      const { _runtime: _, ...cleanPayload } = payload;
++      return executeCapability(capabilityId, {
++        runtime,
++        transport: resolveTransport(options),
++        payload: cleanPayload,
++        nodeId: options.nodeId,
++        stepId: options.stepId,
++      });
++    },
++    async executeStep(stepId, runtime, options = {}) {
++      const step = plan.steps.find((s) => s.stepId === stepId);
++      if (!step) {
++        throw new Error(`Unknown plan step: "${stepId}"`);
++      }
++      return executeCapability(step.capabilityId, {
++        runtime,
++        transport: resolveTransport(options),
++        payload: mergePayload(step.payload, undefined),
++        nodeId: step.nodeId,
++        stepId: step.stepId,
++      });
++    },
++  });
++}
++
++/**
++ * Global entry: runtime.execute(capability, runtimeCtx, payload, options).
++ */
++export async function execute(
++  capabilityId: string,
++  runtime: BotRuntimeContext,
++  payload: Record<string, unknown> = {},
++  options: RuntimeExecuteOptions = {},
++): Promise<CapabilityExecuteResult> {
++  ensureCapabilityExecutorsRegistered();
++  const transport =
++    options.transport
++    ?? createTransport(options.transportId ?? TELEGRAM_TRANSPORT_ID);
++
++  return executeCapability(capabilityId, {
++    runtime,
++    transport,
++    payload: Object.freeze({ ...payload }),
++    nodeId: options.nodeId,
++    stepId: options.stepId,
++  });
++}
++
++export type { CapabilityPlanStep, BotExecutionPlan };
+diff --git a/core/transport/index.ts b/core/transport/index.ts
+new file mode 100644
+index 0000000..66b9776
+--- /dev/null
++++ b/core/transport/index.ts
+@@ -0,0 +1,14 @@
++export {
++  registerTransport,
++  createTransport,
++  listTransports,
++  type TransportAdapter,
++  type TransportSendResult,
++  type SendMessageOptions,
++} from "./transportAdapter.js";
++
++export {
++  TELEGRAM_TRANSPORT_ID,
++  TelegramTransportAdapter,
++  registerTelegramTransport,
++} from "./telegramAdapter.js";
+diff --git a/core/transport/telegramAdapter.ts b/core/transport/telegramAdapter.ts
+new file mode 100644
+index 0000000..ec44f48
+--- /dev/null
++++ b/core/transport/telegramAdapter.ts
+@@ -0,0 +1,69 @@
++/**
++ * Telegram transport adapter (dry-run / preview / test harness).
++ */
++
++import type { BotRuntimeContext } from "../runtime/runtimeContext.js";
++import {
++  registerTransport,
++  type TransportAdapter,
++  type TransportSendResult,
++} from "./transportAdapter.js";
++
++export const TELEGRAM_TRANSPORT_ID = "telegram";
++
++function ok(partial: Partial<TransportSendResult> = {}): TransportSendResult {
++  return {
++    ok: true,
++    transportId: TELEGRAM_TRANSPORT_ID,
++    ...partial,
++  };
++}
++
++export class TelegramTransportAdapter implements TransportAdapter {
++  readonly id = TELEGRAM_TRANSPORT_ID;
++
++  async sendMessage(
++    ctx: BotRuntimeContext,
++    text: string,
++  ): Promise<TransportSendResult> {
++    const target = ctx.callback?.message ?? ctx.message;
++    if (target && typeof target === "object") {
++      (target as Record<string, unknown>)._lastText = text;
++    }
++    return ok();
++  }
++
++  async answerCallback(
++    ctx: BotRuntimeContext,
++    text?: string,
++  ): Promise<TransportSendResult> {
++    if (ctx.callback && typeof ctx.callback === "object" && text) {
++      (ctx.callback as Record<string, unknown>)._answer = text;
++    }
++    return ok();
++  }
++
++  async editMessage(
++    ctx: BotRuntimeContext,
++    text: string,
++  ): Promise<TransportSendResult> {
++    const msg = ctx.callback?.message ?? ctx.message;
++    if (msg && typeof msg === "object") {
++      (msg as Record<string, unknown>).text = text;
++    }
++    return ok();
++  }
++
++  async chatAction(
++    _ctx: BotRuntimeContext,
++    action: string,
++  ): Promise<TransportSendResult> {
++    return ok({ messageId: action });
++  }
++}
++
++export function registerTelegramTransport(): void {
++  registerTransport(TELEGRAM_TRANSPORT_ID, () => new TelegramTransportAdapter());
++}
++
++registerTelegramTransport();
+diff --git a/core/transport/transportAdapter.ts b/core/transport/transportAdapter.ts
+new file mode 100644
+index 0000000..2dd7092
+--- /dev/null
++++ b/core/transport/transportAdapter.ts
+@@ -0,0 +1,66 @@
++/**
++ * Transport abstraction — Telegram is one adapter implementation.
++ */
++
++import type { BotRuntimeContext } from "../runtime/runtimeContext.js";
++
++export interface SendMessageOptions {
++  parseMode?: string;
++  replyMarkup?: unknown;
++}
++
++export interface TransportSendResult {
++  ok: boolean;
++  transportId: string;
++  messageId?: string | number;
++}
++
++/** Platform-agnostic transport surface for capability executors. */
++export interface TransportAdapter {
++  readonly id: string;
++  sendMessage(
++    ctx: BotRuntimeContext,
++    text: string,
++    options?: SendMessageOptions,
++  ): Promise<TransportSendResult>;
++  answerCallback?(
++    ctx: BotRuntimeContext,
++    text?: string,
++  ): Promise<TransportSendResult>;
++  editMessage?(
++    ctx: BotRuntimeContext,
++    text: string,
++  ): Promise<TransportSendResult>;
++  chatAction?(
++    ctx: BotRuntimeContext,
++    action: string,
++  ): Promise<TransportSendResult>;
++}
++
++export type TransportFactory = () => TransportAdapter;
++
++const transports = new Map<string, TransportFactory>();
++
++export function registerTransport(
++  id: string,
++  factory: TransportFactory,
++): void {
++  const key = String(id || "").trim();
++  if (!key || typeof factory !== "function") {
++    throw new Error("registerTransport(id, factory) requires id and factory");
++  }
++  transports.set(key, factory);
++}
++
++export function createTransport(id: string): TransportAdapter {
++  const key = String(id || "").trim();
++  const factory = transports.get(key);
++  if (!factory) {
++    throw new Error(`Unknown transport: "${key}"`);
++  }
++  return factory();
++}
++
++export function listTransports(): string[] {
++  return [...transports.keys()].sort();
++}
+diff --git a/generators/python_aiogram/generateBot.ts b/generators/python_aiogram/generateBot.ts
+index a3a0f44..1c8214d 100644
+--- a/generators/python_aiogram/generateBot.ts
++++ b/generators/python_aiogram/generateBot.ts
+@@ -1,9 +1,31 @@
+ import type { ExecutionGraph } from "../../core/execution/executionContract";
++import { resolveNodeCapability } from "../../core/capabilities/resolveNodeCapability.js";
+ import {
+   DEFAULT_EXECUTION_POLICY,
+   type ExecutionPolicy,
+ } from "../../core/execution/executionPolicy";
+ import { sortEdges } from "../../core/execution/executionContract";
++import { buildFsmGraph } from "../../core/execution/fsmGraph";
++import { buildVisualDbGraphFromBotNodes } from "../../core/db/visual_db_ir";
++import {
++  emitSqliteDbRuntime,
++  emitVisualDbManifest,
++} from "../../core/db/dbCodegen.js";
++import { generateFsmPython } from "./generateFSM";
++import { generateForeachPython } from "./generateForeach";
++import { generatePermissionPython } from "./generatePermission";
++import { emitRuntimeContextRuntime } from "../../core/codegen/runtimeContextCodegen.js";
++
++function executionNodesToDbSources(execution: ExecutionGraph) {
++  return execution.nodes.map((node) => ({
++    id: node.id,
++    type: node.type,
++    payload:
++      node.data && typeof node.data === "object"
++        ? { ...(node.data as Record<string, unknown>) }
++        : {},
++  }));
++}
+ 
+ function formatEdgeLine(edge: {
+   from: string;
+@@ -19,8 +41,8 @@ function formatEdgeLine(edge: {
+ }
+ 
+ /**
+- * Generate aiogram scaffold from prepared ExecutionGraph edges only.
+- * Expects graph that already passed prepareExecutionGraph.
++ * Generate aiogram scaffold from prepared ExecutionGraph.
++ * FSM is graph-based (fsm.state / fsm.input / transition edges).
+  */
+ export function generateAiogramBot(
+   execution: ExecutionGraph,
+@@ -30,13 +52,40 @@ export function generateAiogramBot(
+     .map(formatEdgeLine)
+     .join("\n");
+ 
++  const fsmGraph = buildFsmGraph(execution);
++  const fsmSection = generateFsmPython(fsmGraph);
++  const foreachSection = generateForeachPython(execution);
++  const permissionSection = generatePermissionPython(execution);
++  const hasHandlers = execution.nodes.some((n) => {
++    const caps = resolveNodeCapability(n.type, { nodeId: n.id });
++    return (
++      caps.triggers.length > 0
++      || caps.primaryAction === "route"
++      || caps.primaryAction === "send_message"
++    );
++  });
++  const runtimeCtxSection = hasHandlers
++    ? `# --- runtime ctx (user, message, callback, state, vars) ---\n${emitRuntimeContextRuntime()}\n`
++    : "";
++  const visualDb = buildVisualDbGraphFromBotNodes(
++    executionNodesToDbSources(execution),
++  );
++  const dbManifest = emitVisualDbManifest(visualDb);
++  const dbRuntime =
++    visualDb.nodeCount > 0 ? `\n${emitSqliteDbRuntime()}\n` : "";
++
++  const fsmImports =
++    fsmSection.includes("StatesGroup") || fsmSection.includes("State()")
++      ? "from aiogram.fsm.state import State, StatesGroup\n"
++      : "";
++
+   return `# EXECUTION GRAPH VERSION: ${execution.version}
+ 
+ from aiogram import Router
+-
++${fsmImports}
+ router = Router()
+ 
+ # --- execution graph (source of truth) ---
+ ${edgeManifest || "# (no edges)"}
+-`;
++${runtimeCtxSection}${permissionSection}${dbManifest}${dbRuntime}${foreachSection}${fsmSection ? `\n${fsmSection}` : ""}`;
+ }
+diff --git a/package.json b/package.json
+index fe4edf7..20c0bcd 100644
+--- a/package.json
++++ b/package.json
+@@ -18,6 +18,18 @@
+     "lint": "eslint src core/tests services scripts server.mjs",
+     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
+     "test:compiler": "tsx tests/compiler/compiler.test.ts",
++    "test:bot-ir": "tsx tests/compiler/bot_ir.test.ts",
++    "test:block-capabilities": "node --test core/tests/block-capabilities.test.mjs",
++    "test:fsm-graph": "tsx tests/compiler/fsmGraph.test.ts",
++    "test:visual-db": "tsx tests/compiler/visual_db.test.ts",
++    "test:foreach": "tsx tests/compiler/foreach.test.ts",
++    "test:runtime-context": "tsx tests/compiler/runtime_context.test.ts",
++    "test:permission": "tsx tests/compiler/permission.test.ts",
++    "test:system-templates": "tsx tests/compiler/system_templates.test.ts",
++    "test:python-bot-import": "tsx tests/compiler/python_bot_import.test.ts",
++    "test:strict-validation": "tsx tests/compiler/strict_validation_pipeline.test.ts",
++    "test:unified-pipeline": "tsx tests/compiler/unified_compile_pipeline.test.ts",
++    "test:capability-engine": "tsx tests/compiler/capability_execution_engine.test.ts",
+     "test:runtime": "tsx tests/compiler/runtime.test.ts",
+     "parser-core-blocks": "node scripts/core-blocks-check.mjs",
+     "jammer:publish": "node scripts/publish-jammer-firmware.mjs",
+diff --git a/tests/compiler/capability_execution_engine.test.ts b/tests/compiler/capability_execution_engine.test.ts
+new file mode 100644
+index 0000000..edc6166
+--- /dev/null
++++ b/tests/compiler/capability_execution_engine.test.ts
+@@ -0,0 +1,105 @@
++import assert from "node:assert/strict";
++
++import { createGraphDocument } from "../../src/constructor/graph_document/graph_document.js";
++import { buildGraphNodeData } from "../../src/constructor/graph_document/graph_node_payload.js";
++import { graphToBotIR } from "../../core/ir/bot_ir";
++import { buildExecutionPlan } from "../../core/runtime/executionPlan.ts";
++import { execute } from "../../core/runtime/runtimeEngine.ts";
++import { ensureCapabilityExecutorsRegistered } from "../../core/runtime/capabilityExecutors.ts";
++import { resolveNodeCapability } from "../../core/capabilities/resolveNodeCapability.ts";
++import { compileEventDecorator } from "../../core/codegen/compileCore.js";
++import { registerAllCapabilityEmitters } from "../../core/codegen/capabilityEmitters/registerAll.js";
++import { compileViaCapabilities } from "../../core/compiler/capabilityCompilePipeline.ts";
++import { CAPABILITY_ACTIONS } from "../../core/capabilities/capabilityIds.ts";
++
++registerAllCapabilityEmitters();
++ensureCapabilityExecutorsRegistered();
++
++const doc = createGraphDocument({
++  schema_version: 2,
++  nodes: [
++    {
++      id: "s1",
++      type: "start",
++      position: { x: 0, y: 0 },
++      data: buildGraphNodeData("start", { cmd: "start" }),
++    },
++    {
++      id: "m1",
++      type: "message",
++      position: { x: 200, y: 0 },
++      data: buildGraphNodeData("message", { text: "Hi" }),
++    },
++    {
++      id: "stop1",
++      type: "stop",
++      position: { x: 400, y: 0 },
++      data: buildGraphNodeData("stop", {}),
++    },
++  ],
++  edges: [
++    {
++      id: "e1",
++      source: "s1",
++      target: "m1",
++      sourcePort: "flow",
++      targetPort: "flow",
++    },
++    {
++      id: "e2",
++      source: "m1",
++      target: "stop1",
++      sourcePort: "flow",
++      targetPort: "flow",
++    },
++  ],
++});
++
++const ir = graphToBotIR(doc);
++const plan = buildExecutionPlan(ir);
++
++assert.equal(plan.steps.length, 3);
++assert.ok(Object.isFrozen(plan));
++assert.ok(Object.isFrozen(plan.steps));
++
++const startStep = plan.steps.find((s) => s.nodeId === "s1");
++assert.equal(startStep?.capabilityId, "route");
++assert.ok(startStep?.triggerIds.includes("telegram.command.start"));
++
++const msgStep = plan.steps.find((s) => s.nodeId === "m1");
++assert.equal(msgStep?.capabilityId, CAPABILITY_ACTIONS.SEND_MESSAGE);
++
++const caps = resolveNodeCapability("message", { nodeId: "m1" });
++assert.equal(caps.primaryAction, "send_message");
++assert.ok(!("type" in (ir.nodes.find((n) => n.id === "m1")?.payload || {})));
++
++const decorator = compileEventDecorator("start", { cmd: "start" }, {});
++assert.ok(decorator.includes("CommandStart"));
++
++const runtime = {
++  user: { id: 1 },
++  message: { text: "x" },
++  callback: null,
++  state: null,
++  vars: {},
++};
++
++const sent = await execute(CAPABILITY_ACTIONS.SEND_MESSAGE, runtime, {
++  text: "hello",
++});
++assert.equal(sent.ok, true);
++
++runtime.vars.seed = 1;
++const setVar = await execute(CAPABILITY_ACTIONS.CTX_SET_VAR, runtime, {
++  varname: "a",
++  value: 42,
++});
++assert.equal(setVar.ok, true);
++assert.equal(runtime.vars.a, 42);
++
++const compiled = compileViaCapabilities(doc, { skipValidation: true });
++assert.equal(compiled.success, true);
++assert.ok(compiled.executionPlan.steps.length === 3);
++assert.ok(compiled.python.includes("aiogram"));
++
++console.log("capability_execution_engine.test.ts OK");

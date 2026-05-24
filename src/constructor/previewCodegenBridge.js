@@ -75,7 +75,10 @@ export function buildPreviewCodegenSnapshot(getDocument, options = {}) {
     empty,
     compileWarnings: empty
       ? []
-      : [...compileWarnings, ...compileErrors.map((e) => e.message)],
+      : [
+        ...compileWarnings.map((w) => (typeof w === 'string' ? w : w.message || String(w.code || ''))),
+        ...compileErrors.map((e) => e.message),
+      ],
     compileErrors,
     transpileTrace,
   };

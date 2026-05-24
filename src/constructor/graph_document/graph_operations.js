@@ -13,6 +13,7 @@ import {
   normalizeUiState,
 } from './graph_schema.js';
 import { VM_LAYER } from './graph_compiler_vm_contract.js';
+import { assertNodeTypeInRegistry, normalizeGraphNodePayload } from './graph_node_payload.js';
 
 export { VM_LAYER };
 
@@ -49,15 +50,17 @@ export function createOperation(type, payload = {}, meta = {}) {
 }
 
 function applyAddNode(doc, payload, operation) {
-  const nodeId = payload.nodeId || uid('node');
+  const normalized = normalizeGraphNodePayload(payload);
+  const nodeId = normalized.nodeId || uid('node');
   if (doc.nodes[nodeId]) return fail(doc, `Node already exists: ${nodeId}`);
   const node = {
     id: nodeId,
-    type: payload.type || payload.blockType || 'unknown',
-    position: payload.position || { x: 260, y: 160 },
-    data: payload.data || payload.props || {},
-    meta: payload.meta || {},
+    type: normalized.type,
+    position: normalized.position || { x: 260, y: 160 },
+    data: { ...normalized.data },
+    meta: normalized.meta || {},
   };
+  assertNodeTypeInRegistry(node);
   const nodes = { ...doc.nodes, [nodeId]: node };
   return ok(
     { ...doc, nodes },

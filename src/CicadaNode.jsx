@@ -11,6 +11,8 @@ import {
 } from './builder/blockLayout.js';
 import { getCicadaNodeLayout } from './builder/graph_canvas_metrics.js';
 import { getNodePortDescriptors } from './constructor/graph_document/operation_registry.js';
+import { graphResolveNodeType } from './app/graph/graphHelpers.js';
+import { getBlockDefinition } from '../core/blockRegistry.js';
 import { useGraphCanvasActions } from './builder/graphCanvasActionsContext.jsx';
 
 export function getPortType(type) {
@@ -40,15 +42,20 @@ const CTRL_BTN = {
 };
 
 function CicadaNode({ id, data, selected }) {
+  const clipPathUid = React.useId().replace(/:/g, '');
   const ctx = React.useContext(BuilderUiContext);
   const actions = useGraphCanvasActions();
   const blockTypes = ctx?.blockTypes;
-  const type = data?.type || 'message';
+  const type = graphResolveNodeType({
+    type: data?.canvasBlockType,
+    data: data?.props ?? {},
+  });
   const def = getBlockDef(type, blockTypes);
-  const color = def?.color || '#5b7cf6';
+  const registryDef = getBlockDefinition(type);
+  const color = def?.color || '#94a3b8';
   const icon = def?.icon || '◆';
   const label = data?.label || def?.label || type;
-  const nodeData = data?.props || data;
+  const nodeData = data?.props ?? {};
   const preview = getPreview(type, nodeData, data?.meta);
   const isChainRoot = Boolean(data?.isChainRoot);
   const canStack = def?.canStack !== false;
@@ -147,10 +154,10 @@ function CicadaNode({ id, data, selected }) {
       >
         <path d={path} fill="rgba(0,0,0,0.35)" transform="translate(0,3)" />
         <path d={path} fill={color} />
-        <clipPath id={`hc-${type}-${nodeId}-${selected ? 1 : 0}`}>
+        <clipPath id={clipPathUid}>
           <rect x="0" y="0" width={BLOCK_W} height={h} />
         </clipPath>
-        <path d={path} fill={dark} clipPath={`url(#hc-${type}-${nodeId}-${selected ? 1 : 0})`} opacity="0.45" />
+        <path d={path} fill={dark} clipPath={`url(#${clipPathUid})`} opacity="0.45" />
         <path d={path} fill="rgba(255,255,255,0.12)" />
         <path d={path} fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth="1.2" />
         <path d={path} fill="none" stroke="rgba(0,0,0,0.28)" strokeWidth="1" transform="translate(0,1)" />
@@ -280,7 +287,7 @@ function cicadaNodePropsAreEqual(prev, next) {
   if (prev.id !== next.id) return false;
   const pd = prev.data || {};
   const nd = next.data || {};
-  if (pd.type !== nd.type) return false;
+  if (pd.canvasBlockType !== nd.canvasBlockType) return false;
   if (pd.previewEpoch !== nd.previewEpoch) return false;
   if (pd.snapHint !== nd.snapHint) return false;
   if (pd.repairPulse !== nd.repairPulse) return false;
