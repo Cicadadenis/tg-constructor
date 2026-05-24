@@ -78,6 +78,11 @@ import { registerCleanUrlRouting } from './services/cleanUrlRouting.mjs';
 import { PROJECT_ID_RE } from './services/projectId.mjs';
 import { generateBotPyFromStacks } from './services/pythonCodegen.mjs';
 import { stripThinkingFromAiRaw } from './core/ai/llmOutput.js';
+import './core/node_manifest/init.mjs';
+import {
+  runStartupIntegrityCheck,
+  logStartupIntegrityReport,
+} from './core/startup/startupIntegrityCheck.mjs';
 import {
   AI_TARGET_CORE_EXACT,
   canonicalIrToEditorStacks,
@@ -8887,6 +8892,18 @@ console.log('PORT =', API_PORT);
 
 initDBWithRetry()
   .then(() => migrateUsersJson())
+  .then(async () => {
+    const integrity = await runStartupIntegrityCheck({ pool });
+    if (!integrity.ok) {
+      logStartupIntegrityReport(integrity);
+      const err = new Error(
+        `Startup blocked: ${integrity.violations.length} integrity violation(s)`,
+      );
+      err.code = 'STARTUP_INTEGRITY_FAILED';
+      throw err;
+    }
+    console.log('[startup] integrity check passed');
+  })
   .then(async () => {
     if (!isFirmwareRuntimeEnabled()) {
       console.log('[firmware] runtime disabled (DISABLE_FIRMWARE_RUNTIME)');

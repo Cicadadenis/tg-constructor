@@ -690,3 +690,4 @@ export function getRootBlockTypes() {
     ))
     .map((definition) => definition.type);
 }
+

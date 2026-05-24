@@ -13,15 +13,25 @@ export function freezeRetryPolicy(policy) {
 }
 
 export function freezeStep(step) {
-  return Object.freeze({
+  const frozen = {
     ...step,
     payload: Object.freeze({ ...(step.payload || {}) }),
     successors: Object.freeze([...(step.successors || [])]),
     ...(step.forkBranches
       ? { forkBranches: Object.freeze(step.forkBranches.map((b) => Object.freeze({ ...b }))) }
       : {}),
+    ...(step.executionContract
+      ? {
+          executionContract: Object.freeze({
+            async: Boolean(step.executionContract.async),
+            idempotent: Boolean(step.executionContract.idempotent),
+            retryPolicy: String(step.executionContract.retryPolicy),
+          }),
+        }
+      : {}),
     ...(step.retry ? { retry: freezeRetryPolicy(step.retry) } : {}),
-  });
+  };
+  return Object.freeze(frozen);
 }
 
 export function freezeBarrier(barrier) {

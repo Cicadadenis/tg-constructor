@@ -32,6 +32,14 @@ export interface RetryPolicy {
   readonly retryableErrors?: readonly string[];
 }
 
+export type ExecutionContractRetryPolicy = "none" | "simple" | "durable";
+
+export interface ExecutionContractSnapshot {
+  readonly async: boolean;
+  readonly idempotent: boolean;
+  readonly retryPolicy: ExecutionContractRetryPolicy;
+}
+
 export interface ForkBranch {
   readonly branchId: string;
   readonly entryStepId: string;
@@ -52,6 +60,8 @@ export interface ExecutionIrStep {
   readonly successors: readonly string[];
   readonly forkBranches?: readonly ForkBranch[];
   readonly joinBarrierId?: string;
+  /** Required on action/fork steps — set at compile time from NodeManifest. */
+  readonly executionContract?: ExecutionContractSnapshot;
   readonly retry?: RetryPolicy;
   readonly compensateStepId?: string;
   readonly sourceNodeId?: string;

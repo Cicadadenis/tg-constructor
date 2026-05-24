@@ -12,22 +12,30 @@
  *  - onNodeDoubleClick opens the schema-driven inspector
  */
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { mergeProjectionEdges, mergeProjectionNodes } from './projectionSync.js';
 import {
   ReactFlow,
   Background,
-  Controls,
+  MiniMap,
   useNodesState,
   useEdgesState,
   ReactFlowProvider,
   useReactFlow,
   BackgroundVariant,
-  MarkerType,
+  ConnectionLineType,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import './graph_canvas.css';
+import './flowEdge/flow-add-step.css';
+import './canvas/canvas-chrome.css';
 import CicadaNode from '../CicadaNode.jsx';
+import FlowAddStepEdge from './flowEdge/FlowAddStepEdge.jsx';
+import FlowBezierEdge from './flowEdge/FlowBezierEdge.jsx';
+import CanvasZoomControls from './canvas/CanvasZoomControls.jsx';
+import { buildCanvasEdgePresentation, resolveExecutionPathEdgeIds } from './canvas/canvasEdgeStyles.js';
+import { FlowEdgePickerHost, useFlowEdgePicker } from './flowEdge/FlowEdgePickerHost.jsx';
+import { isSplittableFlowEdge } from './flowEdge/insertNodeOnEdge.js';
 import { NODE_CLICK_DRAG_THRESHOLD_PX } from './graph_canvas_metrics.js';
 import {
   moveNode,
@@ -44,61 +52,48 @@ import { normalizeConnectionError } from './graph_error_messages.js';
 
 
 const NODE_TYPES = Object.freeze({ cicada: CicadaNode });
+const EDGE_TYPES = Object.freeze({
+  flowAdd: FlowAddStepEdge,
+  flowBezier: FlowBezierEdge,
+});
 
-/** Edges exist in GraphDocument; puzzle tabs provide the visual chain. */
 const EDGE_DEFAULTS = Object.freeze({
-  type: 'straight',
-  style: { stroke: 'transparent', strokeWidth: 0 },
-  markerEnd: undefined,
+  type: 'flowBezier',
+  style: { stroke: 'var(--color-border-strong)', strokeWidth: 1.5 },
   animated: false,
-});
-
-const EDGE_INVALID_STYLE = Object.freeze({
-  type: 'straight',
-  style: { stroke: 'rgba(239,68,68,0.55)', strokeWidth: 1.5, strokeDasharray: '4 4' },
-  markerEnd: undefined,
-  animated: false,
-});
-
-const EDGE_REPAIRED_STYLE = Object.freeze({
-  type: 'straight',
-  style: { stroke: 'rgba(62,207,142,0.75)', strokeWidth: 2, strokeDasharray: '6 3' },
-  markerEnd: undefined,
-  animated: true,
 });
 
 function applyEdgeDefaults(edges, document, highlight = {}) {
   const repairedIds = new Set(highlight.repairedEdgeIds || []);
+  const executionIds = new Set(highlight.executionEdgeIds || []);
+
   return edges.map((edge) => {
-    if (repairedIds.has(edge.id)) {
-      return {
-        ...EDGE_REPAIRED_STYLE,
-        ...edge,
-        sourceHandle: edge.sourcePort ?? edge.sourceHandle,
-        targetHandle: edge.targetPort ?? edge.targetHandle,
-        label: '✓',
-        labelStyle: { fill: '#86efac', fontWeight: 700, fontSize: 10 },
-      };
-    }
     const v = validateConnection(document, {
       source: edge.source,
       target: edge.target,
-      // Prefer canonical port names; fall back to legacy handles if present.
       sourcePort: edge.sourcePort ?? edge.sourceHandle,
       targetPort: edge.targetPort ?? edge.targetHandle,
       ignoreEdgeId: edge.id,
     });
-    const base = v.ok ? EDGE_DEFAULTS : EDGE_INVALID_STYLE;
+    const splittable = v.ok && isSplittableFlowEdge(document, edge);
+    const presentation = buildCanvasEdgePresentation(
+      edge,
+      document,
+      {
+        repairedEdgeIds: repairedIds,
+        executionEdgeIds: executionIds,
+        kind: highlight.kind || null,
+      },
+      splittable,
+      v.ok,
+    );
+
     return {
-      ...base,
       ...edge,
-      // ReactFlow expects `sourceHandle`/`targetHandle` on edge objects
-      // for handle connection rendering — populate them from the
-      // GraphDocument `sourcePort`/`targetPort` to avoid storing legacy
-      // handle fields in the document itself.
+      ...presentation,
       sourceHandle: edge.sourcePort ?? edge.sourceHandle,
       targetHandle: edge.targetPort ?? edge.targetHandle,
-      label: v.ok ? '' : (() => {
+      label: v.ok ? (presentation.data?.repairPath ? '✓' : '') : (() => {
         const src = document.nodes[edge.source];
         const tgt = document.nodes[edge.target];
         const ux = normalizeConnectionError(v.reason, {
@@ -111,13 +106,32 @@ function applyEdgeDefaults(edges, document, highlight = {}) {
         return `⚠ ${ux.title}`;
       })(),
       labelStyle: v.ok
-        ? undefined
+        ? (presentation.data?.repairPath
+          ? { fill: '#86efac', fontWeight: 700, fontSize: 10 }
+          : undefined)
         : { fill: 'rgba(254,202,202,0.95)', fontWeight: 600, fontSize: 10 },
-      labelBgStyle: v.ok
-        ? undefined
-        : { fill: 'rgba(127,29,29,0.85)' },
+      labelBgStyle: v.ok ? undefined : { fill: 'rgba(127,29,29,0.85)' },
+      data: {
+        ...(edge.data || {}),
+        ...(presentation.data || {}),
+        splittable,
+        invalid: !v.ok,
+      },
     };
   });
+}
+
+function enrichEdgesWithPicker(edges, picker) {
+  if (!picker?.openPicker) return edges;
+  return edges.map((edge) => ({
+    ...edge,
+    data: {
+      ...edge.data,
+      onOpenPicker: picker.openPicker,
+      pickerOpen: picker.activeEdgeId === edge.id,
+      lang: picker.lang,
+    },
+  }));
 }
 
 /**
@@ -139,12 +153,15 @@ function GraphFlowInner({
   selectedBlockId,
   repairHighlightNodeIds = [],
   repairHighlightEdgeIds = [],
+  highlightKind = null,
+  lang = 'ru',
   onSelectNode,
   onInspectNode,
   onConnectFeedback,
   onDropPaletteEntry,
   onRequestDeleteNodes,
 }) {
+  const edgePicker = useFlowEdgePicker();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const { setViewport, screenToFlowPosition } = useReactFlow();
@@ -200,17 +217,31 @@ function GraphFlowInner({
     if (syncKey === lastRevRef.current && !draggingRef.current) return;
     lastRevRef.current = syncKey;
 
-    const pulseIds = new Set(repairHighlightNodeIds || []);
     const doc = graph.getGraphDocument();
-    const nextEdges = applyEdgeDefaults(projection.edges, doc, {
-      repairedEdgeIds: repairHighlightEdgeIds,
-    });
+    const isExecution = highlightKind === 'execution';
+    const repairIds = isExecution ? new Set() : new Set(repairHighlightNodeIds || []);
+    const executionIds = isExecution ? new Set(repairHighlightNodeIds || []) : new Set();
+    let executionEdgeList = isExecution ? [...(repairHighlightEdgeIds || [])] : [];
+    if (isExecution && !executionEdgeList.length && executionIds.size > 0) {
+      executionEdgeList = resolveExecutionPathEdgeIds(doc, executionIds);
+    }
+    const repairEdgeIds = isExecution ? new Set() : new Set(repairHighlightEdgeIds || []);
+    const executionEdgeIds = isExecution ? new Set(executionEdgeList) : new Set();
+
+    const nextEdges = enrichEdgesWithPicker(
+      applyEdgeDefaults(projection.edges, doc, {
+        repairedEdgeIds: repairEdgeIds,
+        executionEdgeIds,
+        kind: highlightKind,
+      }),
+      edgePicker,
+    );
 
     setNodes((current) => mergeProjectionNodes(
       current,
       projection.nodes,
       selectedBlockId,
-      pulseIds,
+      { repairIds, executionIds },
       rev,
     ));
     setEdges((current) => mergeProjectionEdges(current, nextEdges));
@@ -243,6 +274,10 @@ function GraphFlowInner({
     selectedBlockId,
     repairHighlightNodeIds,
     repairHighlightEdgeIds,
+    highlightKind,
+    edgePicker?.activeEdgeId,
+    edgePicker?.openPicker,
+    edgePicker?.lang,
     setViewport,
     fitView,
     graph,
@@ -252,13 +287,9 @@ function GraphFlowInner({
     draggingRef.current = true;
   }, []);
 
-  const onNodeDragStop = useCallback(
-    (_event, node) => {
-      draggingRef.current = false;
-      moveNode(graph, node.id, node.position);
-    },
-    [graph],
-  );
+  const onNodeDragStop = useCallback(() => {
+    draggingRef.current = false;
+  }, []);
 
   // Live drag preview: forbid invalid connections at the React Flow level.
   const isValidConnection = useCallback(
@@ -455,7 +486,11 @@ function GraphFlowInner({
     [graph],
   );
 
-  const isEmpty = (projection?.nodes?.length ?? 0) === 0;
+  const nodeCount = projection?.nodes?.length ?? 0;
+  const isEmpty = nodeCount === 0;
+  const onlyRenderVisible = nodeCount > 80;
+
+  const defaultEdgeOptions = useMemo(() => ({ ...EDGE_DEFAULTS }), []);
 
   return (
     <div ref={flowHostRef} className="graph-flow-host">
@@ -479,10 +514,14 @@ function GraphFlowInner({
       onDrop={onDrop}
       onMoveEnd={onMoveEnd}
       nodeTypes={NODE_TYPES}
+      edgeTypes={EDGE_TYPES}
       defaultViewport={projection.viewport}
-      defaultEdgeOptions={EDGE_DEFAULTS}
-      connectionLineStyle={{ stroke: 'rgba(99,102,241,0.45)', strokeWidth: 2 }}
+      defaultEdgeOptions={defaultEdgeOptions}
+      connectionLineType={ConnectionLineType.Bezier}
+      connectionLineStyle={{ stroke: 'var(--color-primary)', strokeWidth: 2, opacity: 0.55 }}
       fitView={isEmpty}
+      onlyRenderVisibleElements={onlyRenderVisible}
+      nodesDraggable={false}
       nodeDragThreshold={NODE_CLICK_DRAG_THRESHOLD_PX}
       selectNodesOnDrag={false}
       nodesFocusable
@@ -502,18 +541,25 @@ function GraphFlowInner({
     >
       <Background
         variant={BackgroundVariant.Dots}
-        gap={24}
-        size={1.2}
-        color="#6366f1"
-        style={{ opacity: 0.35 }}
+        gap={32}
+        size={1}
+        color="var(--color-canvas-dot)"
+        style={{ opacity: 0.8 }}
       />
-      <Controls
-        style={{
-          background: 'rgba(13,9,32,0.8)',
-          border: '1px solid rgba(99,102,241,0.3)',
-          borderRadius: 10,
-          boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+      <CanvasZoomControls lang={lang} />
+      <MiniMap
+        className="canvas-minimap"
+        position="bottom-right"
+        nodeColor={(node) => {
+          if (node.data?.executionPath) return 'var(--color-primary)';
+          if (node.data?.repairPulse) return 'var(--color-success)';
+          return 'var(--color-primary)';
         }}
+        nodeStrokeWidth={0}
+        maskColor="rgba(249, 250, 251, 0.82)"
+        pannable
+        zoomable
+        ariaLabel={lang === 'en' ? 'Canvas minimap' : 'Миникарта холста'}
       />
       {isEmpty && (
         <div
@@ -538,9 +584,12 @@ function GraphFlowInner({
  * Accepts graph editor API + projection; no stack state needed.
  */
 export function ReactFlowCanvas(props) {
+  const { onInsertNodeOnEdge, ...rest } = props;
   return (
     <ReactFlowProvider>
-      <GraphFlowInner {...props} />
+      <FlowEdgePickerHost onInsertOnEdge={onInsertNodeOnEdge}>
+        <GraphFlowInner {...rest} />
+      </FlowEdgePickerHost>
     </ReactFlowProvider>
   );
 }

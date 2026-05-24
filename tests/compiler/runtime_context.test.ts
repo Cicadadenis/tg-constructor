@@ -10,6 +10,8 @@ import "../../core/codegen/index.js";
 const runtime = emitRuntimeContextRuntime();
 assert.match(runtime, /def build_runtime_ctx/);
 assert.match(runtime, /"vars": dict\(_RUNTIME_CTX_DEFAULTS\)/);
+assert.match(runtime, /"traceId"/);
+assert.match(runtime, /"temp"/);
 assert.doesNotMatch(runtime, /GLOBAL_STORE/);
 
 const preamble = emitHandlerContextPreamble(false, 1);

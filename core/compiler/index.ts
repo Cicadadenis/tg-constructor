@@ -5,3 +5,7 @@ export * from "./dependencyResolver";
 export * from "./codegen";
 export * from "./unifiedCompilePipeline";
 export * from "./capabilityCompilePipeline";
+export {
+  runStrictExecutionCompilerGate,
+  StrictExecutionCompilerError,
+} from "./strictExecutionCompilerGate.mjs";

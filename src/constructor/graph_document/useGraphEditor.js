@@ -84,6 +84,13 @@ export function useGraphEditor(options = {}) {
       redo: () => actionsRef.current.redo(),
       setViewport: (...args) => actionsRef.current.setViewport(...args),
       resetGraphDocument: (...args) => actionsRef.current.resetGraphDocument(...args),
+      canUndo: () => storeRef.current.canUndo(),
+      canRedo: () => storeRef.current.canRedo(),
+      getHistoryState: () => storeRef.current.getHistoryState(),
+      /** Bumped on dispatch / undo / redo — use as a React dependency */
+      get historyRevision() {
+        return storeRef.current.getHistoryState().cursor;
+      },
     };
   }
 

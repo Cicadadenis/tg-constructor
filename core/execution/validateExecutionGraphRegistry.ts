@@ -3,6 +3,7 @@
  */
 
 import { assertRegisteredBlockType } from "../../src/constructor/graph_document/graph_node_payload.js";
+import { isIntentOnlyNodeType } from "../runtime/execution/executionNodeTypes.mjs";
 import {
   assertBlockCapabilitiesRegistered,
   hasBlockCapabilities,
@@ -20,6 +21,14 @@ export function validateExecutionGraphRegistry(
   for (const node of execution.nodes) {
     const nodeId = String(node.id || "").trim();
     const rawType = String(node.type || "").trim();
+
+    if (isIntentOnlyNodeType(rawType)) {
+      throw new ExecutionGraphValidationError(
+        "UNKNOWN_NODE_TYPE",
+        `Execution node "${nodeId}": intent-only type "${rawType}" cannot reach execution graph`,
+        { nodeId, type: rawType },
+      );
+    }
 
     try {
       assertRegisteredBlockType(rawType, { nodeId });

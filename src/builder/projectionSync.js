@@ -17,6 +17,8 @@ function nodeVisualKey(n) {
     d.canvasBlockType,
     d.previewEpoch,
     d.repairPulse ? 1 : 0,
+    d.executionPath ? 1 : 0,
+    n.className,
     d.isChainRoot ? 1 : 0,
     JSON.stringify(d.props ?? {}),
   ].join('|');
@@ -31,6 +33,9 @@ function edgeVisualKey(e) {
     e.targetHandle,
     e.animated ? 1 : 0,
     e.style ? JSON.stringify(e.style) : '',
+    e.className,
+    e.data?.executionPath ? 1 : 0,
+    e.data?.repairPath ? 1 : 0,
   ].join('|');
 }
 
@@ -63,26 +68,32 @@ export function flowEdgesNeedUpdate(current, next) {
  * @param {import('@xyflow/react').Node[]} current
  * @param {import('@xyflow/react').Node[]} projected
  * @param {string | null} selectedBlockId
- * @param {Set<string>} pulseIds
+ * @param {{ repairIds?: Set<string>, executionIds?: Set<string> }} highlight
  * @param {number | string | undefined} previewEpoch
  */
-export function mergeProjectionNodes(current, projected, selectedBlockId, pulseIds, previewEpoch) {
-  const next = projected.map((n) => ({
-    ...n,
-    selected: n.id === selectedBlockId,
-    style: pulseIds.has(n.id)
-      ? {
-        ...(n.style || {}),
-        boxShadow: '0 0 0 2px rgba(62,207,142,0.85), 0 0 24px rgba(62,207,142,0.45)',
-        borderRadius: 12,
-      }
-      : n.style,
-    data: {
-      ...n.data,
-      previewEpoch,
-      repairPulse: pulseIds.has(n.id),
-    },
-  }));
+export function mergeProjectionNodes(current, projected, selectedBlockId, highlight, previewEpoch) {
+  const repairIds = highlight?.repairIds || new Set();
+  const executionIds = highlight?.executionIds || new Set();
+
+  const next = projected.map((n) => {
+    const classes = (n.className || 'cicada-node flow-node-card-projection').split(/\s+/).filter(Boolean);
+    const base = classes.filter((c) => !c.startsWith('flow-node--'));
+    if (executionIds.has(n.id)) base.push('flow-node--execution');
+    if (repairIds.has(n.id)) base.push('flow-node--repair-pulse');
+
+    return {
+      ...n,
+      className: [...new Set(base)].join(' '),
+      selected: n.id === selectedBlockId,
+      style: n.style,
+      data: {
+        ...n.data,
+        previewEpoch,
+        repairPulse: repairIds.has(n.id),
+        executionPath: executionIds.has(n.id),
+      },
+    };
+  });
 
   if (!flowNodesNeedUpdate(current, next)) {
     return current;

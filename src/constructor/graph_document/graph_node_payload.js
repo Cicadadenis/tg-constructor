@@ -5,6 +5,7 @@
  */
 
 import { blockRegistry, getBlockDefinition } from '../../../core/blockRegistry.js';
+import { getNodeManifestRegistry } from '../../../core/node_manifest/nodeManifestRegistry.mjs';
 
 export const LEGACY_WRAPPER_TYPES = new Set(['cicada', 'unknown', '']);
 
@@ -134,11 +135,11 @@ export function assertRegisteredBlockType(type, context = {}) {
       { nodeId: context.nodeId, type: t || undefined },
     );
   }
-  if (!blockRegistry[t]) {
+  try {
+    getNodeManifestRegistry().assertRegistered(t, { nodeId: context.nodeId });
+  } catch (err) {
     throw new UnknownBlockTypeError(
-      context.nodeId
-        ? `Unknown block type "${t}" for node "${context.nodeId}"`
-        : `Unknown block type "${t}"`,
+      err instanceof Error ? err.message : `Unknown block type "${t}"`,
       { nodeId: context.nodeId, type: t },
     );
   }
@@ -152,14 +153,7 @@ export function assertRegisteredBlockType(type, context = {}) {
 export function assertNodeTypeInRegistry(node) {
   const nodeId = node?.id != null ? String(node.id) : undefined;
   const type = coerceLegacyBlockType(node);
-  if (!blockRegistry[type]) {
-    throw new UnknownBlockTypeError(
-      nodeId
-        ? `Unknown block type "${type}" for node "${nodeId}"`
-        : `Unknown block type "${type}"`,
-      { nodeId, type },
-    );
-  }
+  getNodeManifestRegistry().assertRegistered(type, { nodeId });
   return type;
 }
 

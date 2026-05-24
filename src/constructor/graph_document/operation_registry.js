@@ -7,8 +7,8 @@
  *  - inspector schema per node type (schema-driven editable fields)
  *  - validationRules per node type (zod-style payload guards)
  *
- * Stays read-only at runtime: contracts are derived from the central
- * blockRegistry / aiogram3 metadata. This is the "graph semantic layer"
+ * Contracts are derived from NodeManifestRegistry (single source of truth).
+ * This is the "graph semantic layer"
  * that disappeared with the stack/legacy removal — restored without any
  * stack/segment vocabulary.
  *
@@ -17,10 +17,10 @@
  */
 
 import { z } from 'zod';
-import {
-  blockDefinitions,
-  getBlockDefinition,
-} from '../../../core/blockRegistry.js';
+import { getBlockDefinition } from '../../../core/blockRegistry.js';
+import { getNodeManifestRegistry } from '../../../core/node_manifest/nodeManifestRegistry.mjs';
+import { manifestToOperationContract } from '../../../core/node_manifest/manifestToOperationContract.mjs';
+import { PAYLOAD_VALIDATION_RULES as VALIDATION_RULES } from '../../../core/node_manifest/payloadValidationRules.mjs';
 import {
   assertRegisteredBlockType,
   LEGACY_WRAPPER_TYPES,
@@ -220,72 +220,6 @@ const INSPECTOR_FIELDS = Object.freeze({
   ],
 });
 
-/** Per-type validation rules invoked before dispatch / on Inspector save. */
-const VALIDATION_RULES = Object.freeze({
-  message: (props) => (String(props?.text ?? '').trim() ? null : 'Текст сообщения не может быть пустым'),
-  reply: (props) => (String(props?.text ?? '').trim() ? null : 'Текст ответа не может быть пустым'),
-  command: (props) => (String(props?.cmd ?? '').trim() ? null : 'Укажите команду (без /)'),
-  callback: (props) => (
-    String(props?.data ?? '').trim() || String(props?.label ?? '').trim()
-      ? null
-      : 'Укажите callback_data или текст кнопки'
-  ),
-  condition: (props) => (String(props?.cond ?? '').trim() ? null : 'Условие не может быть пустым'),
-  condition_not: (props) => (String(props?.cond ?? '').trim() ? null : 'Условие не может быть пустым'),
-  ask: (props) => (String(props?.question ?? '').trim() ? null : 'Вопрос не может быть пустым'),
-  remember: (props) => (String(props?.varname ?? '').trim() ? null : 'Укажите имя переменной'),
-  set_variable: (props) => {
-    if (!String(props?.name ?? props?.varname ?? '').trim()) return 'Укажите имя переменной';
-    return null;
-  },
-  get_variable: (props) => {
-    if (!String(props?.name ?? '').trim()) return 'Укажите имя в ctx.vars';
-    return null;
-  },
-  get: (props) => (String(props?.key ?? '').trim() ? null : 'Укажите ключ хранилища'),
-  save: (props) => (String(props?.key ?? '').trim() ? null : 'Укажите ключ хранилища'),
-  goto: (props) => (String(props?.target ?? '').trim() ? null : 'Укажите целевой обработчик'),
-  loop: (props) => {
-    const mode = String(props?.mode ?? 'count').trim();
-    if (mode === 'count') {
-      const n = Number(props?.count);
-      if (!Number.isFinite(n) || n <= 0) return 'Количество итераций должно быть положительным числом';
-    } else if (mode === 'while') {
-      if (!String(props?.cond ?? '').trim()) return 'Укажите условие цикла';
-    }
-    return null;
-  },
-  require_role: (props) => {
-    const explicit = String(props?.roles ?? '').trim();
-    if (explicit) {
-      const parts = explicit.split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean);
-      const allowed = new Set(['admin', 'moderator', 'user']);
-      for (const p of parts) {
-        if (!allowed.has(p.toLowerCase())) {
-          return `Неизвестная роль «${p}». Допустимо: admin, moderator, user`;
-        }
-      }
-      return null;
-    }
-    const role = String(props?.role ?? 'user').trim().toLowerCase();
-    if (!['admin', 'moderator', 'user'].includes(role)) {
-      return 'Роль должна быть admin, moderator или user';
-    }
-    return null;
-  },
-  foreach: (props) => {
-    if (!String(props?.list ?? props?.collection ?? '').trim()) {
-      return 'Укажите список (list)';
-    }
-    if (!String(props?.var ?? props?.item ?? '').trim()) {
-      return 'Укажите переменную элемента (var)';
-    }
-    return null;
-  },
-  bot: (props) => (String(props?.token ?? '').trim() ? null : 'Токен бота обязателен'),
-  version: (props) => (String(props?.version ?? '').trim() ? null : 'Укажите версию'),
-});
-
 function portFromFlow(blockType, dir) {
   const cfg = FLOW_PORTS[blockType] || { input: 'flow', output: 'flow' };
   const transport = dir === PORT_DIRECTIONS.INPUT ? cfg.input : cfg.output;
@@ -375,11 +309,20 @@ function buildContract(definition) {
   });
 }
 
-const REGISTRY = Object.freeze(
-  Object.fromEntries(
-    blockDefinitions.map((definition) => [definition.type, buildContract(definition)]),
-  ),
-);
+let _operationContractRegistry = null;
+
+function getOperationContractRegistry() {
+  if (!_operationContractRegistry) {
+    _operationContractRegistry = Object.freeze(
+      Object.fromEntries(
+        getNodeManifestRegistry()
+          .list()
+          .map((manifest) => [manifest.type, manifestToOperationContract(manifest)]),
+      ),
+    );
+  }
+  return _operationContractRegistry;
+}
 
 /** @deprecated Non-strict UI fallback only — never used when registry enforcement is on. */
 const FALLBACK_CONTRACT = Object.freeze({
@@ -398,24 +341,24 @@ const FALLBACK_CONTRACT = Object.freeze({
 export function hasOperationContract(nodeType) {
   const t = String(nodeType ?? '').trim();
   if (!t || LEGACY_WRAPPER_TYPES.has(t)) return false;
-  return Boolean(REGISTRY[t]);
+  return getNodeManifestRegistry().has(t);
 }
 
 /** Strict lookup — throws via assertRegisteredBlockType when missing. */
 export function getOperationContractStrict(nodeType, context = {}) {
   const t = assertRegisteredBlockType(String(nodeType ?? '').trim(), context);
-  return REGISTRY[t];
+  return getOperationContractRegistry()[t];
 }
 
 /** Lookup an operation contract by node type (returns FALLBACK for unknown — prefer hasOperationContract). */
 export function getOperationContract(nodeType) {
   const t = String(nodeType || '').trim();
-  return REGISTRY[t] || FALLBACK_CONTRACT;
+  return getOperationContractRegistry()[t] || FALLBACK_CONTRACT;
 }
 
-/** All known operation contracts (keyed by type). */
+/** All known operation contracts (keyed by type) — derived from NodeManifestRegistry. */
 export function listOperationContracts() {
-  return REGISTRY;
+  return getOperationContractRegistry();
 }
 
 function findPort(ports, portId) {

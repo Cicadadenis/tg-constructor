@@ -1,7 +1,10 @@
 /**
- * Vertical puzzle-block layout metrics (shared by CicadaNode + layoutChain).
- * Matches BuilderComponents stack snap geometry.
+ * Vertical puzzle-block layout metrics (shared by stack UI + layoutChain).
+ * Canvas nodes use nodeCard/nodeCardLayout.js for card dimensions.
  */
+
+import { getFlowNodeCardLayout } from './nodeCard/nodeCardLayout.js';
+import { graphResolveNodeType } from '../constructor/graph_document/graph_node_payload.js';
 
 export const BLOCK_W = 200;
 export const BLOCK_H = 36;
@@ -82,7 +85,8 @@ export function hasIncomingFlowEdge(doc, nodeId) {
  * @param {object} doc
  */
 export function getChainStepBelow(parentNode, doc) {
-  if (!parentNode) return BLOCK_H;
+  if (!parentNode) return 120;
   const isRoot = !hasIncomingFlowEdge(doc, parentNode.id);
-  return getBlockVisualMetrics(parentNode.type, isRoot).chainStepY;
+  const type = graphResolveNodeType(parentNode);
+  return getFlowNodeCardLayout({ type, isChainRoot: isRoot }).chainStepY;
 }

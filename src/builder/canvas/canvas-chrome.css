@@ -1,0 +1,151 @@
+/* Canvas chrome — zoom controls + minimap placement */
+
+.canvas-zoom-controls {
+  position: absolute;
+  bottom: var(--space-2);
+  left: var(--space-2);
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: var(--space-half);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.canvas-zoom-controls__btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 16px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+  cursor: pointer;
+  transition: var(--motion-transition-hover);
+}
+
+.canvas-zoom-controls__btn:hover {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+.canvas-zoom-controls__btn--fit {
+  font-size: 14px;
+  margin-left: var(--space-half);
+  border-left: 1px solid var(--color-border);
+  padding-left: var(--space-half);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.canvas-zoom-controls__level {
+  min-width: 44px;
+  text-align: center;
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+  user-select: none;
+}
+
+.graph-flow-host .canvas-minimap.react-flow__minimap {
+  bottom: var(--space-2);
+  right: var(--space-2);
+  top: auto;
+  left: auto;
+  width: 140px;
+  height: 100px;
+  margin: 0;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  background: var(--color-surface);
+}
+
+.graph-flow-host .canvas-minimap .react-flow__minimap-mask {
+  fill: rgba(37, 99, 235, 0.08);
+}
+
+.graph-flow-host .canvas-minimap .react-flow__minimap-node {
+  fill: var(--color-primary);
+  stroke: none;
+}
+
+/* Bezier flow edges */
+.flow-bezier-edge__path {
+  fill: none;
+  stroke: var(--color-border-strong);
+  stroke-width: 1.5;
+  transition: stroke var(--motion-duration-base) var(--motion-ease-out),
+    stroke-width var(--motion-duration-base) var(--motion-ease-out);
+}
+
+.flow-bezier-edge__hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 20;
+  pointer-events: stroke;
+}
+
+.flow-bezier-edge--hover .flow-bezier-edge__path,
+.flow-bezier-edge--selected .flow-bezier-edge__path {
+  stroke: var(--color-primary);
+  stroke-width: 2;
+}
+
+.flow-bezier-edge--execution .flow-bezier-edge__path {
+  stroke: var(--color-primary);
+  stroke-width: 2.5;
+  filter: drop-shadow(0 0 4px rgba(37, 99, 235, 0.35));
+}
+
+.flow-bezier-edge--repair .flow-bezier-edge__path {
+  stroke: var(--color-success);
+  stroke-width: 2.5;
+}
+
+.flow-bezier-edge--invalid .flow-bezier-edge__path {
+  stroke: var(--color-danger);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+}
+
+.react-flow__edge.flow-bezier-edge-rf {
+  pointer-events: visibleStroke !important;
+}
+
+.react-flow__edge.flow-bezier-edge-rf .react-flow__edge-interaction {
+  pointer-events: visibleStroke !important;
+}
+
+.flow-add-step-edge--execution .flow-add-step-edge__path {
+  stroke: var(--color-primary);
+  stroke-width: 2.5;
+}
+
+/* Node highlight rings (projection-driven) */
+.react-flow__node.cicada-node.flow-node--execution .flow-node-card__surface {
+  box-shadow: var(--shadow-md), 0 0 0 2px var(--color-primary), 0 0 20px rgba(37, 99, 235, 0.25);
+  border-color: var(--color-primary-border);
+}
+
+.react-flow__node.cicada-node.flow-node--repair-pulse .flow-node-card__surface {
+  box-shadow: var(--shadow-md), 0 0 0 2px var(--color-success), 0 0 18px rgba(22, 163, 74, 0.3);
+}
+
+.react-flow__node.cicada-node.flow-node--snap-ok .flow-node-card__surface {
+  box-shadow: var(--shadow-md), 0 0 0 2px #86efac;
+}
+
+.react-flow__node.cicada-node.flow-node--snap-bad .flow-node-card__surface {
+  opacity: 0.72;
+}

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
 from cicada_platform.api.routes import compile as compile_route
@@ -9,6 +11,21 @@ from cicada_platform.api.routes import constructor, health, runtime, sandbox
 from cicada_platform.core.di.container import Container
 from cicada_platform.core.logging.setup import configure_logging
 from cicada_platform.core.metrics.registry import MetricsRegistry
+from cicada_platform.startup_integrity import (
+    log_startup_integrity_report,
+    run_startup_integrity_check,
+)
+
+
+@asynccontextmanager
+async def _app_lifespan(app: FastAPI):
+    result = run_startup_integrity_check()
+    if not result.ok:
+        log_startup_integrity_report(result)
+        raise RuntimeError(
+            f"Startup blocked: {len(result.violations)} integrity violation(s)"
+        )
+    yield
 
 
 def create_app() -> FastAPI:
@@ -20,6 +37,7 @@ def create_app() -> FastAPI:
         title="Cicada Platform API",
         version="0.2.0",
         description="Execute validated graph IR and sandbox jobs",
+        lifespan=_app_lifespan,
     )
     app.state.container = container
 

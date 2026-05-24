@@ -2,7 +2,7 @@
  * Transport abstraction — Telegram is one adapter implementation.
  */
 
-import type { BotRuntimeContext } from "../runtime/runtimeContext.js";
+import type { ExecutionContext } from "../runtime/executionContext.js";
 
 export interface SendMessageOptions {
   parseMode?: string;
@@ -19,20 +19,20 @@ export interface TransportSendResult {
 export interface TransportAdapter {
   readonly id: string;
   sendMessage(
-    ctx: BotRuntimeContext,
+    ctx: ExecutionContext,
     text: string,
     options?: SendMessageOptions,
   ): Promise<TransportSendResult>;
   answerCallback?(
-    ctx: BotRuntimeContext,
+    ctx: ExecutionContext,
     text?: string,
   ): Promise<TransportSendResult>;
   editMessage?(
-    ctx: BotRuntimeContext,
+    ctx: ExecutionContext,
     text: string,
   ): Promise<TransportSendResult>;
   chatAction?(
-    ctx: BotRuntimeContext,
+    ctx: ExecutionContext,
     action: string,
   ): Promise<TransportSendResult>;
 }

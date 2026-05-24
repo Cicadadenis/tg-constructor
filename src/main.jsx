@@ -6,6 +6,7 @@ import { API_URL } from './apiClient.js';
 import { prefetchCsrfToken } from './csrf.js';
 import { initDevErrorLogging } from './debug/devLog.js';
 import './index.css';
+import './layout/editor-shell.css';
 
 initDevErrorLogging();
 prefetchCsrfToken(API_URL).catch(() => {});

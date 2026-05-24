@@ -4,51 +4,25 @@ import { registerAppDialog, unregisterAppDialog } from './appDialog.js';
 
 const VARIANTS = {
   default: {
-    border: 'rgba(62,207,142,0.35)',
-    titleColor: '#a7f3d0',
-    confirmBg: 'linear-gradient(135deg,#3ecf8e,#0ea5e9)',
-    confirmColor: '#0a0f14',
+    border: 'var(--color-border)',
+    titleColor: 'var(--color-text)',
+    confirmClass: 'ds-btn ds-btn--primary',
   },
   danger: {
-    border: 'rgba(248,113,113,0.4)',
-    titleColor: '#fda4af',
-    confirmBg: 'linear-gradient(135deg,#fb7185,#ef4444)',
-    confirmColor: '#fff',
+    border: 'var(--color-danger)',
+    titleColor: 'var(--color-danger)',
+    confirmClass: 'ds-btn ds-btn--danger',
   },
   warning: {
-    border: 'rgba(251,191,36,0.4)',
-    titleColor: '#fde68a',
-    confirmBg: 'linear-gradient(135deg,#fbbf24,#f59e0b)',
-    confirmColor: '#1a1208',
+    border: 'var(--color-warning)',
+    titleColor: 'var(--color-warning)',
+    confirmClass: 'ds-btn ds-btn--primary',
   },
   info: {
-    border: 'rgba(96,165,250,0.35)',
-    titleColor: '#93c5fd',
-    confirmBg: 'linear-gradient(135deg,#60a5fa,#3b82f6)',
-    confirmColor: '#fff',
+    border: 'var(--color-primary-border)',
+    titleColor: 'var(--color-primary)',
+    confirmClass: 'ds-btn ds-btn--primary',
   },
-};
-
-const cancelBtnStyle = {
-  padding: '10px 16px',
-  borderRadius: 10,
-  border: '1px solid rgba(255,255,255,0.2)',
-  background: 'rgba(255,255,255,0.05)',
-  color: 'rgba(255,255,255,0.92)',
-  cursor: 'pointer',
-  fontFamily: 'Syne, system-ui, sans-serif',
-  fontSize: 13,
-  fontWeight: 600,
-};
-
-const confirmBtnStyle = {
-  padding: '10px 18px',
-  borderRadius: 10,
-  border: 'none',
-  cursor: 'pointer',
-  fontFamily: 'Syne, system-ui, sans-serif',
-  fontSize: 13,
-  fontWeight: 700,
 };
 
 function normalizeDialog(input, defaults) {
@@ -61,14 +35,14 @@ function DialogTitle({ id, variant, children }) {
   return (
     <div
       id={id}
+      className="ds-h2"
       style={{
-        padding: '18px 22px',
-        borderBottom: '1px solid rgba(255,255,255,0.08)',
-        fontFamily: 'Syne, system-ui, sans-serif',
-        fontWeight: 700,
-        fontSize: 16,
+        padding: 'var(--space-2)',
+        paddingBottom: 'var(--space-1)',
+        margin: 0,
+        fontSize: 'var(--font-size-h2)',
         color: theme.titleColor,
-        letterSpacing: '0.01em',
+        borderBottom: '1px solid var(--color-border)',
       }}
     >
       {children}
@@ -162,12 +136,11 @@ export function AppDialogProvider({ children }) {
         position: 'fixed',
         inset: 0,
         zIndex: 10650,
-        background: 'rgba(2,1,12,0.72)',
-        backdropFilter: 'blur(6px)',
+        background: 'var(--color-overlay)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 20,
+        padding: 'var(--space-3)',
         animation: 'appDialogFadeIn 0.2s ease',
       }}
     >
@@ -176,12 +149,13 @@ export function AppDialogProvider({ children }) {
         aria-modal="true"
         aria-labelledby="app-dialog-title"
         onClick={(e) => e.stopPropagation()}
+        className="ds-card"
         style={{
           width: 'min(480px, 92vw)',
-          borderRadius: 16,
+          borderRadius: 'var(--radius-lg)',
           border: `1px solid ${theme.border}`,
-          background: 'linear-gradient(160deg, rgba(22,18,38,0.97), rgba(12,10,24,0.98))',
-          boxShadow: '0 30px 100px rgba(0,0,0,0.65), 0 0 0 1px rgba(255,255,255,0.04) inset',
+          background: 'var(--color-surface)',
+          boxShadow: 'var(--shadow-md)',
           overflow: 'hidden',
           animation: 'appDialogSlideIn 0.22s cubic-bezier(0.22, 1, 0.36, 1)',
         }}
@@ -190,75 +164,62 @@ export function AppDialogProvider({ children }) {
           {dialog.title}
         </DialogTitle>
         {dialog.message && (
-          <p style={{
+          <p className="ds-body" style={{
             margin: 0,
-            padding: '0 22px 18px',
-            color: 'rgba(255,255,255,0.88)',
-            fontSize: 14,
-            lineHeight: 1.55,
-            whiteSpace: 'pre-wrap',
+            padding: '0 var(--space-2) var(--space-2)',
+            color: 'var(--color-text-secondary)',
           }}
           >
             {dialog.message}
           </p>
         )}
         {dialog.kind === 'prompt' && (
-          <div style={{ padding: '0 22px 18px' }}>
+          <div style={{ padding: '0 var(--space-2) var(--space-2)' }}>
             <input
               ref={inputRef}
+              className="ds-input"
               type="text"
               defaultValue={dialog.defaultValue ?? ''}
-              placeholder={dialog.placeholder || ''}
+              placeholder={dialog.placeholder ?? ''}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
-                  closeDialog(e.currentTarget.value);
+                  closeDialog(e.target.value);
                 }
-              }}
-              style={{
-                width: '100%',
-                boxSizing: 'border-box',
-                padding: '11px 14px',
-                borderRadius: 10,
-                border: '1px solid rgba(255,255,255,0.14)',
-                background: 'rgba(0,0,0,0.35)',
-                color: '#f8fafc',
-                fontSize: 14,
-                fontFamily: 'inherit',
-                outline: 'none',
               }}
             />
           </div>
         )}
         <div style={{
-          padding: '0 22px 22px',
           display: 'flex',
           justifyContent: 'flex-end',
-          gap: 10,
-          flexWrap: 'wrap',
+          gap: 'var(--space-1)',
+          padding: 'var(--space-2)',
+          borderTop: '1px solid var(--color-border)',
+          background: 'var(--color-surface-muted)',
         }}
         >
-          {(dialog.kind === 'confirm' || dialog.kind === 'prompt') && (
-            <button type="button" onClick={() => closeDialog(null)} style={cancelBtnStyle}>
-              {dialog.cancelText || 'Отмена'}
+          {dialog.kind !== 'alert' && (
+            <button
+              type="button"
+              className="ds-btn ds-btn--ghost"
+              onClick={() => closeDialog(null)}
+            >
+              {dialog.cancelText}
             </button>
           )}
           <button
             type="button"
+            className={theme.confirmClass}
             onClick={() => {
               if (dialog.kind === 'prompt') {
                 closeDialog(inputRef.current?.value ?? '');
                 return;
               }
-              closeDialog(dialog.kind === 'confirm' ? true : undefined);
-            }}
-            style={{
-              ...confirmBtnStyle,
-              background: theme.confirmBg,
-              color: theme.confirmColor,
+              closeDialog(true);
             }}
           >
-            {dialog.confirmText || 'OK'}
+            {dialog.confirmText}
           </button>
         </div>
       </div>

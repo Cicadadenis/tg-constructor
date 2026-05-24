@@ -24,9 +24,7 @@ import {
   uid,
   syncUidSequenceFromGraph,
   AiDiagnosticSection,
-  BlockInfoModal,
   Sidebar,
-  PropsPanel,
 } from './builder/BuilderComponents.jsx';
 import PythonPane from './builder/PythonPane.jsx';
 import CanvasCompileErrors from './builder/CanvasCompileErrors.jsx';
@@ -60,6 +58,13 @@ import {
   resolveInitialSessionUser,
 } from './apiClient.js';
 import { BlockInfoContext, AddBlockContext, BuilderUiContext } from './builderContext.js';
+import { AppLayoutProvider } from './layout/AppLayoutContext.jsx';
+import EditorShell from './layout/EditorShell.jsx';
+import LeftPanel from './layout/LeftPanel.jsx';
+import CenterPanel from './layout/CenterPanel.jsx';
+import RightInspectorPanel from './layout/RightInspectorPanel.jsx';
+import EntityInspectorPanel from './builder/inspector/EntityInspectorPanel.jsx';
+import MobileZoneNav from './layout/MobileZoneNav.jsx';
 import { useGraphEditor } from './constructor/graph_document/useGraphEditor.js';
 import {
   migrateGraphDocument,
@@ -125,12 +130,24 @@ import { GraphCanvasActionsProvider } from './builder/graphCanvasActionsContext.
 import {
   getNodeDeleteSummary,
   removeGraphNodes,
+  duplicateGraphNode,
 } from './builder/graph_node_delete.js';
 import { getChainStepBelow } from './builder/blockLayout.js';
+import { applyFlowBuilderLayout } from './builder/flowLayout/applyFlowBuilderLayout.js';
+import FlowLayoutToolbar from './builder/flowLayout/FlowLayoutToolbar.jsx';
+import FlowHistoryToolbar from './builder/flowLayout/FlowHistoryToolbar.jsx';
+import ToastHost from './ui/ToastHost.jsx';
+import EmptyState from './ui/EmptyState.jsx';
+import {
+  normalizeFlowLayoutMode,
+  readLayoutModeFromMetadata,
+} from './builder/flowLayout/flowLayoutModes.js';
+import { planInsertNodeOnEdge } from './builder/flowEdge/insertNodeOnEdge.js';
 import { validateGraphSemantics, getNodePortDescriptors, canConnect, validateConnection } from './constructor/graph_document/operation_registry.js';
 import { normalizeGraphError, normalizeConnectionError } from './builder/graph_error_messages.js';
 import { shouldShowCanvasOnboardingOverlay } from './constructor/graph_document/graph_canvas_state.js';
-import CanvasOnboardingOverlay from './builder/CanvasOnboardingOverlay.jsx';
+import FlowCanvasEmptyState from './builder/FlowCanvasEmptyState.jsx';
+import { exampleKeyForTemplate } from './builder/flowTemplates.js';
 import { scheduleCanvasFocusAfterMutation } from './builder/canvas_graph_focus.js';
 import { useCanvasAutosave } from './app/autosave/useCanvasAutosave.js';
 import { useUserProjects } from './app/hooks/useUserProjects.js';
@@ -929,9 +946,8 @@ import {
   graphResolveBotToken,
   graphMakePropsForNewNode as graphMakePropsForNewBlock,
   graphResolveNodeType,
+  graphCanDuplicateNodeType,
   graphCanChainAfter,
-  layoutAllFlowChains,
-  spreadOverlappingNodes,
   resolveUiAttachmentTargetNodeId,
   resolveFlowInsertAnchorId,
   graphUniqueBlockLabel,
@@ -975,6 +991,10 @@ export default function App() {
     () => graph.getGraphDocument().metadata.revision,
     [graph, graph.getGraphDocument().metadata.revision],
   );
+  const graphHistory = React.useMemo(
+    () => (graph.getHistoryState ? graph.getHistoryState() : { canUndo: false, canRedo: false }),
+    [graph, graphRevision],
+  );
   const syncGraphUidSequence = useCallback(() => {
     syncUidSequenceFromGraph(graph.getGraphDocument());
   }, [graph]);
@@ -985,7 +1005,7 @@ export default function App() {
   });
   /** Legacy autosave guard — old bundles still assign .current during graph loads */
   const skipNextCanvasSave = useRef(false);
-  const { userProjects, setUserProjects, loadUserProjects } = useUserProjects();
+  const { userProjects, setUserProjects, loadUserProjects, projectsLoading } = useUserProjects();
   const canvasProjection = React.useMemo(
     () => graph.getCanvasProjection(),
     [graph, graphRevision],
@@ -1001,6 +1021,32 @@ export default function App() {
     return shouldShowCanvasOnboardingOverlay(doc);
   }, [graph, graphRevision, graphNodeCount]);
 
+  const [debugTraceId, setDebugTraceId] = useState(null);
+  const [debugTraceOpen, setDebugTraceOpen] = useState(false);
+  const [debugCodegenSnapshot, setDebugCodegenSnapshot] = useState(null);
+  const [selectedBlockId, setSelectedBlockId] = useState(null);
+  const [mobileAttentionBlockId, setMobileAttentionBlockId] = useState(null);
+  const [showInstructions, setShowInstructions] = useState(false);
+  /** { type, props } — окно справки по кнопке «i» на блоке */
+  const [draggingPaletteEntry, setDraggingPaletteEntry] = useState(null);
+  const canvasRef = useRef(null);
+  const applyCanvasLayoutRef = useRef(null);
+  const [flowLayoutMode, setFlowLayoutMode] = useState(() => {
+    if (typeof window === 'undefined') return 'AUTO';
+    try {
+      return normalizeFlowLayoutMode(localStorage.getItem('cicada-flow-layout-mode'));
+    } catch {
+      return 'AUTO';
+    }
+  });
+
+  const applyCanvasLayout = useCallback((modeOverride) => {
+    const mode = normalizeFlowLayoutMode(modeOverride ?? flowLayoutMode);
+    return applyFlowBuilderLayout(graph, mode);
+  }, [graph, flowLayoutMode]);
+
+  applyCanvasLayoutRef.current = applyCanvasLayout;
+
   const focusCanvasAfterContent = useCallback(() => {
     scheduleCanvasFocusAfterMutation(
       graph,
@@ -1010,29 +1056,27 @@ export default function App() {
       },
       {
         onLayout: () => {
-          spreadOverlappingNodes(graph);
-          layoutAllFlowChains(graph);
+          applyCanvasLayoutRef.current?.();
         },
         onSelectNode: (id) => setSelectedBlockId(id),
       },
     );
   }, [graph]);
 
-  const [debugTraceId, setDebugTraceId] = useState(null);
-  const [debugTraceOpen, setDebugTraceOpen] = useState(false);
-  const [debugCodegenSnapshot, setDebugCodegenSnapshot] = useState(null);
-  const [selectedBlockId, setSelectedBlockId] = useState(null);
-  const [mobileAttentionBlockId, setMobileAttentionBlockId] = useState(null);
-  const [showInstructions, setShowInstructions] = useState(false);
-  /** { type, props } — окно справки по кнопке «i» на блоке */
-  const [blockInfo, setBlockInfo] = useState(null);
-  const [draggingPaletteEntry, setDraggingPaletteEntry] = useState(null);
-  const canvasRef = useRef(null);
-  const layoutChainRef = useRef(null);
+  const handleFlowLayoutModeChange = useCallback((mode) => {
+    const normalized = normalizeFlowLayoutMode(mode);
+    setFlowLayoutMode(normalized);
+    try {
+      localStorage.setItem('cicada-flow-layout-mode', normalized);
+    } catch {
+      /* ignore quota */
+    }
+    graph.dispatch('PatchMetadata', { patch: { layoutMode: normalized } });
+    applyFlowBuilderLayout(graph, normalized);
+  }, [graph]);
 
   const handleFitAllCanvasNodes = useCallback(() => {
-    spreadOverlappingNodes(graph);
-    layoutAllFlowChains(graph);
+    applyCanvasLayout();
     const nodes = Object.values(graph.getGraphDocument().nodes || {});
     if (!nodes.length) return;
     graph.setViewport(computeViewportForNodes(nodes, {
@@ -1084,6 +1128,27 @@ export default function App() {
       toastTimeoutRef.current = null;
     }, duration);
   }, []);
+
+  const handleGraphUndo = useCallback(() => {
+    const result = graph.undo();
+    if (result?.error) {
+      showToast(
+        uiLang === 'en' ? 'Nothing to undo' : 'Нечего отменять',
+        'info',
+      );
+    }
+  }, [graph, showToast, uiLang]);
+
+  const handleGraphRedo = useCallback(() => {
+    const result = graph.redo();
+    if (result?.error) {
+      showToast(
+        uiLang === 'en' ? 'Nothing to redo' : 'Нечего повторять',
+        'info',
+      );
+    }
+  }, [graph, showToast, uiLang]);
+
   afterCanvasHydrateRef.current = (hydrateResult) => {
     if (hydrateResult?.clearedCorruption) {
       showToast(
@@ -1096,8 +1161,9 @@ export default function App() {
     syncGraphUidSequence();
     const nodes = Object.values(graph.getGraphDocument().nodes || {});
     if (!nodes.length) return;
-    spreadOverlappingNodes(graph);
-    layoutAllFlowChains(graph);
+    const metaMode = readLayoutModeFromMetadata(graph.getGraphDocument().metadata);
+    setFlowLayoutMode(metaMode);
+    applyCanvasLayoutRef.current?.(metaMode);
     focusCanvasAfterContent();
   };
   useEffect(() => {
@@ -1225,8 +1291,12 @@ export default function App() {
     if (!opened) window.location.href = target;
   }, [currentUser]);
 
-  // Mobile state
-  const [mobileTab, setMobileTab] = useState('canvas'); // 'canvas' | 'blocks' | 'props' | 'dsl'
+  // 3-zone layout state
+  const [appSection, setAppSection] = useState('automation');
+  const [mobileZone, setMobileZone] = useState('canvas');
+  const [inspectorTab, setInspectorTab] = useState('props');
+  const [listSearch, setListSearch] = useState('');
+  const [listFilter, setListFilter] = useState('all');
   const isMobile = isMobileBuilderViewport();
   const [isMobileView, setIsMobileView] = useState(() => isMobileBuilderViewport());
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
@@ -1297,31 +1367,31 @@ export default function App() {
           selector: '[data-tour="mobile-tab-blocks"]',
           title: ui.tourMobileBlocksTitle,
           text: ui.tourMobileBlocksBody,
-          onEnter: () => setMobileTab('blocks'),
+          onEnter: () => setMobileZone('left'),
         },
         {
           selector: '[data-tour="mobile-tab-canvas"]',
           title: ui.tourMobileCanvasTitle,
           text: ui.tourMobileCanvasBody,
-          onEnter: () => setMobileTab('canvas'),
+          onEnter: () => setMobileZone('canvas'),
         },
         {
           selector: '[data-tour="mobile-tab-props"]',
           title: ui.tourMobilePropsTitle,
           text: ui.tourMobilePropsBody,
-          onEnter: () => setMobileTab('props'),
+          onEnter: () => { setMobileZone('right'); setInspectorTab('props'); },
         },
         {
           selector: '[data-tour="mobile-tab-dsl"]',
           title: ui.tourMobileDslTitle,
           text: ui.tourMobileDslBody,
-          onEnter: () => { if (canSeeCode) setMobileTab('dsl'); },
+          onEnter: () => { if (canSeeCode) { setMobileZone('right'); setInspectorTab('code'); } },
         },
         {
           selector: '[data-tour="mobile-run"]',
           title: ui.tourRunTitle,
           text: ui.tourRunBody,
-          onEnter: () => setMobileTab('canvas'),
+          onEnter: () => setMobileZone('canvas'),
         },
         {
           selector: '[data-tour="profile-button"]',
@@ -1410,8 +1480,14 @@ export default function App() {
 
   // Если триал-юзер оказался на вкладке dsl — сбросить
   useEffect(() => {
-    if (!canSeeCode && mobileTab === 'dsl') setMobileTab('canvas');
-  }, [canSeeCode, mobileTab]);
+    if (!canSeeCode && inspectorTab === 'code') setInspectorTab('props');
+  }, [canSeeCode, inspectorTab]);
+
+  useEffect(() => {
+    if (appSection !== 'automation' && mobileZone === 'canvas') {
+      setMobileZone('left');
+    }
+  }, [appSection, mobileZone]);
 
   useEffect(() => {
     const handler = () => setIsMobileView(isMobileBuilderViewport());
@@ -1612,7 +1688,7 @@ export default function App() {
     }
 
     // Layout only after successful full transaction
-    layoutChainRef.current?.(parentId);
+    applyCanvasLayoutRef.current?.();
     return {
       ok: true,
       nodeId,
@@ -1637,8 +1713,7 @@ export default function App() {
       })),
     }));
     appendStacks(graph, [], newStacks);
-    spreadOverlappingNodes(graph);
-    layoutAllFlowChains(graph);
+    applyCanvasLayout();
     focusCanvasAfterContent();
     setAiPartialResult(null);
     setAiDiagnosticsOpen(false);
@@ -1778,18 +1853,26 @@ export default function App() {
   const handleInspectNode = useCallback((nodeId) => {
     if (!nodeId) return;
     setSelectedBlockId(nodeId);
-    const doc = graph.getGraphDocument();
-    const node = doc.nodes[nodeId];
-    if (!node) return;
-    const resolvedType = graphResolveNodeType(node);
-    const props = { ...(node.data || {}) };
-    setBlockInfo({ type: resolvedType, props, nodeId });
-    if (isMobileView) setMobileTab('props');
-  }, [graph, isMobileView]);
+    setInspectorTab('props');
+    if (isMobileView) setMobileZone('right');
+  }, [isMobileView]);
+
+  /** Stack «i» help — focus right inspector instead of a modal. */
+  const handleBlockInfoRequest = useCallback((info) => {
+    const nodeId = info?.nodeId || info?.id;
+    if (nodeId && graph.getGraphDocument().nodes[nodeId]) {
+      handleSelectNode(nodeId);
+      setInspectorTab('props');
+      if (isMobileView) setMobileZone('right');
+    }
+  }, [graph, handleSelectNode, isMobileView]);
 
   const handleConnectFeedback = useCallback((result) => {
     if (!result) return;
-    if (result.ok) return;
+    if (result.ok) {
+      applyCanvasLayoutRef.current?.();
+      return;
+    }
     const doc = graph.getGraphDocument();
     const src = doc.nodes[result.params?.source];
     const tgt = doc.nodes[result.params?.target];
@@ -1817,6 +1900,7 @@ export default function App() {
     if (!applied?.ok) return false;
     for (const id of ids) endNodeEdit(id);
     setSelectedBlockId(null);
+    applyCanvasLayoutRef.current?.();
     return true;
   }, [graph]);
 
@@ -1876,10 +1960,120 @@ export default function App() {
     if (ok) executeRemoveNodeIds(ids);
   }, [handleRequestDeleteNode, executeRemoveNodeIds, uiLang]);
 
+  const handleDuplicateNode = useCallback((nodeId) => {
+    const id = String(nodeId || '').trim();
+    if (!id) return;
+    const doc = graph.getGraphDocument();
+    const source = doc.nodes[id];
+    if (!source) return;
+    const type = graphResolveNodeType(source);
+    if (!graphCanDuplicateNodeType(type)) {
+      showToast(
+        uiLang === 'en'
+          ? 'This block type cannot be duplicated'
+          : 'Этот тип блока нельзя дублировать',
+        'info',
+      );
+      return;
+    }
+    const result = duplicateGraphNode(doc, id);
+    if (!result.ok || !result.operations?.length) {
+      showToast(uiLang === 'en' ? 'Could not duplicate block' : 'Не удалось дублировать блок', 'info');
+      return;
+    }
+    const applied = applyComposition(graph, { ok: true, operations: result.operations });
+    if (!applied?.ok) {
+      showToast(uiLang === 'en' ? 'Could not duplicate block' : 'Не удалось дублировать блок', 'info');
+      return;
+    }
+    if (result.newNodeId) setSelectedBlockId(result.newNodeId);
+    applyCanvasLayoutRef.current?.();
+  }, [graph, showToast, uiLang]);
+
+  const handleInsertNodeOnEdge = useCallback((edgeId, type) => {
+    const eid = String(edgeId || '').trim();
+    const blockType = String(type || '').trim();
+    if (!eid || !blockType) return;
+
+    const props = graphMakePropsForNewBlock(graph, blockType, currentUser);
+    const conflict = graphGetUniqueConflictMessage(graph, blockType, props, uiLang);
+    if (conflict) {
+      showToast(conflict, 'info');
+      return;
+    }
+
+    const nodeId = uid();
+    const plan = planInsertNodeOnEdge(
+      graph.getGraphDocument(),
+      eid,
+      nodeId,
+      blockType,
+      props,
+    );
+    if (!plan.ok) {
+      showToast(
+        plan.error || (uiLang === 'en' ? 'Could not insert on connection' : 'Не удалось вставить на связь'),
+        'info',
+      );
+      return;
+    }
+
+    const applied = applyComposition(graph, { ok: true, operations: plan.operations });
+    if (!applied?.ok) {
+      showToast(uiLang === 'en' ? 'Could not insert block' : 'Не удалось вставить блок', 'info');
+      return;
+    }
+
+    applyCanvasLayoutRef.current?.();
+    setSelectedBlockId(nodeId);
+    setMobileZone('canvas');
+    setInspectorTab('props');
+    showToast(
+      uiLang === 'en' ? 'Step added to flow' : 'Шаг добавлен в поток',
+      'success',
+    );
+  }, [
+    graph,
+    currentUser,
+    showToast,
+    uiLang,
+    setMobileZone,
+    setInspectorTab,
+  ]);
+
+  const handleAddAfterNode = useCallback((parentId) => {
+    const anchorId = String(parentId || '').trim();
+    if (!anchorId) return;
+    const type = 'message';
+    const props = graphMakePropsForNewBlock(graph, type, currentUser);
+    const nodeId = uid();
+    const inserted = insertNodeAfter(anchorId, nodeId, type, props);
+    if (!inserted?.ok) {
+      showToast(
+        inserted?.errorDetail?.fix || inserted?.error || (uiLang === 'en' ? 'Could not add block' : 'Не удалось добавить блок'),
+        'info',
+      );
+      return;
+    }
+    setSelectedBlockId(nodeId);
+    setMobileZone('canvas');
+    setInspectorTab('props');
+  }, [
+    graph,
+    currentUser,
+    insertNodeAfter,
+    showToast,
+    uiLang,
+    setMobileZone,
+    setInspectorTab,
+  ]);
+
   const graphCanvasActions = React.useMemo(() => ({
     onSelectNode: handleSelectNode,
     onDeleteNode: handleRequestDeleteNode,
-  }), [handleSelectNode, handleRequestDeleteNode]);
+    onDuplicateNode: handleDuplicateNode,
+    onAddAfterNode: handleAddAfterNode,
+  }), [handleSelectNode, handleRequestDeleteNode, handleDuplicateNode, handleAddAfterNode]);
 
   const handleDeleteBlock = useCallback((_stackIdOrNodeId, blockId) => {
     handleRequestDeleteNode(blockId);
@@ -1918,7 +2112,7 @@ export default function App() {
       if (mod && e.key === 'z' && !e.shiftKey) {
         if (isEditableTarget(e.target)) return;
         e.preventDefault();
-        graph.undo();
+        handleGraphUndo();
         return;
       }
 
@@ -1926,13 +2120,13 @@ export default function App() {
       if ((mod && e.key === 'y') || (mod && e.key === 'z' && e.shiftKey)) {
         if (isEditableTarget(e.target)) return;
         e.preventDefault();
-        graph.redo();
+        handleGraphRedo();
       }
     };
 
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [handleRequestDeleteNode, selectedBlockId, graph]);
+  }, [handleRequestDeleteNode, selectedBlockId, handleGraphUndo, handleGraphRedo]);
 
   const handlePropChange = useCallback((key, val) => {
     if (!selectedBlockId) return;
@@ -2206,35 +2400,6 @@ export default function App() {
     return null;
   }, [graph]);
 
-  // Layout chain starting from startNodeId: set positions of subsequent nodes
-  const layoutChain = useCallback((startNodeId) => {
-    if (!startNodeId) return;
-    let currentId = startNodeId;
-    const visited = new Set();
-    while (currentId && !visited.has(currentId)) {
-      visited.add(currentId);
-      const doc = graph.getGraphDocument();
-      const current = doc.nodes[currentId];
-      if (!current) break;
-      const out = getOutgoingEdge(doc, currentId);
-      if (!out) break;
-      const next = doc.nodes[out.target];
-      if (!next) break;
-      const newPos = {
-        x: current.position.x,
-        y: current.position.y + getChainStepBelow(current, doc),
-      };
-      try {
-        moveNode(graph, next.id, newPos);
-      } catch (err) {
-        console.warn('[layoutChain] moveNode failed', err);
-      }
-      currentId = next.id;
-    }
-  }, [graph, getOutgoingEdge]);
-
-  layoutChainRef.current = layoutChain;
-
   // Insert node after parentId in the flow: handle rewiring of existing outgoing edge
   /**
    * Drop handler called by ReactFlowCanvas with flow-coordinate position.
@@ -2325,6 +2490,7 @@ export default function App() {
       setSelectedBlockId(nodeId);
     }
     endPaletteDrag();
+    applyCanvasLayoutRef.current?.();
     focusCanvasAfterContent();
   }, [endPaletteDrag, currentUser, showToast, graph, draggingPaletteEntry, uiLang, builderBlockTypes, builderUi, selectedBlockId, insertNodeAfter, getCanvasCenterPosition, attachLegacyUiToNode, focusCanvasAfterContent]);
 
@@ -2348,6 +2514,56 @@ export default function App() {
     saveCanvasForKey(canvasStorageKey, graph);
     showToast('Холст очищен', 'info');
   }, [graph, builderUi.clearCanvas, showToast, canvasStorageKey]);
+
+  const handleCreateFlow = useCallback(async () => {
+    setAppSection('automation');
+    setMobileZone('canvas');
+
+    const doc = graph.getGraphDocument?.();
+    const isEmpty = doc ? shouldShowCanvasOnboardingOverlay(doc) : true;
+
+    if (!isEmpty) {
+      const confirmed = await appConfirm({
+        title: uiLang === 'en' ? 'New scenario' : uiLang === 'uk' ? 'Новий сценарій' : 'Новый сценарий',
+        message: uiLang === 'en'
+          ? 'Clear the canvas and start a new scenario? Unsaved changes will be lost.'
+          : uiLang === 'uk'
+            ? 'Очистити полотно і почати новий сценарій? Незбережені зміни буде втрачено.'
+            : 'Очистить холст и начать новый сценарий? Несохранённые изменения будут потеряны.',
+        confirmText: uiLang === 'en' ? 'Create new' : uiLang === 'uk' ? 'Створити новий' : 'Создать новый',
+        cancelText: uiLang === 'en' ? 'Cancel' : uiLang === 'uk' ? 'Скасувати' : 'Отмена',
+        variant: 'warning',
+      });
+      if (!confirmed) return;
+    }
+
+    const result = clearGraph(graph);
+    if (!result?.ok) {
+      showToast(result?.error || (uiLang === 'en' ? 'Could not reset canvas' : 'Не удалось сбросить холст'), 'error');
+      return;
+    }
+
+    graph.setViewport?.({ x: 0, y: 0, zoom: 1 });
+    setSelectedBlockId(null);
+    setActiveProjectId(null);
+    setProjectName('');
+    saveCanvasForKey(canvasStorageKey, graph);
+    focusCanvasAfterContent();
+    showToast(
+      uiLang === 'en'
+        ? 'New scenario — pick a template or drag blocks from the left'
+        : uiLang === 'uk'
+          ? 'Новий сценарій — оберіть шаблон або перетягніть блоки зліва'
+          : 'Новый сценарий — выберите шаблон или перетащите блоки слева',
+      'info',
+    );
+  }, [
+    graph,
+    uiLang,
+    canvasStorageKey,
+    showToast,
+    focusCanvasAfterContent,
+  ]);
 
   const handleResetCorruptedGraph = useCallback(async () => {
     const confirmed = await appConfirm({
@@ -2392,7 +2608,7 @@ export default function App() {
     if (!isMobileView || !blockId) return;
     setSelectedBlockId(null);
     setMobileAttentionBlockId(blockId);
-    setMobileTab('canvas');
+    setMobileZone('canvas');
   }, [isMobileView]);
 
   const addBlockFromPaletteTap = useCallback((entry) => {
@@ -2411,7 +2627,7 @@ export default function App() {
         showToast(builderUi.selectBlockFirst || 'Выберите блок для правки', 'info');
         return;
       }
-      setMobileTab('canvas');
+      setMobileZone('canvas');
       return;
     }
     if (entry.type === 'operation' && entry.operationType === 'AddEdge') {
@@ -2447,6 +2663,7 @@ export default function App() {
       }
     }
     setSelectedBlockId(nodeId);
+    applyCanvasLayoutRef.current?.();
     focusMobileAddedBlock(nodeId);
   }, [
     builderUi,
@@ -2464,17 +2681,15 @@ export default function App() {
     try {
     const position = getCanvasCenterPosition();
     const props = graphMakePropsForNewBlock(graph, type, currentUser);
-    const anchorId = blockInfo?.nodeId || selectedBlockId;
+    const anchorId = selectedBlockId;
     const conflict = graphGetUniqueConflictMessage(graph, type, props, uiLang);
     if (conflict) {
       showToast(conflict, 'info');
-      setBlockInfo(null);
       return;
     }
     if (anchorId && tryAttachLegacyUiToSelected(type, props, anchorId)) {
       showToast('Элемент добавлен к выбранному блоку', 'success');
       focusMobileAddedBlock(anchorId);
-      setBlockInfo(null);
       return;
     }
     const nodeId = uid();
@@ -2482,7 +2697,6 @@ export default function App() {
       const inserted = insertNodeAfter(anchorId, nodeId, type, props);
       if (!inserted?.ok) {
         showToast(inserted?.errorDetail?.fix || inserted?.error || 'Не удалось добавить узел', 'info');
-        setBlockInfo(null);
         return;
       }
       if (inserted.effectiveParentId && inserted.effectiveParentId !== inserted.requestedParentId) {
@@ -2500,19 +2714,17 @@ export default function App() {
       const result = graphAddNode(graph, { nodeId, type, position, data: props });
       if (!result?.ok) {
         showToast(result?.error || 'Не удалось добавить узел', 'info');
-        setBlockInfo(null);
         return;
       }
     }
     setSelectedBlockId(nodeId);
+    applyCanvasLayoutRef.current?.();
     focusMobileAddedBlock(nodeId);
-    setBlockInfo(null);
     } catch (err) {
       const msg = err instanceof UnknownBlockTypeError
         ? (uiLang === 'en' ? `Unknown block type: ${err.type || type}` : `Неизвестный тип блока: ${err.type || type}`)
         : (err?.message || 'Не удалось добавить блок');
       showToast(msg, 'info');
-      setBlockInfo(null);
     }
   }, [
     focusMobileAddedBlock,
@@ -2522,7 +2734,6 @@ export default function App() {
     graph,
     uiLang,
     selectedBlockId,
-    blockInfo?.nodeId,
     insertNodeAfter,
     tryAttachLegacyUiToSelected,
     uiLang,
@@ -2644,7 +2855,7 @@ export default function App() {
       done();
       skipNextCanvasSave.current = false;
     }
-    layoutAllFlowChains(graph);
+    applyCanvasLayout();
     syncGraphUidSequence();
     const loadedNodes = graphGetNodes(graph);
     const viewportW = typeof window !== 'undefined' ? window.innerWidth : 1280;
@@ -2658,7 +2869,20 @@ export default function App() {
     const label = EXAMPLE_LABELS[exampleName]?.ru || EXAMPLE_LABELS[exampleName]?.en || String(exampleName);
     setProjectName(label.replace(/^[^\s]+\s/, '').trim() || label);
     showToast(label, 'success');
-  }, [graph, showToast, currentUser, builderUi, beginLoad, syncGraphUidSequence]);
+  }, [graph, showToast, currentUser, builderUi, beginLoad, syncGraphUidSequence, applyCanvasLayout]);
+
+  const handleApplyFlowTemplate = useCallback((templateId) => {
+    const exampleKey = exampleKeyForTemplate(templateId);
+    if (!exampleKey) {
+      showToast(
+        uiLang === 'en' ? 'Template not found' : 'Шаблон не найден',
+        'error',
+      );
+      return;
+    }
+    loadExampleGraph(exampleKey);
+    setMobileZone('canvas');
+  }, [loadExampleGraph, showToast, uiLang, setMobileZone]);
 
   const loadExampleFromFile = loadExampleGraph;
 
@@ -2775,7 +2999,7 @@ export default function App() {
           } finally {
             done();
           }
-          layoutAllFlowChains(graph);
+          applyCanvasLayout();
           syncGraphUidSequence();
         } catch (err) {
           showToast('Ошибка загрузки файла', 'error');
@@ -2800,6 +3024,7 @@ export default function App() {
   const botDebugModeRef = useRef('sandbox');
 
   const [previewPanelOpen, setPreviewPanelOpen] = useState(false);
+  const [publishBusy, setPublishBusy] = useState(false);
   const [previewMessages, setPreviewMessages] = useState([]);
   const [previewDraft, setPreviewDraft] = useState('');
   const [previewBusy, setPreviewBusy] = useState(false);
@@ -2837,10 +3062,11 @@ export default function App() {
     nodeIds: [],
     edgeIds: [],
     until: 0,
+    kind: null,
   });
 
   /** Focus canvas on diagnostic target — pulse highlight, selection, viewport pan. */
-  const handleHighlightCompileNodes = useCallback((target) => {
+  const handleHighlightCompileNodes = useCallback((target, kind = 'compile') => {
     const payload = Array.isArray(target)
       ? { nodeIds: target, edgeIds: [] }
       : { nodeIds: target?.nodeIds || [], edgeIds: target?.edgeIds || [] };
@@ -2857,6 +3083,7 @@ export default function App() {
       nodeIds,
       edgeIds,
       until: Date.now() + 12_000,
+      kind,
     });
     if (nodeIds.length) {
       setSelectedBlockId(nodeIds[0]);
@@ -2876,11 +3103,29 @@ export default function App() {
   const handleTraceHighlightChange = useCallback((highlights) => {
     const active = highlights?.active || [];
     if (!active.length) {
-      setRepairHighlight({ nodeIds: [], edgeIds: [], until: 0 });
+      setRepairHighlight({ nodeIds: [], edgeIds: [], until: 0, kind: null });
       return;
     }
-    handleHighlightCompileNodes(active);
-  }, [handleHighlightCompileNodes]);
+    setRepairHighlight({
+      nodeIds: active,
+      edgeIds: [],
+      until: Date.now() + 12_000,
+      kind: 'execution',
+    });
+    if (active.length) {
+      setSelectedBlockId(active[0]);
+      const doc = graph.getGraphDocument();
+      const focusNodes = active.map((id) => doc?.nodes?.[id]).filter(Boolean);
+      if (focusNodes.length) {
+        graph.setViewport(computeViewportForNodes(focusNodes, {
+          width: canvasRef.current?.clientWidth,
+          height: canvasRef.current?.clientHeight,
+          padding: 80,
+          maxZoom: 1.15,
+        }));
+      }
+    }
+  }, [graph, canvasRef]);
 
   const requestFullValidation = useCallback(() => {
     setFullValidationBusy(true);
@@ -2905,7 +3150,7 @@ export default function App() {
     handleHighlightCompileNodes({
       nodeIds: h.nodeIds || [],
       edgeIds: [...(h.edgeIds || []), ...(h.removedEdgeIds || [])],
-    });
+    }, 'repair');
   }, [lastRepairResult, handleHighlightCompileNodes]);
 
   const requestAutoRepair = useCallback(() => {
@@ -2965,7 +3210,7 @@ export default function App() {
     if (!steps) return;
     rollbackRepair({ undo: graph.undo }, steps);
     setLastRepairResult(null);
-    setRepairHighlight({ nodeIds: [], edgeIds: [], until: 0 });
+    setRepairHighlight({ nodeIds: [], edgeIds: [], until: 0, kind: null });
     requestFullValidation();
     showToast(uiLang === 'en' ? 'Repair undone' : 'Исправление отменено', 'info');
   }, [lastRepairResult, graph, requestFullValidation, showToast, uiLang]);
@@ -2974,11 +3219,11 @@ export default function App() {
     if (!repairHighlight.until) return undefined;
     const left = repairHighlight.until - Date.now();
     if (left <= 0) {
-      setRepairHighlight({ nodeIds: [], edgeIds: [], until: 0 });
+      setRepairHighlight({ nodeIds: [], edgeIds: [], until: 0, kind: null });
       return undefined;
     }
     const t = setTimeout(() => {
-      setRepairHighlight({ nodeIds: [], edgeIds: [], until: 0 });
+      setRepairHighlight({ nodeIds: [], edgeIds: [], until: 0, kind: null });
     }, left);
     return () => clearTimeout(t);
   }, [repairHighlight.until]);
@@ -3783,6 +4028,144 @@ export default function App() {
     await runBot('server', { projectId, graphDocument: project.graph_document });
   }, [runBot, showToast]);
 
+  const flowListItems = React.useMemo(() => {
+    const items = (userProjects || []).map((p) => ({
+      id: p.id,
+      name: p.name || (uiLang === 'en' ? 'Untitled' : 'Без названия'),
+      updatedAt: p.updated_at
+        ? new Date(p.updated_at).toLocaleDateString(uiLang === 'en' ? 'en-US' : 'ru-RU')
+        : undefined,
+      status: 'active',
+    }));
+    const localName = projectName.trim();
+    if (localName) {
+      const draftId = activeProjectId || '__draft__';
+      if (!items.some((i) => i.id === draftId)) {
+        items.unshift({ id: draftId, name: localName, status: 'draft' });
+      }
+    }
+    return items;
+  }, [userProjects, projectName, activeProjectId, uiLang]);
+
+  const controlPanelSectionLists = React.useMemo(() => ({
+    automation: flowListItems,
+    broadcasts: [],
+    audience: [],
+    settings: [
+      {
+        id: 'modules',
+        name: uiLang === 'en' ? 'Module library' : uiLang === 'uk' ? 'Бібліотека модулів' : 'Библиотека модулей',
+        kind: 'system',
+        status: 'active',
+      },
+      {
+        id: 'bot-profile',
+        name: uiLang === 'en' ? 'Bot & account' : uiLang === 'uk' ? 'Бот і акаунт' : 'Бот и аккаунт',
+        kind: 'bot',
+        status: 'active',
+      },
+    ],
+  }), [flowListItems, uiLang]);
+
+  const handleGlobalPublish = useCallback(async () => {
+    setPublishBusy(true);
+    try {
+      await saveProject();
+    } finally {
+      setPublishBusy(false);
+    }
+  }, [saveProject]);
+
+  const handleGlobalPreview = useCallback(() => {
+    setPreviewPanelOpen((v) => !v);
+    setPreviewErr(null);
+  }, []);
+
+  const canRunFlowTest = graphHasRunnableBot(graph, currentUser);
+
+  const handleBulkDeleteFlows = useCallback(async (ids) => {
+    if (!currentUser?.id) {
+      showToast(
+        uiLang === 'en' ? 'Sign in to delete projects' : 'Войдите, чтобы удалять проекты',
+        'info',
+      );
+      return;
+    }
+    try {
+      for (const id of ids) {
+        await deleteProject(id);
+      }
+      await loadUserProjects();
+      if (ids.includes(activeProjectId)) {
+        setActiveProjectId(null);
+      }
+      showToast(
+        uiLang === 'en' ? 'Projects deleted' : 'Проекты удалены',
+        'info',
+      );
+    } catch (e) {
+      showToast(e?.message || (uiLang === 'en' ? 'Delete failed' : 'Не удалось удалить'), 'error');
+    }
+  }, [activeProjectId, currentUser?.id, loadUserProjects, showToast, uiLang]);
+
+  const handleSelectFlowListItem = useCallback(async (projectId) => {
+    if (!projectId || projectId === '__draft__') return;
+    if (projectId === activeProjectId) return;
+    try {
+      const project = await loadProjectFromCloud(projectId);
+      if (!project?.graph_document) {
+        showToast(uiLang === 'en' ? 'Could not load project' : 'Не удалось загрузить проект', 'error');
+        return;
+      }
+      const check = validateGraphDocumentForEditor(project.graph_document);
+      if (!check.ok) {
+        showToast(check.errors[0]?.message || check.issues?.[0]?.message || 'Проект повреждён', 'error');
+        return;
+      }
+      const done = beginLoad();
+      try {
+        const migrated = migrateGraphDocument(graph, createGraphDocument(project.graph_document));
+        if (!migrated?.ok) {
+          showToast(migrated?.error || 'Не удалось загрузить проект', 'error');
+          return;
+        }
+      } finally {
+        done();
+      }
+      applyCanvasLayout();
+      syncGraphUidSequence();
+      setProjectName(project.name);
+      setActiveProjectId(project.id);
+      setMobileZone('canvas');
+      showToast(`📁 ${builderUi.projectBadge(project.name)}`, 'info');
+    } catch (e) {
+      showToast(e?.message || 'Не удалось загрузить проект', 'error');
+    }
+  }, [
+    activeProjectId,
+    beginLoad,
+    builderUi,
+    graph,
+    showToast,
+    syncGraphUidSequence,
+    uiLang,
+  ]);
+
+  const handleControlPanelSelectItem = useCallback(async (itemId) => {
+    if (appSection === 'automation') {
+      await handleSelectFlowListItem(itemId);
+      return;
+    }
+    if (appSection === 'settings') {
+      if (itemId === 'modules') {
+        setShowLibrary(true);
+      } else if (itemId === 'bot-profile') {
+        setProfileInitialTab('projects');
+        setShowProfileModal(true);
+      }
+    }
+  }, [appSection, handleSelectFlowListItem]);
+
   const stopBot = useCallback(async (mode = 'sandbox') => {
     const serverMode = mode === 'server';
     if (serverMode) setIsStoppingServer(true);
@@ -3917,102 +4300,13 @@ export default function App() {
     const openLogin    = () => { setAuthTab('login');    setShowAuthModal(true); };
     const lp = isMobileView;
     return (
-      <div style={{ minHeight: '100vh', background: 'linear-gradient(160deg,#06030f 0%,#0b0720 40%,#080518 70%,#05030e 100%)', color: '#fff', fontFamily: 'system-ui,sans-serif' }}>
-        <style>{`
-          @keyframes landingGrid { from{background-position:0 0} to{background-position:60px 60px} }
-          @keyframes landingPulse { 0%,100%{opacity:.45} 50%{opacity:.9} }
-          @keyframes panelFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
-          @keyframes fadeUp { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:translateY(0)} }
-          @keyframes fadeUpDelay { from{opacity:0;transform:translateY(22px)} to{opacity:1;transform:translateY(0)} }
-          @keyframes glowArc { 0%{stroke-dashoffset:800} 100%{stroke-dashoffset:0} }
-          @keyframes starTwinkle { 0%,100%{opacity:0;transform:scale(0.5)} 50%{opacity:1;transform:scale(1)} }
-          @keyframes orbFloat { 0%,100%{transform:translateY(0) translateX(0)} 33%{transform:translateY(-18px) translateX(8px)} 66%{transform:translateY(10px) translateX(-6px)} }
-          @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
-          @keyframes neonPulse { 0%,100%{opacity:0.7;filter:blur(18px)} 50%{opacity:1;filter:blur(22px)} }
-          .lp-fadeup { animation: fadeUp .65s ease both; }
-          .lp-fadeup2 { animation: fadeUp .65s .15s ease both; }
-          .lp-fadeup3 { animation: fadeUp .65s .3s ease both; }
-          .lp-card { border:1px solid rgba(255,255,255,0.09); border-radius:14px; background:rgba(255,255,255,0.03); transition:border-color .2s,transform .2s,background .2s; }
-          .lp-card:hover { border-color:rgba(255,255,255,0.18); background:rgba(255,255,255,0.055); transform:translateY(-2px); }
-          .lp-btn-ghost { background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.9); border-radius:10px; border:1px solid rgba(255,255,255,0.2); font-size:14px; font-weight:600; cursor:pointer; transition:all .2s; padding:10px 20px; display:flex; align-items:center; gap:8px; }
-          .lp-btn-ghost:hover { background:rgba(255,255,255,0.12); border-color:rgba(255,255,255,0.35); }
-          .lp-btn-gold { background:linear-gradient(135deg,#ff9f00,#f59e0b,#ffd700); color:#111; border:none; font-weight:800; cursor:pointer; transition:all .2s; font-family:Syne,system-ui; box-shadow:0 4px 20px rgba(245,158,11,0.35); }
-          .lp-btn-gold:hover { filter:brightness(1.1); box-shadow:0 8px 32px rgba(245,158,11,0.55); transform:translateY(-2px); }
-          .lp-step-dot { width:44px; height:44px; border-radius:50%; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.12); display:flex; align-items:center; justify-content:center; font-family:Syne,system-ui; font-weight:800; font-size:16px; color:#fbbf24; margin-bottom:14px; }
-          .lp-nav-link { background:none; border:none; color:rgba(255,255,255,0.7); font-size:14px; cursor:pointer; transition:color .2s; padding:4px 2px; }
-          .lp-nav-link:hover { color:#fff; }
-          .lp-nav-pill {
-            display:inline-flex; align-items:center; gap:6px;
-            padding:7px 16px; border-radius:999px; font-size:13px; font-weight:600;
-            cursor:pointer; transition:all .22s ease; white-space:nowrap;
-            font-family:Syne,system-ui; letter-spacing:0.01em;
-            border:1px solid rgba(99,102,241,0.32);
-            background:linear-gradient(135deg,rgba(29,20,82,0.62),rgba(16,12,45,0.5));
-            color:rgba(235,230,255,0.76);
-            position:relative; overflow:hidden; backdrop-filter:blur(10px) saturate(130%);
-            box-shadow:inset 0 0 18px rgba(99,102,241,0.1),0 6px 18px rgba(0,0,0,0.16);
-          }
-          .lp-nav-pill::before {
-            content:''; position:absolute; inset:0 auto auto 0; width:58%; height:1px;
-            background:linear-gradient(90deg,var(--pill-clr),transparent); opacity:.75;
-          }
-          .lp-nav-pill:hover {
-            background:linear-gradient(135deg,rgba(59,130,246,0.2),rgba(168,85,247,0.14));
-            color:#fff;
-            transform:translateY(-1px);
-          }
-          .lp-nav-pill .pill-icon { font-size:13px; line-height:1; transition:transform .22s; }
-          .lp-nav-pill:hover .pill-icon { transform:scale(1.2); }
-          .lp-price-card { border:1px solid rgba(255,255,255,0.1); border-radius:16px; padding:24px; background:rgba(255,255,255,0.03); transition:border-color .2s; }
-          .lp-price-card:hover { border-color:rgba(255,255,255,0.2); }
-          .lp-price-card.featured { border-color:#fbbf24; background:rgba(251,191,36,0.04); }
-          .lp-check { color:#3ecf8e; margin-right:6px; }
-          .lp-cross { color:#f87171; margin-right:6px; }
-          .lp-star { position:absolute; border-radius:50%; background:#fff; animation:starTwinkle var(--dur,3s) var(--delay,0s) ease-in-out infinite; }
-          .mock-panel { animation: panelFloat 5.8s ease-in-out infinite; }
-          .mock-neon-wrap { border-radius:20px; padding:2px; background:linear-gradient(135deg,rgba(99,102,241,0.8),rgba(59,130,246,0.6),rgba(139,92,246,0.8)); box-shadow:0 0 40px rgba(99,102,241,0.5),0 0 80px rgba(59,130,246,0.25),0 0 120px rgba(139,92,246,0.15); }
-          .feat-card { border:1px solid rgba(255,255,255,0.08); border-radius:16px; padding:22px 18px; background:rgba(255,255,255,0.025); transition:all .25s; cursor:default; }
-          .feat-card:hover { border-color:rgba(255,215,0,0.3); background:rgba(255,215,0,0.04); transform:translateY(-3px); box-shadow:0 12px 32px rgba(0,0,0,0.4); }
-          .stat-card { border-radius:14px; border:1px solid rgba(255,255,255,0.12); background:rgba(10,8,25,0.7); backdrop-filter:blur(10px); padding:18px 20px; display:flex; align-items:center; gap:16px; transition:border-color .2s,transform .2s; }
-          .stat-card:hover { border-color:rgba(255,255,255,0.22); transform:translateY(-2px); }
-        `}</style>
-
-        {/* ambient glows — cyberpunk */}
-        <div style={{ position:'fixed', inset:0, pointerEvents:'none', zIndex:0 }}>
-          {/* Orange/amber — top left */}
-          <div style={{ position:'absolute', top:'-5%', left:'-8%', width:'60%', height:'65%', background:'radial-gradient(ellipse at 30% 30%,rgba(245,128,11,0.22) 0%,rgba(180,60,0,0.12) 35%,transparent 65%)' }} />
-          {/* Blue — top right */}
-          <div style={{ position:'absolute', top:'-5%', right:'-10%', width:'60%', height:'60%', background:'radial-gradient(ellipse at 70% 25%,rgba(59,130,246,0.22) 0%,rgba(99,40,240,0.14) 40%,transparent 65%)' }} />
-          {/* Purple — center */}
-          <div style={{ position:'absolute', top:'30%', left:'30%', width:'45%', height:'45%', background:'radial-gradient(ellipse,rgba(124,58,237,0.12) 0%,transparent 65%)', animation:'neonPulse 6s ease-in-out infinite' }} />
-          {/* Cyan glow — bottom right */}
-          <div style={{ position:'absolute', bottom:'5%', right:'10%', width:'40%', height:'40%', background:'radial-gradient(ellipse,rgba(6,182,212,0.1) 0%,transparent 65%)', animation:'orbFloat 9s ease-in-out infinite' }} />
-          {/* Grid overlay */}
-          <div style={{ position:'absolute', inset:0, backgroundImage:'linear-gradient(rgba(99,102,241,0.06) 1px,transparent 1px),linear-gradient(90deg,rgba(99,102,241,0.06) 1px,transparent 1px)', backgroundSize:'60px 60px', opacity:1 }} />
-          {/* Diagonal scan lines */}
-          <div style={{ position:'absolute', inset:0, backgroundImage:'repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.08) 2px,rgba(0,0,0,0.08) 4px)', opacity:0.4 }} />
-          {/* Stars */}
-          {[...Array(35)].map((_,i) => (
-            <div key={i} className="lp-star" style={{
-              width: Math.random()*2+1+'px', height: Math.random()*2+1+'px',
-              top: Math.random()*100+'%', left: Math.random()*100+'%',
-              '--dur': (Math.random()*4+2)+'s', '--delay': (Math.random()*5)+'s',
-              opacity: Math.random()*0.5+0.15,
-            }} />
-          ))}
-          {/* Floating neon orbs */}
-          <div style={{ position:'absolute', top:'20%', right:'15%', width:380, height:380, borderRadius:'50%', background:'radial-gradient(circle,rgba(99,40,240,0.12) 0%,transparent 65%)', animation:'orbFloat 14s ease-in-out infinite' }} />
-          <div style={{ position:'absolute', top:'60%', left:'5%', width:240, height:240, borderRadius:'50%', background:'radial-gradient(circle,rgba(245,128,11,0.1) 0%,transparent 65%)', animation:'orbFloat 10s ease-in-out infinite reverse' }} />
-          <div style={{ position:'absolute', bottom:'10%', right:'30%', width:300, height:300, borderRadius:'50%', background:'radial-gradient(circle,rgba(6,182,212,0.08) 0%,transparent 65%)', animation:'orbFloat 11s ease-in-out infinite 2s' }} />
-        </div>
-
+      <div className="lp-page" style={{ minHeight: '100vh', overflow: 'auto' }}>
         {/* ── NAV ── */}
-        <nav style={{ position:'sticky', top:0, zIndex:100, backdropFilter:'blur(18px)', background:'rgba(5,7,12,0.85)', borderBottom:'1px solid rgba(255,255,255,0.07)', padding: lp ? '0 16px' : '0 40px', height:62, display:'flex', alignItems:'center', justifyContent:'space-between', gap:16 }}>
-          {/* Logo */}
-          <div style={{ fontFamily:'Syne,system-ui', fontSize:22, fontWeight:800, lineHeight:1, display:'flex', alignItems:'center', gap:6, flexShrink:0 }}>
-            <span style={{ color:'#ffd700', textShadow:'0 0 14px rgba(255,215,0,0.5)', fontSize:20 }}>◈</span>
-            <span style={{ background:'linear-gradient(135deg,#ffd700 0%,#ffaa00 55%,#ffd700 100%)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text' }}>Cicada</span>
-            <span style={{ color:'rgba(255,255,255,0.45)', fontSize:13, fontWeight:400 }}>studio</span>
+        <nav className="lp-landing-nav" style={{ padding: lp ? '0 var(--space-2)' : '0 var(--space-4)', height: 56, display:'flex', alignItems:'center', justifyContent:'space-between', gap: 'var(--space-2)' }}>
+          <div style={{ lineHeight: 1, display:'flex', alignItems:'center', gap: 8, flexShrink: 0 }}>
+            <span className="lp-brand-icon">◈</span>
+            <span className="lp-brand-word">Cicada</span>
+            <span className="lp-brand-suffix">studio</span>
           </div>
           {/* Nav links — desktop only */}
           {!lp && (
@@ -4330,352 +4624,15 @@ export default function App() {
       showRepairHighlights={graphValidationContextValue.showRepairHighlights}
     >
     <AddBlockContext.Provider value={addBlockFromContext}>
-    <BlockInfoContext.Provider value={setBlockInfo}>
-    <style>{`
-      :root {
-        --bg: #040018;
-        --bg2: #090127;
-        --bg3: #170848;
-        --glass: rgba(21, 9, 68, 0.64);
-        --glass-strong: rgba(33, 14, 96, 0.78);
-        --panel: rgba(8, 3, 34, 0.78);
-        --text: rgba(255,255,255,0.92);
-        --text2: rgba(255,255,255,0.62);
-        --text3: rgba(255,255,255,0.38);
-        --border: rgba(121, 88, 255, 0.28);
-        --border2: rgba(178, 128, 255, 0.42);
-        --accent: #ff7a35;
-        --accent2: #6f46ff;
-        --cyan: #19d8ff;
-        --violet: #8b5cf6;
-        --hot: #ff3fd7;
-        --mono: 'JetBrains Mono', ui-monospace, monospace;
-      }
-      @keyframes editorNeonPulse { 0%,100%{opacity:0.5} 50%{opacity:1} }
-      @keyframes editorGridShift { from{background-position:0 0} to{background-position:60px 60px} }
-      @keyframes editorOrbFloat { 0%,100%{transform:translateY(0) scale(1)} 50%{transform:translateY(-22px) scale(1.04)} }
-      @keyframes editorScanLine { 0%{transform:translateY(-100%)} 100%{transform:translateY(100vh)} }
-      @keyframes editorStarDrift { from{background-position:0 0, 0 0} to{background-position:72px 54px, -44px 68px} }
-      @keyframes blockEntrance { from{opacity:0;transform:translateY(-6px) scale(0.96)} to{opacity:1;transform:translateY(0) scale(1)} }
-      @keyframes editorNewBlockBlink { 0%,100%{opacity:1;filter:drop-shadow(0 0 7px var(--new-block-glow,#f97316));transform:scale(1)} 50%{opacity:.42;filter:drop-shadow(0 0 18px var(--new-block-glow,#f97316));transform:scale(1.035)} }
-      @keyframes neonBlink { 0%,90%,100%{opacity:1} 95%{opacity:0.6} }
-      @keyframes editorRunPulse { 0%,100%{box-shadow:0 0 0 0 rgba(249,115,22,0)} 50%{box-shadow:0 0 0 6px rgba(249,115,22,0.25)} }
-      .editor-shell::before,
-      .editor-shell::after {
-        content:''; position:absolute; pointer-events:none; z-index:0; filter:blur(4px);
-      }
-      .editor-shell::before {
-        inset:-16% -10% auto -8%; height:54%;
-        background:
-          radial-gradient(circle at 18% 9%, rgba(25,216,255,.24), transparent 28%),
-          radial-gradient(circle at 56% 4%, rgba(139,92,246,.42), transparent 36%),
-          radial-gradient(circle at 86% 24%, rgba(255,63,215,.22), transparent 32%);
-      }
-      .editor-shell::after {
-        inset:0;
-        background:
-          radial-gradient(circle, rgba(255,255,255,.12) 0 1px, transparent 1.4px),
-          radial-gradient(circle, rgba(25,216,255,.12) 0 1px, transparent 1.5px),
-          radial-gradient(circle at 50% 34%, rgba(111,70,255,.18), transparent 44%);
-        background-size: 46px 46px, 88px 88px, auto;
-        mask-image: linear-gradient(to bottom, rgba(0,0,0,.88), rgba(0,0,0,.4));
-        animation: editorStarDrift 18s linear infinite;
-      }
-      .editor-topbar {
-        background:
-          linear-gradient(90deg, rgba(9,3,37,.92), rgba(42,13,116,.76) 48%, rgba(8,3,32,.94)),
-          radial-gradient(circle at 38% -20%, rgba(25,216,255,.24), transparent 38%) !important;
-        border-bottom: 1px solid rgba(255,122,53,.28) !important;
-        box-shadow: 0 12px 42px rgba(8,2,30,.62), 0 0 32px rgba(111,70,255,.2), inset 0 1px 0 rgba(255,255,255,.1) !important;
-        backdrop-filter: blur(24px) saturate(1.45);
-        -webkit-backdrop-filter: blur(24px) saturate(1.45);
-      }
-      .editor-brand-logo {
-        width: 29px; height: 29px; border-radius: 9px; object-fit: cover;
-        box-shadow: 0 0 18px rgba(25,216,255,.38), 0 0 30px rgba(139,92,246,.28);
-        filter: saturate(1.25) contrast(1.05);
-      }
-      @media (max-width: 360px) {
-        .editor-brand-word { display: none; }
-      }
-      .editor-brand-mark {
-        color:#21d6ff !important;
-        text-shadow: 0 0 18px rgba(33,214,255,.72), 0 0 36px rgba(139,92,246,.55) !important;
-      }
-      .editor-subbar {
-        position: relative; z-index: 80;
-        min-height: 66px; padding: 11px 12px;
-        display:flex; align-items:center; gap:12px;
-        background:
-          linear-gradient(90deg, rgba(9,4,34,.84), rgba(39,13,110,.62) 45%, rgba(9,4,34,.86)),
-          radial-gradient(circle at 70% 10%, rgba(255,63,215,.12), transparent 38%);
-        border-bottom: 1px solid rgba(121,88,255,.24);
-        box-shadow: 0 12px 34px rgba(7,3,24,.42), inset 0 1px 0 rgba(255,255,255,.06);
-        backdrop-filter: blur(18px);
-        -webkit-backdrop-filter: blur(18px);
-      }
-      .editor-subbar-left,
-      .editor-subbar-center,
-      .editor-subbar-right {
-        display:flex; align-items:center; gap:9px; min-width:0;
-      }
-      .editor-subbar-left { width: 126px; flex-shrink:0; }
-      .editor-subbar-center { flex:1; }
-      .editor-subbar-right { justify-content:flex-end; }
-      .editor-chip {
-        display:inline-flex; align-items:center; gap:7px;
-        height:38px; padding:0 15px; border-radius:19px;
-        background: linear-gradient(135deg, rgba(255,255,255,.07), rgba(111,70,255,.07));
-        border: 1px solid rgba(178,128,255,.28);
-        color: rgba(255,255,255,.82);
-        box-shadow: inset 0 1px 0 rgba(255,255,255,.09), 0 8px 22px rgba(5,2,20,.28);
-        font-family: Syne, system-ui; font-size:12px; font-weight:700;
-        white-space:nowrap;
-      }
-      .editor-chip.active {
-        color:#fff;
-        background: linear-gradient(135deg, rgba(255,122,53,.22), rgba(111,70,255,.18));
-        border-color: rgba(255,122,53,.64);
-        box-shadow: 0 0 18px rgba(255,122,53,.22), inset 0 1px 0 rgba(255,255,255,.12);
-      }
-      .editor-chip.small { width:38px; justify-content:center; padding:0; font-size:14px; border-radius:13px; }
-      .editor-chip.hot {
-        color:#fff; border-color: rgba(255,122,53,.42);
-        background: linear-gradient(135deg, rgba(255,122,53,.95), rgba(255,79,216,.72));
-        box-shadow: 0 0 22px rgba(255,122,53,.34);
-      }
-      .editor-chip.premium {
-        color:#ffd29a;
-        border-color: rgba(255,122,53,.48);
-        background: linear-gradient(135deg, rgba(255,122,53,.16), rgba(255,63,215,.08));
-      }
-      .editor-chip.esphome {
-        color: #d7fbe2;
-        border-color: rgba(34, 197, 94, 0.55);
-        background: linear-gradient(135deg, rgba(34, 197, 94, 0.22), rgba(14, 165, 233, 0.1));
-        box-shadow: 0 0 16px rgba(34, 197, 94, 0.18), inset 0 1px 0 rgba(255,255,255,.1);
-        cursor: pointer;
-        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-      }
-      .editor-chip.esphome:hover {
-        transform: translateY(-1px);
-        border-color: rgba(74, 222, 128, 0.75);
-        box-shadow: 0 0 22px rgba(34, 197, 94, 0.32), inset 0 1px 0 rgba(255,255,255,.12);
-      }
-      @media (max-width: 768px) {
-        .editor-subbar {
-          min-height: 52px;
-          padding: 8px 10px;
-          gap: 8px;
-          overflow-x: auto;
-          -webkit-overflow-scrolling: touch;
-        }
-        .editor-subbar-left { width: auto; flex-shrink: 0; }
-        .editor-subbar-center { flex: 1; min-width: max-content; }
-        .editor-subbar-right { display: none; }
-        .editor-chip {
-          height: 34px;
-          padding: 0 11px;
-          font-size: 11px;
-          gap: 5px;
-        }
-      }
-      .editor-main-grid {
-        border-top: 1px solid rgba(255,255,255,.025);
-        background: radial-gradient(circle at 48% 20%, rgba(116,61,255,.34), transparent 35%);
-      }
-      .editor-main-grid > * {
-        min-height: 0;
-      }
-      .editor-sidebar-shell,
-      .editor-right-panel {
-        background:
-          linear-gradient(180deg, rgba(11,4,43,.86), rgba(6,2,25,.95)),
-          radial-gradient(circle at 50% 0%, rgba(111,70,255,.18), transparent 42%) !important;
-        backdrop-filter: blur(20px) saturate(1.2);
-        -webkit-backdrop-filter: blur(20px) saturate(1.2);
-      }
-      .editor-sidebar-shell {
-        border-right: 1px solid rgba(121,88,255,.32) !important;
-        box-shadow: 10px 0 34px rgba(5,2,20,.46), inset -1px 0 0 rgba(255,255,255,.025) !important;
-      }
-      .editor-right-panel {
-        border-left: 1px solid rgba(121,88,255,.32) !important;
-        box-shadow: -10px 0 34px rgba(5,2,20,.46), inset 1px 0 0 rgba(255,255,255,.025) !important;
-      }
-      .editor-panel-title {
-        background: linear-gradient(90deg, rgba(25,216,255,.12), rgba(139,92,246,.12), transparent) !important;
-        border-bottom: 1px solid rgba(121,88,255,.26) !important;
-        color: rgba(205,217,255,.74) !important;
-      }
-      .canvas-bg {
-        background:
-          radial-gradient(circle at 56% 14%, rgba(153,89,255,.42), transparent 34%),
-          radial-gradient(circle at 31% 78%, rgba(25,216,255,.12), transparent 38%),
-          radial-gradient(circle at 84% 72%, rgba(255,63,215,.14), transparent 34%),
-          linear-gradient(160deg, #060019 0%, #14053d 48%, #050116 100%) !important;
-      }
-      .canvas-bg::before {
-        content:''; position:absolute; inset:0; pointer-events:none; z-index:0;
-        background:
-          linear-gradient(rgba(162,132,255,.09) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(162,132,255,.09) 1px, transparent 1px),
-          radial-gradient(circle, rgba(255,255,255,.18) 0 1px, transparent 1.5px);
-        background-size: 48px 48px, 48px 48px, 24px 24px;
-        opacity:.62;
-      }
-      .canvas-bg::after {
-        content:''; position:absolute; inset:0; pointer-events:none; z-index:0;
-        background:
-          radial-gradient(circle at center, transparent 0 45%, rgba(3,1,12,.28) 74%, rgba(3,1,12,.65) 100%),
-          repeating-linear-gradient(0deg, rgba(255,255,255,.025) 0 1px, transparent 1px 4px);
-      }
-      .editor-empty-card {
-        background: linear-gradient(180deg, rgba(21,9,68,.68), rgba(7,2,28,.74)) !important;
-        border: 1px solid rgba(178,128,255,.25) !important;
-        box-shadow: 0 28px 80px rgba(5,1,22,.66), 0 0 42px rgba(111,70,255,.16), inset 0 1px 0 rgba(255,255,255,.08) !important;
-      }
-      input, textarea, select {
-        background: rgba(255,255,255,.045) !important;
-        border-color: rgba(167,139,250,.25) !important;
-        box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
-      }
-      input:focus, textarea:focus, select:focus {
-        border-color: rgba(33,214,255,.62) !important;
-        box-shadow: 0 0 0 3px rgba(33,214,255,.08), inset 0 1px 0 rgba(255,255,255,.05);
-      }
-      select option {
-        background: #12072f;
-        color: #f8fafc;
-      }
-      select option:checked {
-        background: #2563eb;
-        color: #fff;
-      }
-      .tb-btn, .editor-chip, .editor-mobile-tab, .editor-panel-title, .editor-subbar {
-        font-family: Syne, system-ui, sans-serif;
-      }
-      .tb-btn {
-        display: inline-flex; align-items: center; gap: 4px;
-        min-width: 38px; height: 34px; justify-content: center;
-        padding: 0 12px; border-radius: 12px; font-size: 11px; font-weight: 700;
-        cursor: pointer; transition: all 0.18s ease; white-space: nowrap;
-        font-family: Syne, system-ui; letter-spacing: 0.01em; line-height: 1;
-        box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
-      }
-      .tb-btn-ghost {
-        background: linear-gradient(135deg, rgba(255,255,255,0.07), rgba(111,70,255,0.08));
-        color: rgba(255,255,255,0.74);
-        border: 1px solid rgba(178,128,255,0.3);
-      }
-      .tb-btn-ghost:hover { background: rgba(127,92,255,0.18); color: rgba(255,255,255,0.94); border-color: rgba(167,139,250,0.55); box-shadow:0 0 18px rgba(127,92,255,.18); }
-      .tb-btn-danger { background: rgba(239,68,68,0.08); color: #f87171; border: 1px solid rgba(239,68,68,0.2); }
-      .tb-btn-danger:hover { background: rgba(239,68,68,0.18); color: #fca5a5; border-color: rgba(239,68,68,0.5); }
-      .tb-btn-green { background: rgba(62,207,142,0.08); color: #3ecf8e; border: 1px solid rgba(62,207,142,0.22); }
-      .tb-btn-green:hover { background: rgba(62,207,142,0.18); border-color: #3ecf8e; }
-      .tb-btn-blue { background: rgba(96,165,250,0.08); color: #60a5fa; border: 1px solid rgba(96,165,250,0.22); }
-      .tb-btn-blue:hover { background: rgba(96,165,250,0.18); border-color: #60a5fa; }
-      .tb-btn-purple { background: rgba(167,139,250,0.08); color: #a78bfa; border: 1px solid rgba(167,139,250,0.22); }
-      .tb-btn-purple:hover { background: rgba(167,139,250,0.18); border-color: #a78bfa; }
-      .tb-btn-run {
-        background: linear-gradient(135deg,#f97316,#dc2626); color:#fff;
-        border:1px solid rgba(255,205,132,.2); font-weight:800; font-size:13px;
-        min-width: 82px; border-radius: 18px;
-        box-shadow:0 2px 18px rgba(249,115,22,0.48), inset 0 1px 0 rgba(255,255,255,.24);
-        animation: editorRunPulse 2.5s ease-in-out infinite;
-      }
-      .tb-btn-run:hover { background:linear-gradient(135deg,#fb923c,#ef4444); box-shadow:0 4px 20px rgba(249,115,22,0.6); transform:translateY(-1px); }
-      .tb-btn-run:disabled { background:rgba(249,115,22,0.15); color:rgba(249,115,22,0.35); box-shadow:none; cursor:not-allowed; transform:none; animation:none; }
-      .tb-btn-stop {
-        background:linear-gradient(135deg,#ef4444,#dc2626); color:#fff;
-        border:none; font-weight:700;
-        box-shadow:0 2px 14px rgba(239,68,68,0.4);
-      }
-      .tb-btn-stop:hover { background:linear-gradient(135deg,#f87171,#ef4444); box-shadow:0 4px 18px rgba(239,68,68,0.6); transform:translateY(-1px); }
-      .tb-divider { width:1px; height:22px; background:rgba(99,102,241,0.22); flex-shrink:0; }
-      .tb-btn-ai {
-        background:linear-gradient(135deg,rgba(25,216,255,0.14),rgba(139,92,246,0.16));
-        color:#8beaff; border:1px solid rgba(25,216,255,0.38); font-weight:700;
-      }
-      .tb-btn-ai:hover {
-        background:linear-gradient(135deg,rgba(33,214,255,0.22),rgba(139,92,246,0.24));
-        border-color:rgba(33,214,255,0.72); color:#fff; box-shadow:0 0 18px rgba(33,214,255,0.22);
-      }
-      .tb-btn.locked-premium {
-        opacity:.64;
-        filter:saturate(.58);
-        cursor:pointer;
-        border-color:rgba(251,191,36,.28);
-      }
-      .tb-btn.locked-premium:hover {
-        opacity:.92;
-        filter:saturate(.85);
-        color:#fde68a;
-        border-color:rgba(251,191,36,.55);
-        box-shadow:0 0 18px rgba(251,191,36,.16);
-      }
-      .tb-files-menu {
-        background: var(--bg2); border: 1px solid rgba(255,255,255,0.1);
-        border-radius: 10px; min-width: 186px;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.6); overflow: hidden;
-      }
-      .tb-files-menu-item {
-        width: 100%; padding: 10px 14px; text-align: left;
-        background: transparent; border: none; border-bottom: 1px solid rgba(255,255,255,0.06);
-        cursor: pointer; font-size: 12px; font-family: Syne,system-ui;
-        display: flex; align-items: center; gap: 8px; transition: background 0.15s;
-        color: var(--text);
-      }
-      .tb-files-menu-item:last-child { border-bottom: none; }
-      .tb-files-menu-item:hover { background: rgba(255,255,255,0.06); }
-      .tb-files-menu-item.locked-premium { color: rgba(253,230,138,0.72); filter:saturate(.6); }
-      .tb-files-menu-item.locked-premium:hover { color:#fde68a; background:rgba(251,191,36,0.07); }
-      .editor-sidebar-block { border-left: 2px solid transparent; }
-      .editor-sidebar-block:hover {
-        background:linear-gradient(90deg, rgba(127,92,255,0.18), rgba(33,214,255,0.04)) !important;
-        border-left-color: rgba(139,92,246,.95);
-        transform: translateX(2px);
-      }
-      .editor-group-header { 
-        padding:11px 12px 5px; font-size:9px; letter-spacing:.14em; text-transform:uppercase; font-weight:800;
-        border-top:1px solid rgba(127,92,255,0.16); color:rgba(167,139,250,0.68);
-        display:flex; align-items:center; gap:6px;
-      }
-      .editor-group-header::after { content:''; flex:1; height:1px; background:linear-gradient(90deg,rgba(33,214,255,0.32),transparent); }
-      .editor-mobile-tab { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; background:transparent; border:none; cursor:pointer; border-top:2px solid transparent; min-width:0; transition:all 0.18s; }
-      .editor-mobile-tab.active { border-top-color:#f97316; }
-      .editor-mobile-tab.locked-premium { opacity:.58; filter:saturate(.55); }
-      .editor-mobile-tab.locked-premium:hover { opacity:.86; filter:saturate(.82); }
-      .editor-mobile-tab .tab-icon { font-size:16px; }
-      .editor-mobile-tab .tab-label { font-size:9px; font-family:Syne,system-ui; font-weight:600; white-space:nowrap; color:var(--text3); }
-      .editor-mobile-tab.active .tab-label { color:#f97316; text-shadow:0 0 8px rgba(249,115,22,0.5); }
-      * { scrollbar-width:thin; scrollbar-color:rgba(99,102,241,0.3) transparent; }
-      *::-webkit-scrollbar { width:4px; height:4px; }
-      *::-webkit-scrollbar-track { background:transparent; }
-      *::-webkit-scrollbar-thumb { background:rgba(99,102,241,0.35); border-radius:4px; }
-      *::-webkit-scrollbar-thumb:hover { background:rgba(249,115,22,0.5); }
-    `}</style>
-    <div
-      className="editor-shell"
-      style={{ display:'flex', flexDirection:'column', height:'var(--app-height, 100vh)', background:'var(--bg)', position:'relative', overflow:'hidden' }}
-    >
+    <BlockInfoContext.Provider value={handleBlockInfoRequest}>
+    <div className="editor-shell">
       {/* Top bar */}
-      <div className="editor-topbar" style={{
-        background: 'linear-gradient(90deg, #0d0920 0%, #080618 100%)',
-        borderBottom: '1px solid rgba(99,102,241,0.25)',
-        boxShadow: '0 1px 0 rgba(249,115,22,0.08), 0 4px 24px rgba(0,0,0,0.6)',
-        display: 'flex', alignItems: 'center', padding: isMobileView ? '0 8px' : '0 18px', gap: isMobileView ? 6 : 10,
-        flexShrink: 0, height: isMobileView ? 52 : 64,
-        overflow: 'visible',
-        position: 'relative', zIndex: 90,
-      }}>
-        {/* Left neon accent line */}
-        <div style={{ position:'absolute', left:0, top:0, bottom:0, width:3, background:'linear-gradient(180deg, #f97316, #6366f1)', borderRadius:'0 2px 2px 0', opacity:0.9 }} />
-        <div style={{ fontFamily:'Syne, system-ui', fontWeight:800, fontSize:isMobileView ? 18 : 22, color:'var(--text)', flexShrink: isMobileView ? 1 : 0, minWidth: 0, paddingLeft: 2, display:'flex', alignItems:'center', gap:isMobileView ? 6 : 8 }}>
+      <div className="editor-topbar editor-shell__topbar">
+        <div className="editor-topbar__brand" style={{ flexShrink: isMobileView ? 1 : 0, minWidth: 0, display:'flex', alignItems:'center', gap: isMobileView ? 8 : 10 }}>
           <img src={cicadaLogo} alt="" className="editor-brand-logo" />
           <div style={{ display:'flex', alignItems:'baseline', lineHeight:1 }}>
-            <span className="editor-brand-word" style={{ background: 'linear-gradient(135deg, #19d8ff 0%, #a78bfa 56%, #ff7a35 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>Cicada</span>
-            {!isMobileView && <span style={{ fontSize:13, background:'linear-gradient(135deg,#8b5cf6,#d8b4fe)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text', marginLeft:7, fontWeight:500, opacity:0.84 }}>Studio</span>}
+            <span className="editor-brand-word">Cicada</span>
+            {!isMobileView && <span className="editor-brand-suffix">Studio</span>}
           </div>
         </div>
         {/* Mobile Examples Button */}
@@ -4716,6 +4673,22 @@ export default function App() {
               title={builderUi.clearCanvas}
               onClick={handleClearCanvas}
             >✕</button>
+            <button
+              type="button"
+              className="tb-btn tb-btn-ghost"
+              title={uiLang === 'en' ? 'Undo (Ctrl+Z)' : 'Отменить (Ctrl+Z)'}
+              onClick={handleGraphUndo}
+              disabled={!graphHistory.canUndo}
+              aria-label={uiLang === 'en' ? 'Undo' : 'Отменить'}
+            >↶</button>
+            <button
+              type="button"
+              className="tb-btn tb-btn-ghost"
+              title={uiLang === 'en' ? 'Redo (Ctrl+Y)' : 'Повторить (Ctrl+Y)'}
+              onClick={handleGraphRedo}
+              disabled={!graphHistory.canRedo}
+              aria-label={uiLang === 'en' ? 'Redo' : 'Повторить'}
+            >↷</button>
             <div className="tb-divider" />
             <div style={{ position: 'relative' }}>
             <button
@@ -5023,53 +4996,6 @@ export default function App() {
           </div>
         )}
       </div>
-
-      {currentUser && (
-        <div className="editor-subbar">
-          <div className="editor-subbar-left">
-            <div className="editor-chip active">
-              <span style={{ color: '#ffb86b' }}>🧱</span>
-              {builderUi.mobileTabBlocks}
-            </div>
-          </div>
-          <div className="editor-subbar-center">
-            <button
-              type="button"
-              className="editor-chip"
-              onClick={() => setShowLibrary(true)}
-              title={builderUi.moduleLibrary}
-            >
-              <span style={{ color: '#8b5cf6' }}>📚</span>
-              {builderUi.moduleLibrary}
-            </button>
-            <button
-              type="button"
-              className="editor-chip esphome"
-              onClick={() => openEsphomeConstructor({
-                projectId: activeProjectId,
-                projectName: projectName.trim() || undefined,
-              })}
-              title={builderUi.espHome}
-            >
-              <span style={{ color: '#4ade80' }}>⚡</span>
-              {builderUi.espHome}
-            </button>
-          </div>
-          <div className="editor-subbar-right">
-            <div className="editor-chip" title="Текущее время">
-              ◷ {new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
-            </div>
-            <button
-              type="button"
-              className="editor-chip small"
-              onClick={() => setShowInstructions(true)}
-              title="Помощь"
-            >
-              ⌕
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Instructions Modal */}
 
@@ -5633,10 +5559,6 @@ export default function App() {
           <InstructionsModal lang={uiLang} onClose={() => setShowInstructions(false)} />
         )}
 
-      {/* Справка по блоку — кнопка «i» на пазле */}
-      {blockInfo && (
-        <BlockInfoModal block={blockInfo} onClose={() => setBlockInfo(null)} />
-      )}
 
       
       {showFilesMenu && typeof document !== 'undefined' && filesMenuRect && createPortal(
@@ -5931,142 +5853,145 @@ export default function App() {
       )}
 
       {currentUser ? (
-        /* Main layout */
-        <>
-        <div className="editor-main-grid" style={{ display:'grid', gridTemplateColumns: isMobileView ? '1fr' : '150px minmax(0, 1fr) 258px', overflow:'hidden', flex: 1, minHeight: 0, height: '100%', position: 'relative', zIndex: 1 }}>
-
-        {/* Sidebar — hidden on mobile unless blocks tab */}
-        {(isMobileView && mobileTab !== 'blocks') ? null : (
-        <div className="editor-sidebar-shell" style={{
-          background:'linear-gradient(180deg, #0d0920 0%, #080618 100%)',
-          borderRight: isMobileView ? 'none' : '1px solid rgba(99,102,241,0.2)',
-          display:'flex', flexDirection:'column', overflow:'hidden',
-          boxShadow: isMobileView ? 'none' : '4px 0 24px rgba(0,0,0,0.4)',
-          ...(isMobileView ? { gridColumn: '1', position: 'absolute', top: 0, left: 0, right: 0, bottom: 56, zIndex: 6 } : {}),
-        }}
-        data-tour={!isMobileView ? 'sidebar-desktop' : undefined}>
-          <div className="editor-panel-title" style={{
-            padding:'10px 12px 5px', fontSize:9,
-            background:'linear-gradient(90deg,rgba(99,102,241,0.12),transparent)',
-            borderBottom:'1px solid rgba(99,102,241,0.15)',
-            color:'rgba(99,102,241,0.7)', textTransform:'uppercase', letterSpacing:'.14em', fontWeight:700,
-            display:'flex', alignItems:'center', gap:6,
-          }}>
-            <span style={{ color:'#f97316', fontSize:12 }}>🧱</span> {builderUi.mobileTabBlocks}
-          </div>
-          <Sidebar
-            onDragStart={setDraggingPaletteEntry}
-            onDragEnd={endPaletteDrag}
-            onTapAdd={isMobileView ? addBlockFromPaletteTap : null} />
-        </div>
-        )}
-
-        {/* Canvas — ReactFlow GraphDocument-native renderer */}
-        {(isMobileView && mobileTab !== 'canvas' && mobileTab !== 'dsl') ? null : (
-        <div
-          ref={canvasRef}
-          data-tour="canvas-area"
-          className="canvas-bg"
-          style={{
-            position:'relative', overflow:'hidden',
-            width: '100%', height: '100%', minHeight: 0,
-            background: 'linear-gradient(160deg, #06030f 0%, #0a0518 50%, #080615 100%)',
-            ...(isMobileView ? { gridColumn: '1', display: (mobileTab === 'canvas' || mobileTab === 'dsl') ? 'block' : 'none' } : {}),
-          }}
+        <AppLayoutProvider
+          isMobile={isMobileView}
+          section={appSection}
+          setSection={setAppSection}
+          mobileZone={mobileZone}
+          setMobileZone={setMobileZone}
+          listSearch={listSearch}
+          setListSearch={setListSearch}
+          listFilter={listFilter}
+          setListFilter={setListFilter}
         >
-          {/* Ambient glow orbs */}
-          <div style={{ position:'absolute', inset:0, pointerEvents:'none', overflow:'hidden', zIndex:0 }}>
-            <div style={{ position:'absolute', top:'-10%', left:'15%', width:500, height:500, borderRadius:'50%', background:'radial-gradient(ellipse,rgba(99,102,241,0.08) 0%,transparent 70%)', animation:'editorOrbFloat 9s ease-in-out infinite' }} />
-            <div style={{ position:'absolute', bottom:'-5%', right:'10%', width:420, height:420, borderRadius:'50%', background:'radial-gradient(ellipse,rgba(249,115,22,0.06) 0%,transparent 70%)', animation:'editorOrbFloat 12s ease-in-out infinite reverse' }} />
-            <div style={{ position:'absolute', top:'40%', right:'30%', width:260, height:260, borderRadius:'50%', background:'radial-gradient(ellipse,rgba(6,182,212,0.05) 0%,transparent 70%)', animation:'editorOrbFloat 7s ease-in-out infinite 2s' }} />
-            <div style={{ position:'absolute', left:0, right:0, height:2, background:'linear-gradient(90deg,transparent,rgba(99,102,241,0.15),rgba(249,115,22,0.1),transparent)', animation:'editorScanLine 8s linear infinite', opacity:0.6, pointerEvents:'none' }} />
-          </div>
-
-          {/* ReactFlow canvas — GraphDocument-native, no stack transforms */}
-          <div style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
-          <GraphCanvasActionsProvider value={graphCanvasActions}>
-            <GraphCanvas
-              graph={graph}
-              projection={canvasProjection}
-              selectedBlockId={selectedBlockId}
-              repairHighlightNodeIds={
-                repairHighlight.until > Date.now() ? repairHighlight.nodeIds : []
-              }
-              repairHighlightEdgeIds={
-                repairHighlight.until > Date.now() ? repairHighlight.edgeIds : []
-              }
-              onSelectNode={handleSelectNode}
-              onInspectNode={handleInspectNode}
-              onConnectFeedback={handleConnectFeedback}
-              onDropPaletteEntry={handleCanvasDrop}
-              onRequestDeleteNodes={handleRequestDeleteNodes}
+        <EditorShell
+          left={(
+            <LeftPanel
+              lang={uiLang}
+              sectionListItems={controlPanelSectionLists}
+              activeListId={appSection === 'automation' ? activeProjectId : null}
+              onSelectListItem={handleControlPanelSelectItem}
+              onCreateFlow={handleCreateFlow}
+              onBulkDelete={handleBulkDeleteFlows}
+              onOpenModuleLibrary={() => setShowLibrary(true)}
+              onOpenEsphome={() => openEsphomeConstructor({
+                projectId: activeProjectId,
+                projectName: projectName.trim() || undefined,
+              })}
+              onGoToAutomation={() => {
+                setAppSection('automation');
+                setMobileZone('canvas');
+              }}
+              listLoading={projectsLoading && appSection === 'automation'}
+              palette={(
+                <Sidebar
+                  onDragStart={setDraggingPaletteEntry}
+                  onDragEnd={endPaletteDrag}
+                  onTapAdd={isMobileView ? addBlockFromPaletteTap : null}
+                />
+              )}
             />
-          </GraphCanvasActionsProvider>
-          </div>
-
-          <CanvasSoftValidationHint />
-
-          <CanvasCompileErrors
-            getGraphDocument={graph.getGraphDocument}
-            graphRevision={graphRevision}
-            onHighlightNodeIds={handleHighlightCompileNodes}
-            onFitAllNodes={handleFitAllCanvasNodes}
-            onResetCorruptedGraph={handleResetCorruptedGraph}
-            onApplyRepair={(operations) => {
-              for (const op of operations || []) graph.dispatch(op.type, op.payload);
-            }}
-          />
-
-          <CanvasOnboardingOverlay
-            show={showCanvasOnboarding}
-            builderUi={builderUi}
-            canUseAiGenerator={canUseAiGenerator}
-            onOpenAi={openAiGeneratorModal}
-            onStartTour={() => { setTourStep(0); setTourActive(true); }}
-          />
-
-        </div>
-        )}
-
-        {/* Right panel: props + DSL — hidden on mobile unless props/dsl tab */}
-        {(isMobileView && mobileTab !== 'props' && mobileTab !== 'dsl') ? null : (
-        <div className="editor-right-panel" style={{
-          display:'flex', flexDirection:'column',
-          borderLeft: isMobileView ? 'none' : '1px solid rgba(99,102,241,0.2)', overflow:'hidden',
-          background: 'linear-gradient(180deg, #0d0920 0%, #080618 100%)',
-          boxShadow: isMobileView
-            ? (mobileTab === 'dsl' ? '0 -10px 34px rgba(0,0,0,0.58)' : 'none')
-            : '-4px 0 24px rgba(0,0,0,0.4)',
-          minWidth: 0,
-          minHeight: 0,
-          height: isMobileView ? undefined : '100%',
-          position: 'relative',
-          zIndex: 2,
-          ...(isMobileView ? {
-            gridColumn: '1',
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 56,
-            zIndex: mobileTab === 'dsl' ? 80 : 6,
-            borderTop: mobileTab === 'dsl' ? '1px solid rgba(99,102,241,0.3)' : undefined,
-            borderRadius: 0,
-            transition: 'top 0.22s ease, border-radius 0.22s ease',
-          } : {}),
-        }}
-        data-tour={!isMobileView ? 'props-panel-desktop' : undefined}>
-          {(!isMobileView || mobileTab === 'props') && (
-            <>
-              <div className="editor-panel-title" style={{
-                borderBottom:'1px solid rgba(99,102,241,0.15)', padding:'8px 12px',
-                fontSize:9, background:'linear-gradient(90deg,rgba(99,102,241,0.12),transparent)',
-                color:'rgba(99,102,241,0.7)', textTransform:'uppercase', letterSpacing:'.14em', fontWeight:700,
-                display:'flex', alignItems:'center', gap:6,
-              }}><span style={{ color:'#06b6d4', fontSize:11 }}>✏️</span> {builderUi.propsHeader}</div>
-              <div style={{ flex: isMobileView ? 1 : '1', minHeight:0, display:'flex', flexDirection:'column', overflow:'hidden' }}>
-                <PropsPanel
+          )}
+          center={appSection === 'automation' ? (
+            <CenterPanel canvasRef={canvasRef}>
+              <div style={{ position:'absolute', inset:0, pointerEvents:'none', overflow:'hidden', zIndex:0 }}>
+                <div style={{ position:'absolute', top:'-10%', left:'15%', width:500, height:500, borderRadius:'50%', background:'radial-gradient(ellipse,rgba(99,102,241,0.08) 0%,transparent 70%)', animation:'editorOrbFloat 9s ease-in-out infinite' }} />
+                <div style={{ position:'absolute', bottom:'-5%', right:'10%', width:420, height:420, borderRadius:'50%', background:'radial-gradient(ellipse,rgba(249,115,22,0.06) 0%,transparent 70%)', animation:'editorOrbFloat 12s ease-in-out infinite reverse' }} />
+                <div style={{ position:'absolute', top:'40%', right:'30%', width:260, height:260, borderRadius:'50%', background:'radial-gradient(ellipse,rgba(6,182,212,0.05) 0%,transparent 70%)', animation:'editorOrbFloat 7s ease-in-out infinite 2s' }} />
+                <div style={{ position:'absolute', left:0, right:0, height:2, background:'linear-gradient(90deg,transparent,rgba(99,102,241,0.15),rgba(249,115,22,0.1),transparent)', animation:'editorScanLine 8s linear infinite', opacity:0.6, pointerEvents:'none' }} />
+              </div>
+              <FlowHistoryToolbar
+                canUndo={graphHistory.canUndo}
+                canRedo={graphHistory.canRedo}
+                onUndo={handleGraphUndo}
+                onRedo={handleGraphRedo}
+                lang={uiLang}
+              />
+              <FlowLayoutToolbar
+                mode={flowLayoutMode}
+                onModeChange={handleFlowLayoutModeChange}
+                onRelayout={() => applyCanvasLayout()}
+                lang={uiLang}
+              />
+              <div style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
+                <GraphCanvasActionsProvider value={graphCanvasActions}>
+                  <GraphCanvas
+                    graph={graph}
+                    projection={canvasProjection}
+                    selectedBlockId={selectedBlockId}
+                    repairHighlightNodeIds={
+                      repairHighlight.until > Date.now() ? repairHighlight.nodeIds : []
+                    }
+                    repairHighlightEdgeIds={
+                      repairHighlight.until > Date.now() ? repairHighlight.edgeIds : []
+                    }
+                    highlightKind={
+                      repairHighlight.until > Date.now() ? repairHighlight.kind : null
+                    }
+                    lang={uiLang}
+                    onSelectNode={handleSelectNode}
+                    onInspectNode={handleInspectNode}
+                    onConnectFeedback={handleConnectFeedback}
+                    onDropPaletteEntry={handleCanvasDrop}
+                    onInsertNodeOnEdge={handleInsertNodeOnEdge}
+                    onRequestDeleteNodes={handleRequestDeleteNodes}
+                  />
+                </GraphCanvasActionsProvider>
+              </div>
+              <CanvasSoftValidationHint />
+              <CanvasCompileErrors
+                getGraphDocument={graph.getGraphDocument}
+                graphRevision={graphRevision}
+                onHighlightNodeIds={handleHighlightCompileNodes}
+                onFitAllNodes={handleFitAllCanvasNodes}
+                onResetCorruptedGraph={handleResetCorruptedGraph}
+                onApplyRepair={(operations) => {
+                  for (const op of operations || []) graph.dispatch(op.type, op.payload);
+                }}
+              />
+              <FlowCanvasEmptyState
+                show={showCanvasOnboarding}
+                lang={uiLang}
+                canUseAiGenerator={canUseAiGenerator}
+                onApplyTemplate={handleApplyFlowTemplate}
+                onOpenAi={openAiGeneratorModal}
+                onStartTour={() => { setTourStep(0); setTourActive(true); }}
+              />
+            </CenterPanel>
+          ) : (
+            <CenterPanel>
+              <EmptyState
+                icon="⚡"
+                title={uiLang === 'en' ? 'Automation lives here' : 'Автоматизация на холсте'}
+                hint={uiLang === 'en'
+                  ? 'Switch to Automation in the left panel to build flows and use templates.'
+                  : 'Перейдите в «Автоматизация» слева — там холст и шаблоны сценариев.'}
+                actions={(
+                  <button
+                    type="button"
+                    className="ds-btn ds-btn--primary ds-btn--sm"
+                    onClick={() => setAppSection('automation')}
+                  >
+                    {uiLang === 'en' ? 'Open Automation' : 'Открыть автоматизацию'}
+                  </button>
+                )}
+              />
+            </CenterPanel>
+          )}
+          right={appSection === 'automation' ? (
+            <RightInspectorPanel
+              tab={inspectorTab}
+              onTabChange={setInspectorTab}
+              canSeeCode={canSeeCode}
+              onLockedCodeTab={openPremiumPurchase}
+              lang={uiLang}
+              inspector={selectedBlock ? (
+                <EntityInspectorPanel
+                  graph={graph}
+                  graphRevision={graphRevision}
+                  nodeId={selectedBlockId}
                   block={selectedBlock}
+                  lang={uiLang}
                   onChange={handlePropChange}
                   onKeyboardDataChange={handleKeyboardDataChange}
                   onAddAttachment={(kind) => handleAddFooterAction(selectedBlock?.id, kind)}
@@ -6075,6 +6000,8 @@ export default function App() {
                   graphRefIndex={graphRefIndex}
                   graphDocument={graph.getGraphDocument()}
                   onJumpToNode={(nodeId) => nodeId && handleHighlightCompileNodes([nodeId])}
+                  onDeleteNode={handleRequestDeleteNode}
+                  onValidationToast={showToast}
                   onCreateCallbackHandler={(ref) => {
                     const doc = graph.getGraphDocument();
                     const compileValue = String(ref?.compileValue || '').trim()
@@ -6113,116 +6040,107 @@ export default function App() {
                   isProjectMode={isProjectMode}
                   hasActiveProSubscription={hasActiveProSubscription}
                 />
-              </div>
-            </>
-          )}
-          {canSeeCode && (!isMobileView || mobileTab === 'dsl') && (
-            <PythonPane
-              getGraphDocument={graph.getGraphDocument}
-              graphRevision={graphRevision}
-              isMobile={isMobileView}
-              onClose={undefined}
+              ) : (
+                <EmptyState
+                  icon="🎯"
+                  title={uiLang === 'en' ? 'No block selected' : 'Блок не выбран'}
+                  hint={uiLang === 'en'
+                    ? 'Click a step on the canvas to edit it here.'
+                    : 'Нажмите на шаг на холсте, чтобы редактировать его здесь.'}
+                />
+              )}
+              codePane={(
+                <PythonPane
+                  getGraphDocument={graph.getGraphDocument}
+                  graphRevision={graphRevision}
+                  isMobile={isMobileView}
+                  onClose={undefined}
+                />
+              )}
+              lockedCodePane={(
+                <PremiumLockedPanel
+                  title="Код сценария доступен в Pro"
+                  text="Нажми, чтобы открыть меню покупки Premium."
+                  isMobile={isMobileView}
+                  onUpgrade={openPremiumPurchase}
+                />
+              )}
+            />
+          ) : (
+            <RightInspectorPanel
+              tab="props"
+              onTabChange={() => {}}
+              lang={uiLang}
+              inspector={(
+                <EmptyState
+                  icon="📋"
+                  title={uiLang === 'en' ? 'Nothing selected' : 'Ничего не выбрано'}
+                  hint={uiLang === 'en'
+                    ? 'Pick an item from the left list to configure it.'
+                    : 'Выберите элемент в списке слева для настройки.'}
+                />
+              )}
             />
           )}
-          {!canSeeCode && (!isMobileView || mobileTab === 'dsl') && (
-            <PremiumLockedPanel
-              title="Код сценария доступен в Pro"
-              text="Нажми, чтобы открыть меню покупки Premium."
-              isMobile={isMobileView}
-              onUpgrade={openPremiumPurchase}
-            />
-          )}
-        </div>
-        )}
-
-      </div>
-
-      {/* Mobile bottom navigation */}
-      {isMobileView && (
-        <div style={{
-          position: 'fixed', bottom: 0, left: 0, right: 0,
-          display: 'flex',
-          background: 'linear-gradient(180deg, #0d0920 0%, #06030f 100%)',
-          borderTop: '1px solid rgba(99,102,241,0.25)',
-          boxShadow: '0 -4px 24px rgba(0,0,0,0.6)',
-          height: 56,
-          zIndex: 100,
-        }}>
-          {[
-            { key: 'canvas', icon: '🎨', label: builderUi.mobileTabCanvas },
-            { key: 'blocks', icon: '🧱', label: builderUi.mobileTabBlocks },
-            { key: 'props',  icon: '✏️', label: builderUi.mobileTabProps },
-            { key: 'dsl', icon: canSeeCode ? '📜' : '🔒', label: builderUi.mobileTabDsl, locked: !canSeeCode },
-          ].map(tab => (
-            <button
-              key={tab.key}
-              data-tour={tab.key === 'canvas' ? 'mobile-tab-canvas' : tab.key === 'blocks' ? 'mobile-tab-blocks' : tab.key === 'props' ? 'mobile-tab-props' : tab.key === 'dsl' ? 'mobile-tab-dsl' : undefined}
-              onClick={() => {
-                if (tab.locked) {
-                  openPremiumPurchase();
-                  return;
-                }
-                if (tab.key === 'dsl') {
-                  setMobileTab(prev => prev === 'dsl' ? 'canvas' : 'dsl');
-                  return;
-                }
-                setMobileTab(tab.key);
+          mobileNav={isMobileView ? (
+            <MobileZoneNav
+              labels={{
+                canvas: builderUi.mobileTabCanvas,
+                list: builderUi.mobileTabBlocks,
+                inspector: builderUi.mobileTabProps,
               }}
-              className={`editor-mobile-tab${mobileTab === tab.key ? ' active' : ''}${tab.locked ? ' locked-premium' : ''}`}
-              title={tab.locked ? 'Доступно в Pro' : undefined}
-            >
-              <span className="tab-icon">{tab.icon}</span>
-              <span className="tab-label">{tab.label}</span>
-            </button>
-          ))}
-          {/* Mobile Run/Stop Button */}
-          {(() => { const _canRun = graphHasRunnableBot(graph, currentUser); return (
-          <button
-            data-tour="mobile-run"
-            onClick={isSandboxRunning ? stopSandboxBot : (_canRun ? startBot : undefined)}
-            disabled={!isSandboxRunning && !_canRun}
-            title={
-              !isSandboxRunning && !_canRun
-                ? (!graphHasBotBlock(graph) ? builderUi.addBotTokenTitle : builderUi.needBotToken)
-                : ''
-            }
-            style={{
-              width: 70, display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center', gap: 1,
-              background: isSandboxRunning
-                ? 'linear-gradient(135deg,#ef4444,#dc2626)'
-                : _canRun ? 'linear-gradient(135deg,#f97316,#dc2626)' : 'rgba(45,55,72,0.6)',
-              border: 'none', cursor: (!isSandboxRunning && !_canRun) ? 'not-allowed' : 'pointer',
-              borderTop: `2px solid ${isSandboxRunning ? '#ef4444' : _canRun ? '#f97316' : 'transparent'}`,
-              borderLeft: '1px solid rgba(99,102,241,0.2)',
-              flexShrink: 0, position: 'relative', overflow: 'hidden',
-              opacity: (!isSandboxRunning && !_canRun) ? 0.4 : 1,
-              transition: 'all 0.2s',
-              boxShadow: (_canRun || isSandboxRunning) ? '0 0 20px rgba(249,115,22,0.3)' : 'none',
-            }}
-          >
-            {isSandboxRunning && sandboxSecondsLeft !== null && (
-              <div style={{
-                position:'absolute', bottom:0, left:0, height:2,
-                background:'rgba(255,255,255,0.45)',
-                width:`${(sandboxSecondsLeft/300)*100}%`,
-                transition:'width 1s linear',
-              }} />
-            )}
-            <span style={{ fontSize: 18 }}>{isSandboxRunning ? '■' : '▶'}</span>
-            <span style={{ fontSize: 9, color: '#fff', fontFamily: 'Syne, system-ui', fontWeight: 600, whiteSpace: 'nowrap' }}>
-              {isSandboxRunning ? builderUi.mobileStop : builderUi.mobileRun}
-            </span>
-            {isSandboxRunning && sandboxSecondsLeft !== null && (
-              <span style={{ fontSize: 7, color: 'rgba(255,255,255,0.75)', fontFamily: 'var(--mono)' }}>
-                {Math.floor(sandboxSecondsLeft/60)}:{String(sandboxSecondsLeft%60).padStart(2,'0')}
-              </span>
-            )}
-          </button>
-          ); })()}
-        </div>
-      )}
-        </>
+              runSlot={(() => {
+                const _canRun = graphHasRunnableBot(graph, currentUser);
+                return (
+                  <button
+                    data-tour="mobile-run"
+                    type="button"
+                    onClick={isSandboxRunning ? stopSandboxBot : (_canRun ? startBot : undefined)}
+                    disabled={!isSandboxRunning && !_canRun}
+                    title={
+                      !isSandboxRunning && !_canRun
+                        ? (!graphHasBotBlock(graph) ? builderUi.addBotTokenTitle : builderUi.needBotToken)
+                        : ''
+                    }
+                    style={{
+                      width: 70, display: 'flex', flexDirection: 'column',
+                      alignItems: 'center', justifyContent: 'center', gap: 1,
+                      background: isSandboxRunning
+                        ? 'linear-gradient(135deg,#ef4444,#dc2626)'
+                        : _canRun ? 'linear-gradient(135deg,#f97316,#dc2626)' : 'rgba(45,55,72,0.6)',
+                      border: 'none', cursor: (!isSandboxRunning && !_canRun) ? 'not-allowed' : 'pointer',
+                      borderTop: `2px solid ${isSandboxRunning ? '#ef4444' : _canRun ? '#f97316' : 'transparent'}`,
+                      borderLeft: '1px solid rgba(99,102,241,0.2)',
+                      flexShrink: 0, position: 'relative', overflow: 'hidden',
+                      opacity: (!isSandboxRunning && !_canRun) ? 0.4 : 1,
+                      transition: 'all 0.2s',
+                      boxShadow: (_canRun || isSandboxRunning) ? '0 0 20px rgba(249,115,22,0.3)' : 'none',
+                    }}
+                  >
+                    {isSandboxRunning && sandboxSecondsLeft !== null && (
+                      <div style={{
+                        position:'absolute', bottom:0, left:0, height:2,
+                        background:'rgba(255,255,255,0.45)',
+                        width:`${(sandboxSecondsLeft/300)*100}%`,
+                        transition:'width 1s linear',
+                      }} />
+                    )}
+                    <span style={{ fontSize: 18 }}>{isSandboxRunning ? '■' : '▶'}</span>
+                    <span style={{ fontSize: 9, color: '#fff', fontFamily: 'Syne, system-ui', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                      {isSandboxRunning ? builderUi.mobileStop : builderUi.mobileRun}
+                    </span>
+                    {isSandboxRunning && sandboxSecondsLeft !== null && (
+                      <span style={{ fontSize: 7, color: 'rgba(255,255,255,0.75)', fontFamily: 'var(--mono)' }}>
+                        {Math.floor(sandboxSecondsLeft/60)}:{String(sandboxSecondsLeft%60).padStart(2,'0')}
+                      </span>
+                    )}
+                  </button>
+                );
+              })()}
+            />
+          ) : null}
+        />
+        </AppLayoutProvider>
       ) : (
         /* Non-logged-in: just show auth modal, empty background */
         <div style={{
@@ -6300,7 +6218,9 @@ export default function App() {
               } finally {
                 done();
               }
-              layoutAllFlowChains(graph);
+              const metaMode = readLayoutModeFromMetadata(graph.getGraphDocument().metadata);
+              setFlowLayoutMode(metaMode);
+              applyCanvasLayout(metaMode);
               syncGraphUidSequence();
               setProjectName(project.name);
               setActiveProjectId(project.id);
@@ -6787,43 +6707,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Toast Notification */}
-      {toast && (
-        <div style={{
-          position: 'fixed',
-          top: isMobileView ? 'auto' : 20,
-          bottom: isMobileView ? 80 : 'auto',
-          left: '50%',
-          transform: toast.visible ? 'translateX(-50%) translateY(0)' : 'translateX(-50%) translateY(-20px)',
-          opacity: toast.visible ? 1 : 0,
-          transition: 'all 0.3s ease',
-          zIndex: 9999,
-          maxWidth: isMobileView ? '90%' : 400,
-          width: 'auto',
-        }}>
-          <div style={{
-            background: toast.type === 'error' ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' :
-                        toast.type === 'success' ? 'linear-gradient(135deg, #3ecf8e 0%, #059669 100%)' :
-                        'linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%)',
-            color: '#fff',
-            padding: '12px 20px',
-            borderRadius: 10,
-            boxShadow: '0 10px 30px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.1)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            fontSize: 14,
-            fontWeight: 500,
-            backdropFilter: 'blur(10px)',
-            border: '1px solid rgba(255,255,255,0.1)',
-          }}>
-            <span style={{ fontSize: 18 }}>
-              {toast.type === 'error' ? '⚠️' : toast.type === 'success' ? '✅' : 'ℹ️'}
-            </span>
-            <span>{toast.message}</span>
-          </div>
-        </div>
-      )}
+      <ToastHost toast={toast} isMobile={isMobileView} />
 
       {/* Bot Starting Loading Modal */}
       {(isStartingSandbox || isStartingServer) && (

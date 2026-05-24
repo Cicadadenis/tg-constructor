@@ -44,6 +44,15 @@ store.redo();
 assert.equal(Object.keys(store.document.nodes).length, 1);
 assert.equal(Object.keys(store.document.edges).length, 0);
 
+assert.equal(store.canUndo(), true);
+assert.equal(store.canRedo(), false);
+store.undo();
+assert.equal(store.canUndo(), true);
+assert.equal(store.canRedo(), true);
+const hist = store.getHistoryState();
+assert.equal(hist.cursor >= 0, true);
+assert.equal(typeof hist.length, 'number');
+
 const bootstrap = documentToBootstrapOperations(createGraphDocument({
   nodes: [{ id: 'z', type: 'start', position: { x: 1, y: 2 } }],
   edges: [],

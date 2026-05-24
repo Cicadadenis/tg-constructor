@@ -8,7 +8,7 @@ import {
   LEGACY_WRAPPER_TYPES,
   UnknownBlockTypeError,
 } from '../../src/constructor/graph_document/graph_node_payload.js';
-import { hasOperationContract } from '../../src/constructor/graph_document/operation_registry.js';
+import { getNodeManifestRegistry } from '../node_manifest/nodeManifestRegistry.mjs';
 
 /**
  * @typedef {object} RegistryViolation
@@ -55,10 +55,10 @@ export function collectRegistryViolations(nodes) {
     try {
       const resolved = coerceLegacyBlockType(node);
       assertRegisteredBlockType(resolved, { nodeId });
-      if (!hasOperationContract(resolved)) {
+      if (!getNodeManifestRegistry().has(resolved)) {
         violations.push({
           code: 'unregistered_block_type',
-          message: `Node "${nodeId}": type "${resolved}" is not in operation registry`,
+          message: `Node "${nodeId}": type "${resolved}" is not in NodeManifestRegistry`,
           nodeId,
           type: resolved,
         });

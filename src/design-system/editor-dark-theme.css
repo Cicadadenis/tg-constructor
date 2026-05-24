@@ -1,0 +1,364 @@
+/**
+ * Constructor shell — dark cyberpunk theme (matches Profile modal aesthetic).
+ * Scoped to `.editor-shell` so modals/landing keep their own styling.
+ */
+
+@keyframes editorStarFloat {
+  from { background-position: 0 0, 0 0; }
+  to { background-position: 52px 42px, -38px 58px; }
+}
+
+body:has(.editor-shell),
+.editor-shell {
+  --color-primary: #19d8ff;
+  --color-primary-hover: #06b6d4;
+  --color-primary-active: #0891b2;
+  --color-primary-muted: rgba(25, 216, 255, 0.12);
+  --color-primary-border: rgba(25, 216, 255, 0.38);
+
+  --color-bg: #050114;
+  --color-surface: rgba(13, 7, 42, 0.96);
+  --color-surface-muted: rgba(255, 255, 255, 0.035);
+  --color-surface-elevated: rgba(18, 10, 48, 0.98);
+  --color-overlay: rgba(2, 1, 12, 0.88);
+
+  --color-border: rgba(178, 128, 255, 0.22);
+  --color-border-strong: rgba(178, 128, 255, 0.42);
+  --color-border-focus: #19d8ff;
+
+  --color-text: #ffffff;
+  --color-text-secondary: rgba(255, 255, 255, 0.65);
+  --color-text-muted: rgba(255, 255, 255, 0.38);
+  --color-text-inverse: #050114;
+
+  --color-danger: #f87171;
+  --color-danger-muted: rgba(248, 113, 113, 0.12);
+  --color-success: #34d399;
+  --color-success-muted: rgba(52, 211, 153, 0.12);
+  --color-warning: #fbbf24;
+  --color-warning-muted: rgba(251, 191, 36, 0.12);
+
+  --color-canvas-bg: #030118;
+  --color-canvas-grid: rgba(139, 92, 246, 0.08);
+  --color-canvas-dot: rgba(25, 216, 255, 0.14);
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5), 0 0 14px rgba(111, 70, 255, 0.08);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.55), 0 0 24px rgba(25, 216, 255, 0.08);
+  --shadow-focus: 0 0 0 3px rgba(25, 216, 255, 0.28);
+
+  color: var(--color-text);
+}
+
+body:has(.editor-shell) {
+  background: #050114;
+}
+
+.editor-shell {
+  background:
+    radial-gradient(ellipse at 18% 0%, rgba(111, 70, 255, 0.24) 0%, transparent 52%),
+    radial-gradient(ellipse at 88% 100%, rgba(25, 216, 255, 0.12) 0%, transparent 48%),
+    linear-gradient(180deg, #0d072a 0%, #050114 52%, #03000f 100%);
+}
+
+.editor-shell::before {
+  display: block !important;
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(circle, rgba(255, 255, 255, 0.14) 0 1px, transparent 1.4px),
+    radial-gradient(circle, rgba(25, 216, 255, 0.11) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 50% 12%, rgba(111, 70, 255, 0.18), transparent 42%);
+  background-size: 22px 22px, 58px 58px, auto;
+  animation: editorStarFloat 18s linear infinite;
+  opacity: 0.45;
+}
+
+.editor-shell::after {
+  display: block !important;
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: radial-gradient(circle at 50% 48%, transparent 0 52%, rgba(3, 1, 12, 0.38) 100%);
+}
+
+.editor-shell__topbar,
+.editor-shell__body,
+.editor-shell > * {
+  position: relative;
+  z-index: 1;
+}
+
+.editor-shell .editor-topbar {
+  background: rgba(13, 7, 42, 0.94) !important;
+  border-bottom: 1px solid rgba(178, 128, 255, 0.28) !important;
+  box-shadow: 0 1px 0 rgba(25, 216, 255, 0.08), 0 8px 24px rgba(0, 0, 0, 0.35) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.editor-shell .editor-brand-word {
+  font-family: 'Syne', var(--font-sans);
+  font-weight: 800;
+  background: linear-gradient(90deg, #06b6d4, #818cf8);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.editor-shell .editor-brand-suffix {
+  font-family: 'Syne', var(--font-sans);
+  color: rgba(255, 255, 255, 0.32);
+}
+
+.editor-shell .app-zone {
+  background: rgba(10, 6, 32, 0.82);
+}
+
+.editor-shell .app-zone--left,
+.editor-shell .app-zone--right {
+  background: linear-gradient(180deg, rgba(13, 7, 42, 0.94) 0%, rgba(4, 2, 16, 0.98) 100%);
+  border-color: rgba(178, 128, 255, 0.2);
+}
+
+.editor-shell .app-zone--center {
+  background: transparent;
+}
+
+.editor-shell .app-nav__item {
+  border-radius: var(--radius-md);
+  color: rgba(255, 255, 255, 0.58);
+  position: relative;
+}
+
+.editor-shell .app-nav__item::before {
+  content: '';
+  position: absolute;
+  inset: 8px auto 8px 0;
+  width: 2px;
+  border-radius: var(--radius-full);
+  background: transparent;
+  transition: var(--motion-transition-hover);
+}
+
+.editor-shell .app-nav__item:hover {
+  background: linear-gradient(90deg, rgba(25, 216, 255, 0.08), rgba(139, 92, 246, 0.09));
+  border-color: rgba(178, 128, 255, 0.24);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.editor-shell .app-nav__item.active {
+  background: linear-gradient(135deg, rgba(25, 216, 255, 0.18), rgba(139, 92, 246, 0.22) 56%, rgba(255, 122, 53, 0.12));
+  border-color: rgba(25, 216, 255, 0.42);
+  color: #fff;
+  box-shadow: 0 0 18px rgba(25, 216, 255, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.editor-shell .app-nav__item.active::before {
+  background: linear-gradient(#19d8ff, #8b5cf6, #ff7a35);
+  box-shadow: 0 0 12px rgba(25, 216, 255, 0.65);
+}
+
+.editor-shell .control-panel__rail-tabs {
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom-color: rgba(178, 128, 255, 0.2);
+}
+
+.editor-shell .control-panel__rail-tab {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.editor-shell .control-panel__rail-tab.active {
+  background: linear-gradient(135deg, rgba(25, 216, 255, 0.2), rgba(139, 92, 246, 0.24));
+  border-color: rgba(25, 216, 255, 0.45);
+  color: #fff;
+  box-shadow: 0 0 16px rgba(25, 216, 255, 0.12);
+}
+
+.editor-shell .editor-sidebar-block {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(178, 128, 255, 0.16);
+}
+
+.editor-shell .editor-sidebar-block:hover {
+  background: linear-gradient(90deg, rgba(25, 216, 255, 0.1), rgba(139, 92, 246, 0.12)) !important;
+  border-left-color: #19d8ff !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.editor-shell .editor-group-header {
+  color: rgba(255, 255, 255, 0.45);
+  border-top-color: rgba(178, 128, 255, 0.16);
+}
+
+.editor-shell .flow-canvas-empty__card {
+  background: linear-gradient(145deg, rgba(25, 216, 255, 0.1), rgba(111, 70, 255, 0.14) 54%, rgba(6, 2, 32, 0.88));
+  border: 1px solid rgba(121, 88, 255, 0.45);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45), 0 0 32px rgba(111, 70, 255, 0.12);
+}
+
+.editor-shell .flow-canvas-empty__template {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(178, 128, 255, 0.22);
+}
+
+.editor-shell .flow-canvas-empty__template:hover {
+  background: linear-gradient(135deg, rgba(25, 216, 255, 0.12), rgba(139, 92, 246, 0.14));
+  border-color: rgba(25, 216, 255, 0.4);
+}
+
+.editor-shell .ds-btn--primary {
+  background: linear-gradient(135deg, rgba(25, 216, 255, 0.95), rgba(139, 92, 246, 0.88) 58%, rgba(255, 122, 53, 0.75));
+  border-color: rgba(25, 216, 255, 0.45);
+  color: #fff;
+  box-shadow: 0 0 18px rgba(25, 216, 255, 0.18);
+}
+
+.editor-shell .ds-btn--primary:hover:not(:disabled) {
+  filter: brightness(1.06);
+  box-shadow: 0 0 22px rgba(25, 216, 255, 0.28);
+}
+
+.editor-shell .tb-btn-ai {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.22), rgba(249, 115, 22, 0.28));
+  border-color: rgba(251, 191, 36, 0.45);
+  color: #fde68a;
+}
+
+.editor-shell .tb-btn-run {
+  background: linear-gradient(135deg, #19d8ff, #6f46ff);
+  border-color: rgba(25, 216, 255, 0.5);
+  color: #fff;
+}
+
+.editor-shell .tb-btn-danger {
+  background: rgba(248, 113, 113, 0.1);
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.35);
+}
+
+.editor-shell .tb-btn-danger:hover {
+  background: rgba(248, 113, 113, 0.18);
+  color: #fecaca;
+  border-color: rgba(248, 113, 113, 0.5);
+}
+
+.editor-shell .app-left__search,
+.editor-shell input:not([type='checkbox']):not([type='radio']),
+.editor-shell textarea,
+.editor-shell select {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(178, 128, 255, 0.24);
+  color: var(--color-text);
+}
+
+.editor-shell .app-left__search:focus,
+.editor-shell input:not([type='checkbox']):not([type='radio']):focus,
+.editor-shell textarea:focus,
+.editor-shell select:focus {
+  border-color: rgba(25, 216, 255, 0.55);
+  box-shadow: 0 0 0 3px rgba(25, 216, 255, 0.15);
+}
+
+.editor-shell .app-left__filter-chip {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(178, 128, 255, 0.2);
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.editor-shell .app-left__filter-chip.active {
+  background: linear-gradient(135deg, rgba(25, 216, 255, 0.16), rgba(139, 92, 246, 0.2));
+  border-color: rgba(25, 216, 255, 0.4);
+  color: #fff;
+}
+
+.editor-shell .app-inspector-tab.active {
+  color: #19d8ff;
+  border-bottom-color: #19d8ff;
+  text-shadow: 0 0 12px rgba(25, 216, 255, 0.35);
+}
+
+.editor-shell * {
+  scrollbar-color: rgba(139, 92, 246, 0.55) transparent;
+}
+
+.editor-shell *::-webkit-scrollbar-thumb {
+  background: linear-gradient(#6f46ff, #ff7a35);
+}
+
+.editor-shell .react-flow__background {
+  background: var(--color-canvas-bg) !important;
+}
+
+/* Flow nodes — dark category accents */
+.editor-shell .flow-node-card--messaging {
+  --node-accent: #38bdf8;
+  --node-muted: rgba(56, 189, 248, 0.12);
+  --node-border: rgba(56, 189, 248, 0.35);
+}
+
+.editor-shell .flow-node-card--logic {
+  --node-accent: #a78bfa;
+  --node-muted: rgba(167, 139, 250, 0.12);
+  --node-border: rgba(167, 139, 250, 0.35);
+}
+
+.editor-shell .flow-node-card--ai {
+  --node-accent: #22d3ee;
+  --node-muted: rgba(34, 211, 238, 0.12);
+  --node-border: rgba(34, 211, 238, 0.35);
+}
+
+.editor-shell .flow-node-card--db {
+  --node-accent: #34d399;
+  --node-muted: rgba(52, 211, 153, 0.12);
+  --node-border: rgba(52, 211, 153, 0.35);
+}
+
+.editor-shell .flow-node-card__surface {
+  background: rgba(13, 7, 42, 0.92);
+  border-color: rgba(178, 128, 255, 0.24);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.editor-shell .flow-node-card.selected .flow-node-card__surface {
+  box-shadow: var(--shadow-md), 0 0 0 2px var(--node-accent), 0 0 18px rgba(25, 216, 255, 0.12);
+}
+
+.editor-shell .canvas-zoom-controls,
+.editor-shell .graph-flow-host .canvas-minimap.react-flow__minimap {
+  background: rgba(13, 7, 42, 0.94);
+  border-color: rgba(178, 128, 255, 0.28);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.editor-shell .tb-btn-ghost {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(178, 128, 255, 0.22);
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.editor-shell .tb-btn-ghost:hover:not(:disabled) {
+  background: rgba(139, 92, 246, 0.14);
+  border-color: rgba(25, 216, 255, 0.35);
+  color: #fff;
+}
+
+.editor-shell .tb-btn-stop {
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #fca5a5;
+}
+
+.editor-shell .app-inspector-body,
+.editor-shell .app-inspector-tabs {
+  background: transparent;
+}

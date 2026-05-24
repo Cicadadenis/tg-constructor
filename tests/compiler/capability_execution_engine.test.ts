@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 
+process.env.LEGACY_EXECUTION_ENABLED = "true";
+
 import { createGraphDocument } from "../../src/constructor/graph_document/graph_document.js";
 import { buildGraphNodeData } from "../../src/constructor/graph_document/graph_node_payload.js";
 import { graphToBotIR } from "../../core/ir/bot_ir";

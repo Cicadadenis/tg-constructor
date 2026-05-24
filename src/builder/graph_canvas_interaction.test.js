@@ -17,10 +17,11 @@ test('click vs drag threshold', () => {
   assert.equal(NODE_CLICK_DRAG_THRESHOLD_PX, 5);
 });
 
-test('hit area larger than puzzle body', () => {
+test('hit area larger than card body', () => {
   const layout = getCicadaNodeLayout('message', false);
   assert.ok(layout.hitW > layout.width);
   assert.ok(layout.hitH > layout.height);
+  assert.ok(layout.height >= 100);
 });
 
 test('delete summary for connected node', () => {

@@ -3,13 +3,13 @@
  * Bot IR (Canonical AI IR) stays semantic; Execution IR is the executable layer.
  */
 
-import { buildExecutionIrFromFlowGraph } from '../runtime/execution/buildExecutionIr.mjs';
+import { compileFlowGraphToExecutionIr } from './executionGraphCompiler.mjs';
 
 /**
  * @param {object} flowGraph — from synthesizeFlowGraph()
  */
 export function buildExecutionIrFromSemanticFlowGraph(flowGraph) {
-  return buildExecutionIrFromFlowGraph({
+  return compileFlowGraphToExecutionIr({
     version: flowGraph?.version,
     nodes: flowGraph?.nodes || [],
     edges: flowGraph?.edges || [],

@@ -29,6 +29,8 @@ export interface ExecutionStateSnapshot {
   readonly branchStates: Readonly<Record<string, BranchRuntimeState>>;
   readonly joinProgress: Readonly<Record<string, JoinProgress>>;
   readonly variables: Readonly<Record<string, unknown>>;
+  readonly appliedIdempotencyKeys: readonly string[];
+  readonly lastEventSequence: number;
   readonly suspendReason?: string;
   readonly checkpoint: number;
   readonly lastError?: string;
@@ -53,6 +55,8 @@ export function createInitialExecutionState(
     branchStates: Object.freeze({}),
     joinProgress: Object.freeze({}),
     variables: Object.freeze({}),
+    appliedIdempotencyKeys: Object.freeze([]),
+    lastEventSequence: 0,
     checkpoint: 0,
     updatedAt: now,
   });
@@ -68,6 +72,8 @@ export function cloneSnapshot(
     branchStates: Record<string, BranchRuntimeState>;
     joinProgress: Record<string, JoinProgress>;
     variables: Record<string, unknown>;
+    appliedIdempotencyKeys: string[];
+    lastEventSequence: number;
     suspendReason: string | undefined;
     checkpoint: number;
     lastError: string | undefined;
@@ -92,6 +98,10 @@ export function cloneSnapshot(
       ...snapshot.variables,
       ...(patch.variables || {}),
     }),
+    appliedIdempotencyKeys: Object.freeze(
+      patch.appliedIdempotencyKeys ?? [...snapshot.appliedIdempotencyKeys],
+    ),
+    lastEventSequence: patch.lastEventSequence ?? snapshot.lastEventSequence,
     checkpoint: patch.checkpoint ?? snapshot.checkpoint + 1,
     updatedAt: new Date().toISOString(),
   });

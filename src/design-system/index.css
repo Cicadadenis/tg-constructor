@@ -1,0 +1,28 @@
+@import './tokens.css';
+@import './motion.css';
+@import './interactions.css';
+@import './typography.css';
+@import './components.css';
+@import './editor-chrome.css';
+@import './editor-dark-theme.css';
+@import './landing.css';
+
+/* Global scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: var(--radius-full);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}

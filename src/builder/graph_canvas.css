@@ -27,13 +27,23 @@
   z-index: 2 !important;
 }
 
-.react-flow__edge,
 .react-flow__connectionline {
   pointer-events: none !important;
 }
 
-.react-flow__edge-interaction {
+.react-flow__edge:not(.flow-bezier-edge-rf):not(.flow-add-step-edge-rf),
+.react-flow__edge:not(.flow-bezier-edge-rf):not(.flow-add-step-edge-rf) .react-flow__edge-interaction {
   pointer-events: none !important;
+}
+
+.react-flow__edge.flow-bezier-edge-rf,
+.react-flow__edge.flow-add-step-edge-rf {
+  pointer-events: visibleStroke !important;
+}
+
+.react-flow__edge.flow-bezier-edge-rf .react-flow__edge-interaction,
+.react-flow__edge.flow-add-step-edge-rf .react-flow__edge-interaction {
+  pointer-events: visibleStroke !important;
 }
 
 .react-flow__node.cicada-node {
@@ -49,7 +59,9 @@
   cursor: grabbing;
 }
 
-.react-flow__node.cicada-node .cicada-node-controls {
+.react-flow__node.cicada-node .cicada-node-controls,
+.react-flow__node.cicada-node .flow-node-card__actions,
+.react-flow__node.cicada-node .flow-node-card__action-btn {
   pointer-events: all !important;
 }
 

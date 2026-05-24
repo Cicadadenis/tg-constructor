@@ -1,6 +1,7 @@
 import { CURRENT_VERSION } from "./version";
 import { executionTriggerForSource } from "../registry/blockCapabilities.js";
 import { assertRegisteredBlockType } from "../../src/constructor/graph_document/graph_node_payload.js";
+import { validateGraphNodeForExecution } from "../node_manifest/validateNodeExecution.mjs";
 import { resolveFlowNodeType, resolveFlowNodeProps } from "../ir/resolveFlowNodeType.js";
 import type { BotIRGraph } from "../ir/bot_ir.js";
 import { botIrToExecutionGraph } from "../ir/botIrToExecutionGraph.js";
@@ -23,6 +24,7 @@ function toExecutionNode(node: any): ExecutionNode {
   const type = assertRegisteredBlockType(resolveFlowNodeType(node), {
     nodeId: nodeId || undefined,
   });
+  validateGraphNodeForExecution({ id: nodeId, type, data: resolveFlowNodeProps(node) });
   const props = resolveFlowNodeProps(node);
   return {
     id: nodeId,

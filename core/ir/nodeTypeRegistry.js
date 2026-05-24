@@ -3,7 +3,15 @@
  * refFields — поля, которые после build должны указывать на существующий compiler id.
  *
  * id узла IR = compiler id (не подпись кнопки).
+ *
+ * scenario | step | block — intent / editor DSL only (see intentNodeRegistry.mjs).
+ * They MUST NOT appear in Flow Graph or Execution IR.
  */
+
+/** @deprecated for execution pipelines — intent/editor only */
+export const IR_INTENT_ONLY_NODE_TYPES = Object.freeze(
+  new Set(['scenario', 'step', 'block']),
+);
 
 export const IR_NODE_REGISTRY = Object.freeze({
   callback: Object.freeze({

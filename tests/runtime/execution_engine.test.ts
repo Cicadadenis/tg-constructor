@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
-  buildExecutionIrFromFlowGraph,
   createExecutionScheduler,
   InMemoryExecutionStateStore,
   isJoinBarrierSatisfied,
   type ExecutionIrPlan,
 } from "../../core/runtime/execution/index.js";
+import "../../core/node_manifest/init.mjs";
+import { compileFlowGraphToExecutionIr as compileFlowGraph } from "../../core/ai/executionGraphCompiler.mjs";
 import { ensureCapabilityExecutorsRegistered } from "../../core/runtime/capabilityExecutors.js";
 
 ensureCapabilityExecutorsRegistered();
@@ -41,7 +42,7 @@ function branchFlowGraph() {
 
 describe("Execution IR", () => {
   it("builds immutable plan from non-linear flow graph", () => {
-    const plan = buildExecutionIrFromFlowGraph(branchFlowGraph());
+    const plan = compileFlowGraph(branchFlowGraph());
     assert.equal(plan.version, "1.0");
     assert.ok(plan.planId);
     assert.ok(plan.steps.length > 0);
@@ -56,7 +57,7 @@ describe("Execution IR", () => {
   });
 
   it("join barrier satisfaction is deterministic", () => {
-    const plan = buildExecutionIrFromFlowGraph(branchFlowGraph());
+    const plan = compileFlowGraph(branchFlowGraph());
     const barrier = plan.barriers[0];
     assert.equal(
       isJoinBarrierSatisfied(barrier, {
@@ -77,7 +78,7 @@ describe("Execution IR", () => {
 
 describe("Execution scheduler", () => {
   it("runs sequential flow to completion", async () => {
-    const plan = buildExecutionIrFromFlowGraph({
+    const plan = compileFlowGraph({
       nodes: [
         { id: "a", type: "notify", payload: { text: "Hi" } },
         { id: "b", type: "terminal", payload: {} },
@@ -94,7 +95,7 @@ describe("Execution scheduler", () => {
   });
 
   it("parallel fork branches execute and join", async () => {
-    const plan = buildExecutionIrFromFlowGraph(branchFlowGraph());
+    const plan = compileFlowGraph(branchFlowGraph());
     const store = new InMemoryExecutionStateStore();
     const scheduler = createExecutionScheduler(plan);
     const result = await scheduler.start({ store, maxSteps: 100 });
@@ -106,7 +107,7 @@ describe("Execution scheduler", () => {
   });
 
   it("resumes suspended execution", async () => {
-    const plan = buildExecutionIrFromFlowGraph({
+    const plan = compileFlowGraph({
       nodes: [
         { id: "j", type: "merge", payload: {} },
         { id: "t", type: "terminal", payload: {} },
@@ -123,7 +124,7 @@ describe("Execution scheduler", () => {
   });
 
   it("retries failed action then completes or fails deterministically", async () => {
-    const plan = buildExecutionIrFromFlowGraph({
+    const plan = compileFlowGraph({
       nodes: [
         { id: "x", type: "notify", payload: { text: "retry me" } },
         { id: "y", type: "terminal", payload: {} },

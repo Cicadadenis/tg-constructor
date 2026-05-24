@@ -5,6 +5,7 @@ from __future__ import annotations
 from cicada_platform.compiler.source_utils import source_hash
 from cicada_platform.core.schemas.ast import AstProgramSnapshot
 from cicada_platform.core.schemas.ir import IrAction, IrHandler, IrProgram, IrState
+from cicada_platform.runtime.legacy_execution_policy import assert_legacy_execution_allowed
 
 
 def _stmt_to_action(stmt: object) -> IrAction | None:
@@ -28,6 +29,7 @@ def _stmt_to_action(stmt: object) -> IrAction | None:
 
 
 def lower_program(program: object, *, dsl_source: str = "") -> tuple[AstProgramSnapshot, IrProgram]:
+    assert_legacy_execution_allowed("lower_program → IrProgram")
     handlers = getattr(program, "handlers", [])
     scenarios = getattr(program, "scenarios", {})
     blocks = getattr(program, "blocks", {})

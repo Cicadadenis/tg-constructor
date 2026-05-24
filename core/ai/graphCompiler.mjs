@@ -1,6 +1,9 @@
 /**
  * Compiler: valid Canonical AI IR (Bot IR) → executable editor stacks.
  * Rejects invalid IR — never emits graph from broken input.
+ *
+ * Separation: scenarios live in Bot IR (intent). Flow Graph / Execution IR
+ * are built only via synthesizeFlowGraph → executionGraphCompiler (no scenario nodes).
  */
 
 import {
@@ -10,9 +13,39 @@ import {
 } from './aiCanonicalIr.mjs';
 import { validateIrSemanticGate } from './irSemanticGate.mjs';
 import { reconcileIrGraph } from './graphReconciler.mjs';
+import { validateNodeType } from '../runtime/execution/executionNodeTypes.mjs';
+import { ALLOWED_FLOW_GRAPH_NODE_TYPES } from '../runtime/execution/executionNodeTypes.mjs';
+import { isIntentOnlyBlockType } from './intentNodeRegistry.mjs';
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
+}
+
+/**
+ * Validate a flow-graph node for execution pipeline (throws on scenario / unknown).
+ * @param {{ id?: string, type?: string }} node
+ * @param {{ strict?: boolean }} [options]
+ */
+export function validateExecutionGraphNodeType(node, options = {}) {
+  return validateNodeType(node, ALLOWED_FLOW_GRAPH_NODE_TYPES, {
+    strict: options.strict !== false,
+    throwOnIntentOnly: true,
+  });
+}
+
+/**
+ * Guard: editor stacks may contain scenario blocks (intent layer); never pass stacks to Execution IR.
+ * @param {object[]} stacks
+ */
+export function assertStacksAreIntentLayerOnly(stacks) {
+  for (const stack of asArray(stacks)) {
+    for (const block of asArray(stack?.blocks)) {
+      if (isIntentOnlyBlockType(block?.type)) {
+        continue;
+      }
+    }
+  }
+  return { ok: true };
 }
 
 /**

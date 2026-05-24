@@ -1,0 +1,60 @@
+/**
+ * Typography hierarchy — Inter / system sans-serif.
+ */
+
+.ds-h1,
+h1.ds-h1 {
+  font-family: var(--font-sans);
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  color: var(--color-text);
+  letter-spacing: -0.02em;
+}
+
+.ds-h2,
+h2.ds-h2 {
+  font-family: var(--font-sans);
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  color: var(--color-text);
+  letter-spacing: -0.01em;
+}
+
+.ds-body {
+  font-family: var(--font-sans);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-body);
+  color: var(--color-text);
+}
+
+.ds-meta {
+  font-family: var(--font-sans);
+  font-size: var(--font-size-meta);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-body);
+  color: var(--color-text-secondary);
+}
+
+.ds-caption {
+  font-family: var(--font-sans);
+  font-size: var(--font-size-caption);
+  color: var(--color-text-muted);
+  line-height: var(--line-height-body);
+}
+
+.ds-label {
+  font-family: var(--font-sans);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ds-mono {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-meta);
+}

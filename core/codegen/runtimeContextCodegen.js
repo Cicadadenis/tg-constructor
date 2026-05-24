@@ -1,6 +1,5 @@
 /**
- * Unified runtime ctx — Python helpers and handler preamble.
- * ctx = { user, message, callback, state, vars: {} }
+ * Unified ExecutionContext — Python helpers and handler preamble.
  */
 
 import { pyQuote, pyIndent, escapePyKey } from './utils.js';
@@ -8,22 +7,44 @@ import { pyQuote, pyIndent, escapePyKey } from './utils.js';
 /** Runtime helpers injected once per generated bot module. */
 export function emitRuntimeContextRuntime() {
   return [
+    'def _execution_logger():',
+    '    import logging',
+    '    return logging.getLogger("cicada.execution")',
+    '',
+    'def _execution_db():',
+    '  """Scoped DB access — override in integration tests."""',
+    '    return getattr(_execution_db, "_instance", None)',
+    '',
     'def build_runtime_ctx(',
     '    message=None,',
     '    callback=None,',
     '    state=None,',
+    '    trace_id=None,',
     ') -> dict:',
+    '    import uuid',
     '    user = None',
+    '    chat = None',
     '    if callback is not None and getattr(callback, "from_user", None):',
     '        user = callback.from_user',
     '    elif message is not None and getattr(message, "from_user", None):',
     '        user = message.from_user',
+    '    if callback is not None and getattr(callback, "message", None):',
+    '        chat = getattr(callback.message, "chat", None)',
+    '    elif message is not None:',
+    '        chat = getattr(message, "chat", None)',
+    '    temp = {}',
+    '    if callback is not None:',
+    '        temp["__callback"] = callback',
     '    return {',
+    '        "traceId": trace_id or str(uuid.uuid4()),',
     '        "user": user,',
+    '        "chat": chat,',
     '        "message": message,',
-    '        "callback": callback,',
     '        "state": state,',
     '        "vars": dict(_RUNTIME_CTX_DEFAULTS),',
+    '        "temp": temp,',
+    '        "db": _execution_db(),',
+    '        "logger": _execution_logger(),',
     '    }',
     '',
     'def ctx_set_var(ctx: dict, name: str, value) -> None:',

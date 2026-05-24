@@ -15,15 +15,22 @@ async function fetchUserProjects() {
  */
 export function useUserProjects() {
   const [userProjects, setUserProjects] = useState([]);
+  const [projectsLoading, setProjectsLoading] = useState(false);
 
   const loadUserProjects = useCallback(async (userId) => {
     if (!userId) {
       setUserProjects([]);
+      setProjectsLoading(false);
       return;
     }
-    const projects = await fetchUserProjects();
-    setUserProjects(projects);
+    setProjectsLoading(true);
+    try {
+      const projects = await fetchUserProjects();
+      setUserProjects(projects);
+    } finally {
+      setProjectsLoading(false);
+    }
   }, []);
 
-  return { userProjects, setUserProjects, loadUserProjects };
+  return { userProjects, setUserProjects, loadUserProjects, projectsLoading };
 }

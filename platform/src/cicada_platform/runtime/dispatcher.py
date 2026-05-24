@@ -8,6 +8,7 @@ from cicada_platform.core.schemas.ir import IrProgram
 from cicada_platform.runtime.action_registry import ActionRegistry
 from cicada_platform.runtime.context import RuntimeContext
 from cicada_platform.runtime.middleware import MiddlewarePipeline
+from cicada_platform.runtime.legacy_execution_policy import assert_legacy_execution_allowed
 from cicada_platform.runtime.state_machine import StateMachineEngine
 
 
@@ -18,6 +19,7 @@ class EventDispatcher:
         registry: ActionRegistry,
         middleware: MiddlewarePipeline | None = None,
     ) -> None:
+        assert_legacy_execution_allowed("EventDispatcher(IrProgram)")
         self._program = program
         self._registry = registry
         self._sm = StateMachineEngine(program)

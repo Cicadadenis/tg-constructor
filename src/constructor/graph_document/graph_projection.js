@@ -3,9 +3,12 @@
  */
 
 import { hasIncomingFlowEdge } from '../../builder/blockLayout.js';
-import { getCicadaNodeLayout } from '../../builder/graph_canvas_metrics.js';
+import { getFlowNodeCardLayout } from '../../builder/graph_canvas_metrics.js';
+import { getNodeCardContent } from '../../builder/nodeCard/nodeCardContent.js';
+import { getNodePortDescriptors } from './operation_registry.js';
 import { projectionNodesSignature } from './projection_signature.js';
 import { getBlockDef, getPaletteBlockTypes } from '../../constructor/block_catalog.js';
+import { getBlockDefinition } from '../../../core/blockRegistry.js';
 import { graphResolveNodeType } from './graph_node_payload.js';
 import { createGraphDocument } from './graph_document.js';
 import { createOperation } from './graph_operations.js';
@@ -23,18 +26,36 @@ export function projectGraphDocumentToCanvas(document) {
         const isChainRoot = !hasIncomingFlowEdge(doc, node.id);
         const kbNode = findKeyboardNodeForOwner(doc, node.id);
         const keyboardButtonCount = kbNode ? countKeyboardButtons(kbNode.data) : 0;
-        const isKb = resolvedType === 'inline_keyboard' || resolvedType === 'reply_keyboard';
-        const kbExtraH = isKb && keyboardButtonCount > 2
-          ? Math.max(0, Math.ceil(keyboardButtonCount / 2) - 1) * 14
-          : 0;
-        const layout = getCicadaNodeLayout(resolvedType, isChainRoot, true, kbExtraH);
+        const registryDef = getBlockDefinition(resolvedType);
+        const cardContent = getNodeCardContent(
+          resolvedType,
+          node.data,
+          { ...node.meta, keyboardButtonCount, keyboardNodeId: kbNode?.id || null },
+          {
+            label: def?.label || resolvedType,
+            description: registryDef?.description,
+            category: registryDef?.category,
+            isChainRoot,
+          },
+        );
+        const outputPorts = (getNodePortDescriptors(resolvedType).outputs || []).map((p) => ({
+          id: p.id || 'flow',
+          label: p.edgeLabel || p.label || null,
+        }));
+        const layout = getFlowNodeCardLayout({
+          type: resolvedType,
+          isChainRoot,
+          bodyLineCount: cardContent.bodyLineCount,
+          canStack: def?.canStack !== false,
+          outputPorts,
+        });
         return {
           id: node.id,
           type: 'cicada',
           position: { ...node.position },
           width: layout.hitW,
           height: layout.hitH,
-          className: 'cicada-node',
+          className: 'cicada-node flow-node-card-projection',
           selectable: true,
           focusable: true,
           dragHandle: '.cicada-node-hit',

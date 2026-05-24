@@ -8,7 +8,8 @@ import { isPlaceholderBotToken } from '../../../core/botTokenPlaceholders.mjs';
 import { canAttach, canRenderUi } from '../../../core/capabilityEngine.js';
 import { DEFAULT_PROPS } from '../../constructor/block_catalog.js';
 import { getChainStepBelow, hasIncomingFlowEdge } from '../../builder/blockLayout.js';
-import { moveNode } from '../../constructor/graph_document/graph_operation_client.js';
+import { applyFlowBuilderLayout } from '../../builder/flowLayout/applyFlowBuilderLayout.js';
+import { readLayoutModeFromMetadata } from '../../builder/flowLayout/flowLayoutModes.js';
 import { getNodePortDescriptors } from '../../constructor/graph_document/operation_registry.js';
 
 import {
@@ -245,65 +246,20 @@ export function getOutgoingFlowEdge(doc, nodeId) {
   return edges[0];
 }
 
-/** Snap vertical positions along each flow chain (after example / import load). */
-export function layoutFlowChain(graph, startNodeId) {
-  if (!startNodeId) return;
-  let currentId = startNodeId;
-  const visited = new Set();
-  while (currentId && !visited.has(currentId)) {
-    visited.add(currentId);
-    const doc = graph.getGraphDocument();
-    const current = doc.nodes[currentId];
-    if (!current) break;
-    const out = getOutgoingFlowEdge(doc, currentId);
-    if (!out) break;
-    const next = doc.nodes[out.target];
-    if (!next) break;
-    moveNode(graph, next.id, {
-      x: current.position.x,
-      y: current.position.y + getChainStepBelow(current, doc),
-    });
-    currentId = next.id;
-  }
+/** @deprecated Use applyFlowBuilderLayout — kept for call-site compatibility. */
+export function layoutFlowChain(graph, _startNodeId, mode) {
+  applyFlowBuilderLayout(graph, mode);
 }
 
-/** Layout every chain whose head has no incoming flow edge. */
-export function layoutAllFlowChains(graph) {
-  const doc = graph.getGraphDocument();
-  const roots = Object.values(doc.nodes || {}).filter(
-    (n) => !hasIncomingFlowEdge(doc, n.id),
-  );
-  for (const root of roots) {
-    layoutFlowChain(graph, root.id);
-  }
+/** Deterministic top→bottom layout for the full graph. */
+export function layoutAllFlowChains(graph, mode) {
+  const resolved = mode ?? readLayoutModeFromMetadata(graph.getGraphDocument().metadata);
+  applyFlowBuilderLayout(graph, resolved);
 }
-
-const SPREAD_COL_GAP = 280;
-const SPREAD_ROW_GAP = 112;
-const SPREAD_BUCKET = 16;
 
 /**
- * Unstack nodes that share the same canvas coordinates (common after AI append).
+ * @deprecated Replaced by deterministic flow layout (same implementation).
  */
-export function spreadOverlappingNodes(graph) {
-  const nodes = graphGetNodes(graph).sort((a, b) => a.id.localeCompare(b.id));
-  const buckets = new Map();
-  for (const node of nodes) {
-    const x = Number(node.position?.x) || 0;
-    const y = Number(node.position?.y) || 0;
-    const key = `${Math.round(x / SPREAD_BUCKET)}_${Math.round(y / SPREAD_BUCKET)}`;
-    if (!buckets.has(key)) buckets.set(key, []);
-    buckets.get(key).push(node);
-  }
-  let col = 0;
-  for (const group of buckets.values()) {
-    if (group.length <= 1) continue;
-    group.forEach((node, row) => {
-      moveNode(graph, node.id, {
-        x: 120 + col * SPREAD_COL_GAP,
-        y: 120 + row * SPREAD_ROW_GAP,
-      });
-    });
-    col += 1;
-  }
+export function spreadOverlappingNodes(graph, mode) {
+  layoutAllFlowChains(graph, mode);
 }

@@ -1,0 +1,30 @@
+/**
+ * Standardized motion — hover 120–180ms, subtle easing.
+ */
+
+:root {
+  --motion-duration-fast: 120ms;
+  --motion-duration-base: 150ms;
+  --motion-duration-slow: 180ms;
+
+  --motion-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  --motion-transition-hover: color var(--motion-duration-base) var(--motion-ease-out),
+    background-color var(--motion-duration-base) var(--motion-ease-out),
+    border-color var(--motion-duration-base) var(--motion-ease-out),
+    box-shadow var(--motion-duration-base) var(--motion-ease-out),
+    opacity var(--motion-duration-base) var(--motion-ease-out),
+    transform var(--motion-duration-base) var(--motion-ease-out);
+
+  --motion-transition-fade: opacity var(--motion-duration-slow) var(--motion-ease-out),
+    transform var(--motion-duration-slow) var(--motion-ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration-fast: 0ms;
+    --motion-duration-base: 0ms;
+    --motion-duration-slow: 0ms;
+  }
+}

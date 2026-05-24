@@ -14,8 +14,14 @@ import type {
   ExecutionNode,
 } from "../execution/executionContract.js";
 import type { BotIRGraph, BotIRNode } from "./bot_ir.js";
+import { isIntentOnlyNodeType } from "../runtime/execution/executionNodeTypes.mjs";
 
 function botIrNodeToExecution(node: BotIRNode): ExecutionNode {
+  if (isIntentOnlyNodeType(node.type)) {
+    throw new Error(
+      `Bot IR node "${node.id}": type "${node.type}" is intent-only and cannot reach execution graph`,
+    );
+  }
   const type = assertRegisteredBlockType(node.type, { nodeId: node.id });
   assertBlockCapabilitiesRegistered(type);
   return {

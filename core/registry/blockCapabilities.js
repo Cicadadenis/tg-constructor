@@ -1,8 +1,13 @@
 /**
  * Node-type capability contracts — triggers, actions, async, flow outputs.
  * UI attachment features (buttons/inline/media) remain on BlockDefinition.capabilities (string[]).
+ *
+ * Intent-only types (scenario, step, block, run, use) are NOT listed here — they never
+ * reach Flow Graph / Execution IR (see core/ai/intentNodeRegistry.mjs).
  * @typedef {{ triggers?: string[], actions?: string[], async: boolean, outputs: string[] }} BlockCapabilities
  */
+
+import { getNodeManifestRegistry } from '../node_manifest/nodeManifestRegistry.mjs';
 
 export const BLOCK_CAPABILITIES_VERSION = '1.0';
 
@@ -117,9 +122,30 @@ const FALLBACK_CAPABILITIES = Object.freeze({
   actions: Object.freeze(['noop']),
 });
 
+/**
+ * @param {import('../node_manifest/nodeManifestTypes.mjs').NodeManifest} manifest
+ * @returns {BlockCapabilities}
+ */
+function capabilitiesFromManifest(manifest) {
+  const triggers = manifest.capabilities
+    .filter((c) => c.startsWith('trigger:'))
+    .map((c) => c.slice('trigger:'.length));
+  const actions = manifest.capabilities
+    .filter((c) => c.startsWith('action:'))
+    .map((c) => c.slice('action:'.length));
+  return Object.freeze({
+    async: manifest.executionContract.async,
+    outputs: Object.freeze([...manifest.outputs.capabilityOutputs]),
+    ...(triggers.length ? { triggers: Object.freeze(triggers) } : {}),
+    ...(actions.length ? { actions: Object.freeze(actions) } : {}),
+  });
+}
+
 /** @param {string} blockType */
 export function getBlockCapabilities(blockType) {
   const t = String(blockType || '').trim();
+  const manifest = getNodeManifestRegistry().tryGet(t);
+  if (manifest) return capabilitiesFromManifest(manifest);
   return blockCapabilitiesByType[t] ?? FALLBACK_CAPABILITIES;
 }
 
@@ -137,20 +163,13 @@ export function getBlockCapabilitiesStrict(blockType, context = {}) {
         : 'blockCapabilities: block type is required',
     );
   }
-  const caps = blockCapabilitiesByType[t];
-  if (!caps) {
-    throw new Error(
-      context.nodeId
-        ? `blockCapabilities: no capability map for node "${context.nodeId}" type "${t}"`
-        : `blockCapabilities: no capability map for block type "${t}"`,
-    );
-  }
-  return caps;
+  const manifest = getNodeManifestRegistry().get(t, { nodeId: context.nodeId });
+  return capabilitiesFromManifest(manifest);
 }
 
 /** @param {string} blockType */
 export function hasBlockCapabilities(blockType) {
-  return Boolean(blockCapabilitiesByType[String(blockType || '').trim()]);
+  return getNodeManifestRegistry().has(String(blockType || '').trim());
 }
 
 /** @param {string} blockType @param {string | null | undefined} sourcePortId */
@@ -199,16 +218,13 @@ export function executionTriggerForSource(blockType, sourcePortId) {
 
 /** @param {string} blockType */
 export function assertBlockCapabilitiesRegistered(blockType) {
-  const t = String(blockType || '').trim();
-  if (!t) throw new Error('blockCapabilities: block type is required');
-  if (!blockCapabilitiesByType[t]) {
-    throw new Error(`blockCapabilities: no capability map for block type "${t}"`);
-  }
+  getNodeManifestRegistry().assertRegistered(blockType);
 }
 
 /** @template T @param {T & { type: string }} definition */
 export function attachCapabilitiesToDefinition(definition) {
-  const nodeCapabilities = getBlockCapabilities(definition.type);
+  const nodeCapabilities =
+    blockCapabilitiesByType[definition.type] ?? FALLBACK_CAPABILITIES;
   return Object.freeze({
     ...definition,
     nodeCapabilities,

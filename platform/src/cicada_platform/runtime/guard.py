@@ -5,12 +5,16 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from cicada_platform.runtime.legacy_execution_policy import is_legacy_execution_enabled
+
 
 class LegacyRuntimePathError(RuntimeError):
     """Raised when runtime would invoke cicada.executor.Executor."""
 
 
 def is_runtime_strict() -> bool:
+    if not is_legacy_execution_enabled():
+        return True
     return os.environ.get("CICADA_RUNTIME_STRICT", "").strip() in (
         "1",
         "true",

@@ -5,6 +5,9 @@
 import { echo } from './echo.js';
 import { weather } from './weather.js';
 import { shop } from './shop.js';
+import { welcome } from './welcome.js';
+import { aiAssistant } from './aiAssistant.js';
+import { supportBot } from './supportBot.js';
 import { keyboards } from './keyboards.js';
 import { fsm } from './fsm.js';
 import { callbacks } from './callbacks.js';
@@ -17,6 +20,9 @@ export const EXAMPLE_GRAPH_FLOWS = Object.freeze({
   echo,
   weather,
   shop,
+  welcome,
+  aiAssistant,
+  supportBot,
   keyboards,
   fsm,
   callbacks,
@@ -30,6 +36,9 @@ export const EXAMPLE_CATEGORIES = Object.freeze({
   echo: 'basic_handlers',
   weather: 'keyboards',
   shop: 'basic_handlers',
+  welcome: 'basic_handlers',
+  aiAssistant: 'basic_handlers',
+  supportBot: 'basic_handlers',
   keyboards: 'keyboards',
   fsm: 'fsm',
   callbacks: 'callbacks',
@@ -43,6 +52,9 @@ export const EXAMPLE_LABELS = Object.freeze({
   echo: { ru: '🔄 Эхо Бот', en: '🔄 Echo bot' },
   weather: { ru: '☀️ Бот погода', en: '☀️ Weather bot' },
   shop: { ru: '🛍️ Магазин', en: '🛍️ Shop bot' },
+  welcome: { ru: '👋 Welcome Flow', en: '👋 Welcome Flow' },
+  aiAssistant: { ru: '🤖 AI Assistant', en: '🤖 AI Assistant' },
+  supportBot: { ru: '🎧 Support Bot', en: '🎧 Support Bot' },
   keyboards: { ru: '⌨️ Клавиатуры (AST)', en: '⌨️ Keyboards (AST)' },
   fsm: { ru: '📋 FSM профиль', en: '📋 FSM profile' },
   callbacks: { ru: '🔗 Callbacks', en: '🔗 Callbacks' },

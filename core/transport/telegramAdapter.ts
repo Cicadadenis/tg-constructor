@@ -2,7 +2,8 @@
  * Telegram transport adapter (dry-run / preview / test harness).
  */
 
-import type { BotRuntimeContext } from "../runtime/runtimeContext.js";
+import type { ExecutionContext } from "../runtime/executionContext.js";
+import { getCallback } from "../runtime/executionContext.js";
 import {
   registerTransport,
   type TransportAdapter,
@@ -19,14 +20,22 @@ function ok(partial: Partial<TransportSendResult> = {}): TransportSendResult {
   };
 }
 
+function callbackMessage(ctx: ExecutionContext): unknown {
+  const callback = getCallback(ctx);
+  if (callback && typeof callback === "object" && "message" in callback) {
+    return (callback as { message?: unknown }).message;
+  }
+  return null;
+}
+
 export class TelegramTransportAdapter implements TransportAdapter {
   readonly id = TELEGRAM_TRANSPORT_ID;
 
   async sendMessage(
-    ctx: BotRuntimeContext,
+    ctx: ExecutionContext,
     text: string,
   ): Promise<TransportSendResult> {
-    const target = ctx.callback?.message ?? ctx.message;
+    const target = callbackMessage(ctx) ?? ctx.message;
     if (target && typeof target === "object") {
       (target as Record<string, unknown>)._lastText = text;
     }
@@ -34,20 +43,21 @@ export class TelegramTransportAdapter implements TransportAdapter {
   }
 
   async answerCallback(
-    ctx: BotRuntimeContext,
+    ctx: ExecutionContext,
     text?: string,
   ): Promise<TransportSendResult> {
-    if (ctx.callback && typeof ctx.callback === "object" && text) {
-      (ctx.callback as Record<string, unknown>)._answer = text;
+    const callback = getCallback(ctx);
+    if (callback && typeof callback === "object" && text) {
+      (callback as Record<string, unknown>)._answer = text;
     }
     return ok();
   }
 
   async editMessage(
-    ctx: BotRuntimeContext,
+    ctx: ExecutionContext,
     text: string,
   ): Promise<TransportSendResult> {
-    const msg = ctx.callback?.message ?? ctx.message;
+    const msg = callbackMessage(ctx) ?? ctx.message;
     if (msg && typeof msg === "object") {
       (msg as Record<string, unknown>).text = text;
     }
@@ -55,7 +65,7 @@ export class TelegramTransportAdapter implements TransportAdapter {
   }
 
   async chatAction(
-    _ctx: BotRuntimeContext,
+    _ctx: ExecutionContext,
     action: string,
   ): Promise<TransportSendResult> {
     return ok({ messageId: action });

@@ -34,6 +34,7 @@ import { bindingPatchFromReference } from '../constructor/graph_document/graph_r
 import { getSmartRefFieldConfig } from './graph_reference_field_map.js';
 import SmartGraphRefPicker from './SmartGraphRefPicker.jsx';
 import { hasCustomInspector, resolveNodeInspector } from './inspectors/NodeInspectorRegistry.js';
+import { fieldSectionFor } from './inspector/inspectorFieldSections.js';
 
 /** @deprecated use getPaletteBlockTypes / buildLocalizedBlockCatalog — registry is source of truth */
 export const BLOCK_TYPES = getPaletteBlockTypes();
@@ -1685,27 +1686,20 @@ function Sidebar({ onDragStart, onDragEnd, onTapAdd }) {
                 onDragEnd={() => { onDragEnd && onDragEnd(); }}
                 onClick={() => onTapAdd && onTapAdd(b)}
                 className="editor-sidebar-block"
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '9px 10px',
-                  cursor: draggable || onTapAdd ? 'pointer' : 'default',
-                  userSelect: 'none',
-                  transition: 'background .15s, border-color .15s, transform .15s',
-                  borderRadius: 10,
-                  margin: '2px 0',
-                  background: 'rgba(255,255,255,0.018)',
-                  opacity: draggable || onTapAdd ? 1 : 0.72,
-                }}
+                title={b.label || display.label || b.id}
               >
-                <span style={{
-                  width: 23, height: 23, borderRadius: 7,
-                  background: `${display.color}28`, color: display.color,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 12, flexShrink: 0,
-                  boxShadow: `0 0 12px ${display.color}20`,
-                }}>{display.icon}</span>
-                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.82)', flex: 1, fontFamily: 'Syne, system-ui', fontWeight: 650 }}>{b.label}</div>
-                {onTapAdd && <span style={{ fontSize: 16, color: 'var(--text3)', opacity: 0.5 }}>+</span>}
+                <span
+                  className="editor-sidebar-block__icon"
+                  style={{
+                    background: `${display.color}28`,
+                    color: display.color,
+                    boxShadow: `0 0 12px ${display.color}20`,
+                  }}
+                >
+                  {display.icon}
+                </span>
+                <span className="editor-sidebar-block__label">{b.label || display.label || b.id}</span>
+                {onTapAdd && <span className="editor-sidebar-block__add" aria-hidden>+</span>}
               </div>
               {showPaletteDebug && paletteDebugAvailable && (
                 <PaletteEntryDebugPanel entry={b} />
@@ -2375,6 +2369,10 @@ function PropsPanel({
   projectId = '',
   isProjectMode = false,
   hasActiveProSubscription = false,
+  /** @type {'basic' | 'execution' | 'ui' | 'advanced' | null} */
+  section = null,
+  excludeKeys = null,
+  embedded = false,
 }) {
   const ctx = React.useContext(BuilderUiContext);
   const addBlockFromContext = React.useContext(AddBlockContext);
@@ -2437,7 +2435,8 @@ function PropsPanel({
     const patch = bindingPatchFromReference(ref);
     Object.entries(patch).forEach(([key, val]) => onChange(key, val));
   }, [onChange]);
-  const showMapUi = block?.type === 'location';
+  const showMapSection = !section || section === 'ui' || section === 'advanced';
+  const showMapUi = showMapSection && block?.type === 'location';
   const locationProps = block?.type === 'location' ? (block.props || {}) : null;
 
   // Must run on every render (before early returns) — otherwise selecting any block crashes React.
@@ -2528,21 +2527,47 @@ function PropsPanel({
     console.error('Unknown block type:', block.type, block);
     return null;
   }
-  const fields = localizedPropFields(block.type, lang, FIELDS[block.type] || []);
+  const allFields = localizedPropFields(block.type, lang, FIELDS[block.type] || []);
+  const fields = allFields.filter((f) => {
+    if (excludeKeys?.has?.(f.key)) return false;
+    if (section) return fieldSectionFor(f, block.type) === section;
+    return true;
+  });
   const props = block.props || {};
-  const CustomInspector = hasCustomInspector(block.type) ? resolveNodeInspector(block.type) : null;
-  const showLocalUpload = block.type === 'photo' || block.type === 'document' || block.type === 'send_file';
+  const showCustomInspector = !section || section === 'ui';
+  const CustomInspector = showCustomInspector && hasCustomInspector(block.type)
+    ? resolveNodeInspector(block.type)
+    : null;
+  const showLocalUpload = (section === 'advanced' || !section)
+    && (block.type === 'photo' || block.type === 'document' || block.type === 'send_file');
+  const showCallbackUi = !section || section === 'ui' || section === 'advanced';
+  const showAttachments = !section || section === 'ui';
   const uploadFieldKey = block.type === 'send_file' ? 'file' : 'url';
   const mediaStorageNote = isProjectMode
     ? (hasActiveProSubscription ? ui.mediaProjectNote : ui.startServerNeedsPremium)
     : ui.mediaEphemeralNote;
 
+  const hasSectionContent = fields.length > 0
+    || (showCustomInspector && CustomInspector)
+    || (showMapUi)
+    || (showCallbackUi && block.type === 'callback')
+    || (showAttachments && block.ui?.addableActions?.length);
+
+  if (embedded && section && !hasSectionContent) {
+    return null;
+  }
+
   return (
-    <div style={{ overflowY: 'auto', flex: 1, padding: '10px 12px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-        <span style={{ fontSize: 14 }}>{def?.icon}</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: def?.color }}>{def?.label}</span>
-      </div>
+    <div
+      className={embedded ? 'props-panel-section' : undefined}
+      style={embedded ? undefined : { overflowY: 'auto', flex: 1, padding: '10px 12px' }}
+    >
+      {!embedded && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+          <span style={{ fontSize: 14 }}>{def?.icon}</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: def?.color }}>{def?.label}</span>
+        </div>
+      )}
       {showLocalUpload && (
         <div style={{
           marginBottom: 10, padding: '8px 10px', borderRadius: 8,
@@ -2613,7 +2638,7 @@ function PropsPanel({
           lang={lang}
         />
       )}
-      {block.type === 'callback' && (
+      {showCallbackUi && block.type === 'callback' && (
         <SmartGraphRefPicker
           title="Выберите кнопку"
           refs={callbackButtonRefs}
@@ -2626,7 +2651,7 @@ function PropsPanel({
           emptyHint="Сначала добавьте inline-кнопки к блоку «Фото» или «Ответ» на холсте (кнопка Inline в свойствах сообщения)."
         />
       )}
-      {block.type === 'callback' && (
+      {showCallbackUi && block.type === 'callback' && (
         <button
           type="button"
           onClick={() => setCallbackAdvancedOpen((v) => !v)}
@@ -2738,7 +2763,7 @@ function PropsPanel({
         onChange={onLocalFilePicked}
         style={{ display: 'none' }}
       />
-      {fields.length === 0 && !CustomInspector && (
+      {!embedded && fields.length === 0 && !CustomInspector && (
         <>
           <div style={{ color: 'var(--text3)', fontSize: 10, marginBottom: addBlockFromContext ? 10 : 0 }}>
             {ui.noSettings}
@@ -2753,7 +2778,7 @@ function PropsPanel({
           )}
         </>
       )}
-      {!CustomInspector && (
+      {showAttachments && !CustomInspector && (
         <>
           <UiAttachmentAddPanel block={block} onAddAttachment={onAddAttachment} />
           <UiAttachmentsPanel

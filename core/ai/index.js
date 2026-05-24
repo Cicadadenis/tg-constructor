@@ -26,6 +26,23 @@ export { synthesizeFlowGraph } from './flowSynthesizer.mjs';
 export { compileFlowGraphToBotIr, compileSemanticIntentToBotIr } from './flowGraphToBotIr.mjs';
 export { CAPABILITY_IDS, expandCapabilityDependencies } from './capabilityRegistry.mjs';
 export { buildExecutionIrFromSemanticFlowGraph } from './executionIrBridge.mjs';
+export { compileFlowGraphToExecutionIr } from './executionGraphCompiler.mjs';
+export {
+  runStrictExecutionCompilerGate,
+  StrictExecutionCompilerError,
+} from '../compiler/strictExecutionCompilerGate.mjs';
+export {
+  normalizeFlowGraphForExecutionIR,
+  ALLOWED_EXECUTION_IR_NODE_TYPES,
+  ExecutionIRValidationError,
+} from '../runtime/execution/validateExecutionIR.mjs';
+export { sanitizeFlowGraphForExecution, assertFlowGraphExecutableOnly } from './flowGraphSanitizer.mjs';
+export {
+  isIntentOnlyBlockType,
+  INTENT_ONLY_NODE_TYPES,
+  INTENT_SCENARIO_ACTION_TYPES,
+} from './intentNodeRegistry.mjs';
+export { validateExecutionGraphNodeType } from './graphCompiler.mjs';
 export {
   extractPartialBotIrFromLlmStream,
   buildIntentPlanLlmMessages,

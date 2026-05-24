@@ -1,17 +1,9 @@
 /**
- * Unified runtime context — single bag for handler execution (codegen + IR).
+ * Compile-time helpers for variable defaults (codegen / Bot IR).
+ * Runtime execution uses ExecutionContext from executionContext.ts.
  */
 
 export const RUNTIME_CTX_VERSION = "1.0";
-
-/** Canonical runtime context shape emitted into generated Python handlers. */
-export interface BotRuntimeContext {
-  user: unknown;
-  message: unknown;
-  callback: unknown;
-  state: unknown;
-  vars: Record<string, unknown>;
-}
 
 /** Default variable seeds from `global` / project settings blocks. */
 export interface RuntimeContextDefaults {

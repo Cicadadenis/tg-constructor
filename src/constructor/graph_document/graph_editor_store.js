@@ -58,6 +58,25 @@ export class GraphEditorStore {
     return { ok: !this._history.lastError, document: this._history.document, error: this._history.lastError };
   }
 
+  canUndo() {
+    return Number(this._history?.cursor ?? 0) > 0;
+  }
+
+  canRedo() {
+    const cursor = Number(this._history?.cursor ?? 0);
+    const len = this._history?.stream?.length ?? 0;
+    return cursor < len;
+  }
+
+  getHistoryState() {
+    return {
+      canUndo: this.canUndo(),
+      canRedo: this.canRedo(),
+      cursor: Number(this._history?.cursor ?? 0),
+      length: this._history?.stream?.length ?? 0,
+    };
+  }
+
   getCanvasProjection() {
     return markCanvasProjection(projectGraphDocumentToCanvas(this.document));
   }

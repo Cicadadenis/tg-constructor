@@ -1,0 +1,108 @@
+/**
+ * Cicada Studio — unified design tokens (ManyChat-inspired).
+ * Single brand accent, neutral surfaces, 8px spacing grid.
+ */
+
+:root {
+  /* Brand */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-active: #1e40af;
+  --color-primary-muted: #eff6ff;
+  --color-primary-border: #bfdbfe;
+
+  /* Surfaces */
+  --color-bg: #f9fafb;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f3f4f6;
+  --color-surface-elevated: #ffffff;
+  --color-overlay: rgba(17, 24, 39, 0.45);
+
+  /* Borders */
+  --color-border: #e5e7eb;
+  --color-border-strong: #d1d5db;
+  --color-border-focus: var(--color-primary);
+
+  /* Text */
+  --color-text: #111827;
+  --color-text-secondary: #6b7280;
+  --color-text-muted: #9ca3af;
+  --color-text-inverse: #ffffff;
+
+  /* Semantic (minimal — status only) */
+  --color-danger: #dc2626;
+  --color-danger-muted: #fef2f2;
+  --color-success: #16a34a;
+  --color-success-muted: #f0fdf4;
+  --color-warning: #d97706;
+  --color-warning-muted: #fffbeb;
+
+  /* Typography */
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --font-size-h1: 24px;
+  --font-size-h2: 18px;
+  --font-size-body: 14px;
+  --font-size-meta: 13px;
+  --font-size-caption: 12px;
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --line-height-tight: 1.25;
+  --line-height-body: 1.5;
+  --line-height-relaxed: 1.6;
+
+  /* Spacing — 8px grid */
+  --space-1: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+  --space-half: 4px;
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-full: 999px;
+
+  /* Shadows — soft only */
+  --shadow-xs: 0 1px 2px rgba(17, 24, 39, 0.05);
+  --shadow-sm: 0 1px 3px rgba(17, 24, 39, 0.08), 0 1px 2px rgba(17, 24, 39, 0.04);
+  --shadow-md: 0 4px 12px rgba(17, 24, 39, 0.08);
+  --shadow-focus: 0 0 0 3px var(--color-primary-muted);
+
+  /* Layout */
+  --layout-left-w: 272px;
+  --layout-right-w: 300px;
+  --layout-top-h: 56px;
+  --layout-mobile-nav-h: 56px;
+
+  /* Canvas */
+  --color-canvas-bg: #f3f4f6;
+  --color-canvas-grid: #e5e7eb;
+  --color-canvas-dot: #d1d5db;
+
+  /* Legacy aliases — keep existing var() references working */
+  --bg: var(--color-bg);
+  --bg2: var(--color-surface);
+  --bg3: var(--color-surface-muted);
+  --panel: var(--color-surface);
+  --glass: var(--color-surface);
+  --glass-strong: var(--color-surface);
+  --border: var(--color-border);
+  --border2: var(--color-border-strong);
+  --text: var(--color-text);
+  --text2: var(--color-text-secondary);
+  --text3: var(--color-text-muted);
+  --accent: var(--color-primary);
+  --accent2: var(--color-primary-hover);
+  --green: var(--color-success);
+  --red: var(--color-danger);
+  --amber: var(--color-warning);
+  --sans: var(--font-sans);
+  --mono: var(--font-mono);
+}
