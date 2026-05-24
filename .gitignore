@@ -1,5 +1,6 @@
 # Local dev snapshots (npm run dev:full)
 .dev-backups/
+env_origina
 push.sh
 # Dependencies & build
 node_modules/
