@@ -31,7 +31,7 @@ export default function ToastHost({ toast, isMobile = false }) {
         role="status"
       >
         <span className="ds-toast__icon" aria-hidden>{ICONS[type] || ICONS.info}</span>
-        <span>{toast.message}</span>
+        <span className="ds-toast__message">{toast.message}</span>
       </div>
     </div>
   );

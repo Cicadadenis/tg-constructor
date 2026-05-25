@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGraphDocument } from '../../constructor/graph_document/graph_document.js';
-import { resolveFlowInsertAnchorId } from './graphHelpers.js';
+import { resolveFlowInsertAnchorId, resolvePaletteChainParentId } from './graphHelpers.js';
 
 describe('resolveFlowInsertAnchorId', () => {
   it('keeps start as anchor for message', () => {
@@ -36,5 +36,11 @@ describe('resolveFlowInsertAnchorId', () => {
       ],
     });
     assert.equal(resolveFlowInsertAnchorId(doc, 'b', 'message'), 's');
+  });
+
+  it('returns null for missing anchor id', () => {
+    const doc = createGraphDocument({ nodes: [], edges: [] });
+    assert.equal(resolveFlowInsertAnchorId(doc, 'ghost', 'message'), null);
+    assert.equal(resolvePaletteChainParentId(doc, 'ghost', 'message'), null);
   });
 });

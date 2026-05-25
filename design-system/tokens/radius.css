@@ -1,0 +1,22 @@
+/**
+ * MC Design System — radius (large rounded cards, ManyChat-style).
+ */
+
+:root {
+  --mc-radius-none: 0;
+  --mc-radius-xs: 6px;
+  --mc-radius-sm: 8px;
+  --mc-radius-md: 12px;
+  --mc-radius-lg: 16px;
+  --mc-radius-xl: 20px;
+  --mc-radius-2xl: 24px;
+  --mc-radius-full: 9999px;
+
+  /* Semantic */
+  --mc-radius-control: var(--mc-radius-md);
+  --mc-radius-card: var(--mc-radius-lg);
+  --mc-radius-panel: var(--mc-radius-xl);
+  --mc-radius-modal: var(--mc-radius-2xl);
+  --mc-radius-node: var(--mc-radius-md);
+  --mc-radius-floating: var(--mc-radius-lg);
+}

@@ -1,0 +1,104 @@
+/**
+ * Maps legacy Cicada CSS variables (--color-*, --space-*, etc.) to MC tokens.
+ * Loaded after MC tokens; does not override .editor-shell / .lp-page scoped themes.
+ */
+:root,
+[data-mc-theme='light'] {
+  --color-primary: var(--mc-color-primary);
+  --color-primary-hover: var(--mc-color-primary-hover);
+  --color-primary-active: var(--mc-color-primary-active);
+  --color-primary-muted: var(--mc-color-primary-muted);
+  --color-primary-border: var(--mc-color-primary-border);
+
+  --color-bg: var(--mc-color-bg);
+  --color-surface: var(--mc-color-surface);
+  --color-surface-muted: var(--mc-color-surface-muted);
+  --color-surface-elevated: var(--mc-color-surface-elevated);
+  --color-overlay: var(--mc-color-overlay);
+
+  --color-border: var(--mc-color-border);
+  --color-border-strong: var(--mc-color-border-strong);
+  --color-border-focus: var(--mc-color-border-focus);
+
+  --color-text: var(--mc-color-text);
+  --color-text-secondary: var(--mc-color-text-secondary);
+  --color-text-muted: var(--mc-color-text-muted);
+  --color-text-inverse: var(--mc-color-text-inverse);
+
+  --color-danger: var(--mc-color-danger);
+  --color-danger-muted: var(--mc-color-danger-muted);
+  --color-success: var(--mc-color-success);
+  --color-success-muted: var(--mc-color-success-muted);
+  --color-warning: var(--mc-color-warning);
+  --color-warning-muted: var(--mc-color-warning-muted);
+
+  --color-canvas-bg: var(--mc-color-canvas-bg);
+  --color-canvas-grid: var(--mc-color-canvas-grid);
+  --color-canvas-dot: var(--mc-color-canvas-dot);
+
+  --font-sans: var(--mc-font-sans);
+  --font-mono: var(--mc-font-mono);
+
+  --font-size-h1: var(--mc-font-size-2xl);
+  --font-size-h2: var(--mc-font-size-lg);
+  --font-size-body: var(--mc-font-size-base);
+  --font-size-meta: var(--mc-font-size-sm);
+  --font-size-caption: var(--mc-font-size-xs);
+
+  --font-weight-regular: var(--mc-font-weight-regular);
+  --font-weight-medium: var(--mc-font-weight-medium);
+  --font-weight-semibold: var(--mc-font-weight-semibold);
+  --font-weight-bold: var(--mc-font-weight-bold);
+
+  --line-height-tight: var(--mc-line-height-tight);
+  --line-height-body: var(--mc-line-height-normal);
+  --line-height-relaxed: var(--mc-line-height-relaxed);
+
+  --space-half: var(--mc-space-1);
+  --space-1: var(--mc-space-2);
+  --space-2: var(--mc-space-4);
+  --space-3: var(--mc-space-6);
+  --space-4: var(--mc-space-8);
+
+  --radius-sm: var(--mc-radius-sm);
+  --radius-md: var(--mc-radius-md);
+  --radius-lg: var(--mc-radius-lg);
+  --radius-full: var(--mc-radius-full);
+
+  --shadow-xs: var(--mc-shadow-xs);
+  --shadow-sm: var(--mc-shadow-sm);
+  --shadow-md: var(--mc-shadow-md);
+  --shadow-focus: var(--mc-shadow-focus);
+
+  --layout-left-w: var(--mc-layout-sidebar-w);
+  --layout-right-w: var(--mc-layout-inspector-w);
+  --layout-top-h: var(--mc-layout-toolbar-h);
+  --layout-mobile-nav-h: var(--mc-layout-mobile-nav-h);
+
+  --motion-duration-fast: var(--mc-duration-fast);
+  --motion-duration-base: var(--mc-duration-base);
+  --motion-duration-slow: var(--mc-duration-slow);
+  --motion-ease-out: var(--mc-ease-out);
+  --motion-ease-in-out: var(--mc-ease-in-out);
+  --motion-transition-hover: var(--mc-transition-interactive);
+  --motion-transition-fade: var(--mc-transition-fade);
+
+  --bg: var(--mc-color-bg);
+  --bg2: var(--mc-color-surface);
+  --bg3: var(--mc-color-surface-muted);
+  --panel: var(--mc-color-surface);
+  --glass: var(--mc-color-surface);
+  --glass-strong: var(--mc-color-surface-elevated);
+  --border: var(--mc-color-border);
+  --border2: var(--mc-color-border-strong);
+  --text: var(--mc-color-text);
+  --text2: var(--mc-color-text-secondary);
+  --text3: var(--mc-color-text-muted);
+  --accent: var(--mc-color-primary);
+  --accent2: var(--mc-color-primary-hover);
+  --green: var(--mc-color-success);
+  --red: var(--mc-color-danger);
+  --amber: var(--mc-color-warning);
+  --sans: var(--mc-font-sans);
+  --mono: var(--mc-font-mono);
+}

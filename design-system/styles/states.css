@@ -1,0 +1,91 @@
+/**
+ * MC Design System — interaction & accessibility states.
+ */
+
+/* Focus visible (Radix-friendly) */
+.mc-focus-ring:focus {
+  outline: none;
+}
+
+.mc-focus-ring:focus-visible {
+  outline: none;
+  box-shadow: var(--mc-shadow-focus);
+}
+
+/* Disabled */
+.mc-disabled,
+[disabled].mc-disabled,
+.mc-disabled[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Hover lift (cards, floating menus) */
+.mc-hover-lift {
+  transition: var(--mc-transition-interactive);
+}
+
+@media (hover: hover) {
+  .mc-hover-lift:hover:not(:disabled):not([aria-disabled='true']) {
+    transform: translateY(-1px);
+    box-shadow: var(--mc-elevation-card-hover);
+  }
+}
+
+/* Active press */
+.mc-press:active:not(:disabled):not([aria-disabled='true']) {
+  transform: translateY(0) scale(0.98);
+}
+
+/* Selected */
+.mc-selected,
+[aria-selected='true'].mc-selected {
+  background: var(--mc-color-primary-muted);
+  border-color: var(--mc-color-primary-border);
+  color: var(--mc-color-primary);
+}
+
+/* Invalid */
+.mc-invalid,
+[aria-invalid='true'].mc-invalid {
+  border-color: var(--mc-color-danger) !important;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15);
+}
+
+/* Loading */
+.mc-loading {
+  position: relative;
+  color: transparent !important;
+  pointer-events: none;
+}
+
+.mc-loading::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 1em;
+  height: 1em;
+  border: 2px solid var(--mc-color-border);
+  border-top-color: var(--mc-color-primary);
+  border-radius: var(--mc-radius-full);
+  animation: mc-spin 0.7s linear infinite;
+}
+
+@keyframes mc-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Screen reader only */
+.mc-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

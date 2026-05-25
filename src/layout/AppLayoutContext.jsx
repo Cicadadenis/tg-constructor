@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo, useState } from 'react';
+import React, { createContext, useContext, useMemo, useState, useCallback } from 'react';
 
 /** @typedef {'canvas' | 'left' | 'right'} MobileZone */
 
@@ -34,6 +34,10 @@ export function AppLayoutProvider({
   const [listSearchState, setListSearchState] = useState('');
   const [listFilterState, setListFilterState] = useState('all');
   const [bulkSelectedIdsState, setBulkSelectedIdsState] = useState(() => new Set());
+  const [leftRailOpen, setLeftRailOpen] = useState(true);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
 
   const section = controlledSection ?? sectionState;
   const setSection = controlledSetSection ?? setSectionState;
@@ -62,6 +66,16 @@ export function AppLayoutProvider({
     setBulkSelectedIdsState(new Set());
   }, []);
 
+  const toggleLeftRail = useCallback(() => setLeftRailOpen((v) => !v), []);
+  const toggleInspector = useCallback(() => {
+    setInspectorOpen((v) => {
+      if (!v) setInspectorCollapsed(false);
+      return !v;
+    });
+  }, []);
+  const toggleInspectorCollapsed = useCallback(() => setInspectorCollapsed((v) => !v), []);
+  const toggleFocusMode = useCallback(() => setFocusMode((v) => !v), []);
+
   const value = useMemo(
     () => ({
       section,
@@ -77,6 +91,18 @@ export function AppLayoutProvider({
       setBulkSelectedIds,
       toggleBulkId,
       clearBulkSelection,
+      leftRailOpen,
+      setLeftRailOpen,
+      inspectorOpen,
+      setInspectorOpen,
+      inspectorCollapsed,
+      setInspectorCollapsed,
+      focusMode,
+      setFocusMode,
+      toggleLeftRail,
+      toggleInspector,
+      toggleInspectorCollapsed,
+      toggleFocusMode,
     }),
     [
       section,
@@ -92,6 +118,14 @@ export function AppLayoutProvider({
       setBulkSelectedIds,
       toggleBulkId,
       clearBulkSelection,
+      leftRailOpen,
+      inspectorOpen,
+      inspectorCollapsed,
+      focusMode,
+      toggleLeftRail,
+      toggleInspector,
+      toggleInspectorCollapsed,
+      toggleFocusMode,
     ],
   );
 

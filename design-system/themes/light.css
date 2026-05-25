@@ -1,0 +1,7 @@
+/**
+ * MC Design System — light theme (default SaaS / ManyChat-style).
+ */
+[data-mc-theme='light'],
+:root {
+  color-scheme: light;
+}

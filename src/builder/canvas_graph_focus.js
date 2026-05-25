@@ -40,3 +40,31 @@ export function scheduleCanvasFocusAfterMutation(graph, dims = {}, hooks = {}) {
   });
   return null;
 }
+
+/**
+ * Pan viewport to a single node (e.g. after palette drop) without relayouting the whole graph.
+ * @param {object} graph
+ * @param {string} nodeId
+ * @param {{ width?: number, height?: number }} [dims]
+ */
+export function focusCanvasOnNode(graph, nodeId, dims = {}) {
+  const doc = graph.getGraphDocument();
+  const node = doc.nodes?.[nodeId];
+  if (!node) return null;
+  const vp = computeViewportForNodes([node], { ...dims, padding: 80, maxZoom: 1.15 });
+  graph.setViewport(vp);
+  return nodeId;
+}
+
+/**
+ * @param {object} graph
+ * @param {string} nodeId
+ * @param {{ width?: number, height?: number }} [dims]
+ */
+export function scheduleFocusCanvasOnNode(graph, nodeId, dims = {}) {
+  if (typeof requestAnimationFrame !== 'function') {
+    return focusCanvasOnNode(graph, nodeId, dims);
+  }
+  requestAnimationFrame(() => focusCanvasOnNode(graph, nodeId, dims));
+  return null;
+}

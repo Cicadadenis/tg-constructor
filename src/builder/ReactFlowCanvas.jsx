@@ -12,23 +12,33 @@
  *  - onNodeDoubleClick opens the schema-driven inspector
  */
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { mergeProjectionEdges, mergeProjectionNodes } from './projectionSync.js';
+import { memo, Profiler, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useGraphCanvasActions } from './graphCanvasActionsContext.jsx';
+import { useCanvasInteractions } from './canvas/useCanvasInteractions.js';
+import { useBatchedProjectionSync } from '../performance/useBatchedProjectionSync.js';
+import CanvasPerformanceOverlay from '../performance/CanvasPerformanceOverlay.jsx';
+import { usePerformanceStore } from '../performance/performanceStore.js';
+import { zoomToTier } from '../performance/zoomTier.js';
+import { scheduleBatched } from '../performance/batchedUpdates.js';
+import CanvasDropGhost from './canvas/CanvasDropGhost.jsx';
+import CanvasContextMenu from './canvas/CanvasContextMenu.jsx';
+import CanvasEnhancedMinimap from './canvas/CanvasEnhancedMinimap.jsx';
 import {
   ReactFlow,
   Background,
-  MiniMap,
   useNodesState,
   useEdgesState,
   ReactFlowProvider,
   useReactFlow,
+  useStore,
   BackgroundVariant,
-  ConnectionLineType,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import './graph_canvas.css';
 import './flowEdge/flow-add-step.css';
 import './canvas/canvas-chrome.css';
+import './canvas/canvas-interaction.css';
+import './visualNodes/visual-node-card.css';
 import CicadaNode from '../CicadaNode.jsx';
 import FlowAddStepEdge from './flowEdge/FlowAddStepEdge.jsx';
 import FlowBezierEdge from './flowEdge/FlowBezierEdge.jsx';
@@ -36,7 +46,8 @@ import CanvasZoomControls from './canvas/CanvasZoomControls.jsx';
 import { buildCanvasEdgePresentation, resolveExecutionPathEdgeIds } from './canvas/canvasEdgeStyles.js';
 import { FlowEdgePickerHost, useFlowEdgePicker } from './flowEdge/FlowEdgePickerHost.jsx';
 import { isSplittableFlowEdge } from './flowEdge/insertNodeOnEdge.js';
-import { NODE_CLICK_DRAG_THRESHOLD_PX } from './graph_canvas_metrics.js';
+import { NODE_CLICK_DRAG_THRESHOLD_PX, BLOCK_W } from './graph_canvas_metrics.js';
+import { useSelectionStore } from '../stores/selectionStore.js';
 import {
   moveNode,
   removeNode,
@@ -45,10 +56,10 @@ import {
 import {
   canConnect,
   validateConnection,
-  getNodePortDescriptors,
   validateGraph,
 } from '../constructor/graph_document/operation_registry.js';
 import { normalizeConnectionError } from './graph_error_messages.js';
+import { computeViewportForNodes } from '../constructor/graph_document/graph_viewport.js';
 
 
 const NODE_TYPES = Object.freeze({ cicada: CicadaNode });
@@ -160,39 +171,58 @@ function GraphFlowInner({
   onConnectFeedback,
   onDropPaletteEntry,
   onRequestDeleteNodes,
+  paletteDragEntry = null,
 }) {
+  const graphCanvasActions = useGraphCanvasActions();
   const edgePicker = useFlowEdgePicker();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const { setViewport, screenToFlowPosition } = useReactFlow();
+  const { setViewport, screenToFlowPosition, setCenter, getViewport } = useReactFlow();
+  const canvasFocusRequest = useSelectionStore((s) => s.canvasFocusRequest);
+  const rfVpX = useStore((s) => s.transform[0]);
+  const rfVpY = useStore((s) => s.transform[1]);
+  const rfVpZoom = useStore((s) => s.transform[2]);
+  const rfViewport = useMemo(
+    () => ({ x: rfVpX, y: rfVpY, zoom: rfVpZoom }),
+    [rfVpX, rfVpY, rfVpZoom],
+  );
+  const canvasWidth = useStore((s) => s.width);
+  const canvasHeight = useStore((s) => s.height);
+  const canvasSize = useMemo(
+    () => ({ width: canvasWidth, height: canvasHeight }),
+    [canvasWidth, canvasHeight],
+  );
 
   const lastRevRef = useRef(null);
   const lastViewportRef = useRef(null);
   const lastNodeCountRef = useRef(0);
   const draggingRef = useRef(false);
+  const syncingViewportFromGraphRef = useRef(false);
+  const initialFitDoneRef = useRef(false);
+  const resizeFitDoneRef = useRef(false);
   const flowHostRef = useRef(null);
+  const projectionViewport = projection?.viewport ?? { x: 0, y: 0, zoom: 1 };
+  const projectionVpX = projectionViewport.x ?? 0;
+  const projectionVpY = projectionViewport.y ?? 0;
+  const projectionVpZoom = projectionViewport.zoom ?? 1;
 
   const { fitView } = useReactFlow();
 
-  // Re-measure when parent flex/grid layout settles (e.g. after auth/API bootstrap).
+  // One-time fit when the canvas host gains real dimensions (layout settle after login).
   useEffect(() => {
     const host = flowHostRef.current;
-    if (!host || typeof ResizeObserver !== 'function') return undefined;
+    if (!host || typeof ResizeObserver !== 'function' || resizeFitDoneRef.current) return undefined;
 
-    let lastW = 0;
-    let lastH = 0;
     let raf = 0;
     const reflow = () => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
+        if (resizeFitDoneRef.current) return;
         const { width, height } = host.getBoundingClientRect();
-        const wasZero = lastW < 2 || lastH < 2;
-        lastW = width;
-        lastH = height;
         if (width < 2 || height < 2) return;
-        if (!wasZero) return;
+        resizeFitDoneRef.current = true;
         try {
-          fitView({ padding: 0.2, duration: 200, maxZoom: 1.2 });
+          fitView({ padding: 0.2, duration: 0, maxZoom: 1.2 });
         } catch (err) {
           logCanvasLifecycle('fitView:resize', err);
         }
@@ -208,88 +238,213 @@ function GraphFlowInner({
     };
   }, [fitView]);
 
-  // Sync projection → ReactFlow state when revision, node count, or preview content changes.
-  useEffect(() => {
-    const rev = projection?.metadata?.revision;
-    const nodeCount = projection?.nodes?.length ?? 0;
-    const previewSig = projection?.previewSignature ?? '';
-    const syncKey = `${rev ?? ''}:${nodeCount}:${previewSig}`;
-    if (syncKey === lastRevRef.current && !draggingRef.current) return;
-    lastRevRef.current = syncKey;
+  const applyEdgeDefaultsFn = useCallback(
+    (edgeList, doc, highlight) => applyEdgeDefaults(edgeList, doc, highlight),
+    [],
+  );
+  const enrichEdgesFn = useCallback(
+    (edgeList, picker) => enrichEdgesWithPicker(edgeList, picker),
+    [],
+  );
 
-    const doc = graph.getGraphDocument();
-    const isExecution = highlightKind === 'execution';
-    const repairIds = isExecution ? new Set() : new Set(repairHighlightNodeIds || []);
-    const executionIds = isExecution ? new Set(repairHighlightNodeIds || []) : new Set();
-    let executionEdgeList = isExecution ? [...(repairHighlightEdgeIds || [])] : [];
-    if (isExecution && !executionEdgeList.length && executionIds.size > 0) {
-      executionEdgeList = resolveExecutionPathEdgeIds(doc, executionIds);
-    }
-    const repairEdgeIds = isExecution ? new Set() : new Set(repairHighlightEdgeIds || []);
-    const executionEdgeIds = isExecution ? new Set(executionEdgeList) : new Set();
-
-    const nextEdges = enrichEdgesWithPicker(
-      applyEdgeDefaults(projection.edges, doc, {
-        repairedEdgeIds: repairEdgeIds,
-        executionEdgeIds,
-        kind: highlightKind,
-      }),
-      edgePicker,
-    );
-
-    setNodes((current) => mergeProjectionNodes(
-      current,
-      projection.nodes,
-      selectedBlockId,
-      { repairIds, executionIds },
-      rev,
-    ));
-    setEdges((current) => mergeProjectionEdges(current, nextEdges));
-
-    const vp = projection.viewport;
-    const last = lastViewportRef.current;
-    const viewportChanged =
-      !last ||
-      Math.abs(last.x - vp.x) > 0.5 ||
-      Math.abs(last.y - vp.y) > 0.5 ||
-      Math.abs(last.zoom - vp.zoom) > 0.01;
-
-    if (viewportChanged) {
-      setViewport(vp, { duration: 300 });
-      lastViewportRef.current = { x: vp.x, y: vp.y, zoom: vp.zoom };
-    } else if (nodeCount > 0 && lastNodeCountRef.current === 0) {
-      requestAnimationFrame(() => {
-        try {
-          fitView({ padding: 0.2, duration: 200, maxZoom: 1.2 });
-        } catch (err) {
-          logCanvasLifecycle('fitView:initial', err);
-        }
-      });
-    }
-    lastNodeCountRef.current = nodeCount;
-  }, [
-    projection?.metadata?.revision,
-    projection?.nodes?.length,
-    projection?.previewSignature,
+  useBatchedProjectionSync({
+    projection,
+    graph,
     selectedBlockId,
     repairHighlightNodeIds,
     repairHighlightEdgeIds,
     highlightKind,
-    edgePicker?.activeEdgeId,
-    edgePicker?.openPicker,
-    edgePicker?.lang,
-    setViewport,
-    fitView,
-    graph,
+    edgePicker,
+    setNodes,
+    setEdges,
+    draggingRef,
+    lastRevRef,
+    viewport: rfViewport,
+    canvasSize,
+    applyEdgeDefaultsFn,
+    enrichEdgesFn,
+  });
+
+  useEffect(() => {
+    const nodeCount = projection?.nodes?.length ?? 0;
+    const edgeCount = projection?.edges?.length ?? 0;
+    const tier = zoomToTier(rfVpZoom);
+    const perf = usePerformanceStore.getState();
+    if (
+      perf.zoom === rfVpZoom
+      && perf.zoomTier === tier
+      && perf.nodeCount === nodeCount
+      && perf.edgeCount === edgeCount
+      && perf.onlyVisible === (nodeCount > 48)
+    ) {
+      return;
+    }
+    usePerformanceStore.getState().patch({
+      zoom: rfVpZoom,
+      zoomTier: tier,
+      nodeCount,
+      edgeCount,
+      onlyVisible: nodeCount > 48,
+    });
+  }, [
+    projection?.nodes?.length,
+    projection?.edges?.length,
+    rfVpZoom,
   ]);
 
-  const onNodeDragStart = useCallback(() => {
-    draggingRef.current = true;
-  }, []);
+  // Sync graph → React Flow viewport at most once per graph revision (avoids persist feedback loops).
+  useEffect(() => {
+    const rev = projection?.metadata?.revision ?? 0;
+    if (lastViewportRef.current?.revision === rev) return;
 
-  const onNodeDragStop = useCallback(() => {
-    draggingRef.current = false;
-  }, []);
+    syncingViewportFromGraphRef.current = true;
+    setViewport(
+      { x: projectionVpX, y: projectionVpY, zoom: projectionVpZoom },
+      { duration: 0 },
+    );
+    lastViewportRef.current = {
+      revision: rev,
+      x: projectionVpX,
+      y: projectionVpY,
+      zoom: projectionVpZoom,
+    };
+    requestAnimationFrame(() => {
+      syncingViewportFromGraphRef.current = false;
+    });
+  }, [
+    projection?.metadata?.revision,
+    projectionVpX,
+    projectionVpY,
+    projectionVpZoom,
+    setViewport,
+  ]);
+
+  // One-time fit when nodes first appear (e.g. after autosave hydrate).
+  useEffect(() => {
+    const nodeCount = projection?.nodes?.length ?? 0;
+    if (nodeCount === 0 || initialFitDoneRef.current) return undefined;
+    initialFitDoneRef.current = true;
+    const id = requestAnimationFrame(() => {
+      try {
+        fitView({ padding: 0.2, duration: 0, maxZoom: 1.2 });
+      } catch (err) {
+        logCanvasLifecycle('fitView:initial', err);
+      }
+    });
+    return () => cancelAnimationFrame(id);
+  }, [projection?.nodes?.length, fitView]);
+
+  const persistViewport = useCallback((viewport) => {
+    if (syncingViewportFromGraphRef.current) return;
+    const doc = graph.getGraphDocument();
+    const current = doc.viewport || { x: 0, y: 0, zoom: 1 };
+    if (
+      Math.abs((current.x ?? 0) - viewport.x) < 0.01
+      && Math.abs((current.y ?? 0) - viewport.y) < 0.01
+      && Math.abs((current.zoom ?? 1) - viewport.zoom) < 0.0001
+    ) {
+      lastViewportRef.current = viewport;
+      return;
+    }
+    lastViewportRef.current = viewport;
+    scheduleBatched('viewport-persist', () => {
+      graph.setViewport(viewport);
+    });
+  }, [graph]);
+
+  const persistViewportForced = useCallback((viewport) => {
+    lastViewportRef.current = viewport;
+    graph.setViewport(viewport);
+  }, [graph]);
+
+  // Pan visible canvas to a newly added node (setCenter on React Flow, then persist).
+  useEffect(() => {
+    const nodeId = canvasFocusRequest?.nodeId;
+    if (!nodeId) return undefined;
+
+    let cancelled = false;
+    let attempts = 0;
+    const NODE_FOCUS_H = 160;
+
+    const run = () => {
+      if (cancelled) return;
+      attempts += 1;
+      const docNode = graph.getGraphDocument().nodes?.[nodeId];
+      if (!docNode?.position) {
+        if (attempts < 12) requestAnimationFrame(run);
+        return;
+      }
+
+      const rfNode = nodes.find((n) => n.id === nodeId);
+      const w = rfNode?.measured?.width ?? rfNode?.width ?? BLOCK_W;
+      const h = rfNode?.measured?.height ?? rfNode?.height ?? NODE_FOCUS_H;
+      const cx = Number(docNode.position.x) + w / 2;
+      const cy = Number(docNode.position.y) + h / 2;
+      const zoom = Math.min(Math.max(getViewport().zoom ?? 1, 0.45), 1.15);
+
+      syncingViewportFromGraphRef.current = true;
+      lastViewportRef.current = null;
+
+      setCenter(cx, cy, { zoom, duration: 260 })
+        .then(() => {
+          if (cancelled) return;
+          persistViewportForced(getViewport());
+        })
+        .catch(() => {
+          if (cancelled) return;
+          const vp = computeViewportForNodes([docNode], {
+            width: canvasWidth || 800,
+            height: canvasHeight || 600,
+            padding: 80,
+            maxZoom: 1.15,
+          });
+          setViewport(vp, { duration: 0 });
+          persistViewportForced(vp);
+        })
+        .finally(() => {
+          requestAnimationFrame(() => {
+            syncingViewportFromGraphRef.current = false;
+            useSelectionStore.getState().clearCanvasFocus();
+          });
+        });
+    };
+
+    const id = requestAnimationFrame(() => requestAnimationFrame(run));
+    return () => { cancelled = true; cancelAnimationFrame(id); };
+  }, [
+    canvasFocusRequest?.nodeId,
+    canvasFocusRequest?.seq,
+    graph,
+    nodes,
+    setCenter,
+    getViewport,
+    setViewport,
+    persistViewportForced,
+    canvasWidth,
+    canvasHeight,
+  ]);
+
+  const {
+    reactFlowInteractionProps: interactionProps,
+    dropGhost,
+    clearDropGhost,
+    contextMenu,
+    closeContextMenu,
+    fitToFlow,
+    groupSelectedNodes,
+  } = useCanvasInteractions({
+    graph,
+    setNodes,
+    onSelectNode,
+    onInspectNode,
+    onConnectFeedback,
+    onRequestDeleteNodes,
+    graphCanvasActions,
+    lang,
+    draggingRef,
+    lastViewportRef,
+    persistViewport,
+  });
 
   // Live drag preview: forbid invalid connections at the React Flow level.
   const isValidConnection = useCallback(
@@ -356,46 +511,6 @@ function GraphFlowInner({
     [graph, onConnectFeedback],
   );
 
-  // Snap hint: highlight compatible targets while the user drags a connection.
-  const onConnectStart = useCallback(
-    (_event, params) => {
-      const srcHandleId = params.handleId;
-      const srcNodeId = params.nodeId;
-      if (!srcHandleId) return;
-      const doc = graph.getGraphDocument();
-      setNodes((nds) =>
-        nds.map((n) => {
-          if (n.id === srcNodeId) return n;
-          try {
-            const srcNode = doc.nodes[srcNodeId];
-            const targetNode = doc.nodes[n.id];
-            const ports = getNodePortDescriptors(targetNode.type).inputs || [];
-            const anyOk = ports.some((p) => {
-              const test = canConnect(srcNode.type, targetNode.type, srcHandleId, p.id);
-              return test.ok;
-            });
-            const hint = anyOk ? 'ok' : 'bad';
-            return { ...n, data: { ...n.data, snapHint: hint } };
-          } catch (err) {
-            return { ...n, data: { ...n.data, snapHint: 'bad' } };
-          }
-        }),
-      );
-    },
-    [setNodes, graph],
-  );
-
-  // Clear snap hints when drag ends (connection made or cancelled).
-  const onConnectEnd = useCallback(() => {
-    setNodes((nds) =>
-      nds.map((n) =>
-        n.data?.snapHint
-          ? { ...n, data: { ...n.data, snapHint: null } }
-          : n,
-      ),
-    );
-  }, [setNodes]);
-
   const applyLocalSelection = useCallback((nodeId) => {
     setNodes((nds) => nds.map((n) => ({
       ...n,
@@ -420,10 +535,20 @@ function GraphFlowInner({
     [onSelectNode, onInspectNode],
   );
 
+  const ignorePaneClickUntilRef = useRef(0);
+  const contextMenuOpenRef = useRef(false);
+
+  useEffect(() => {
+    contextMenuOpenRef.current = Boolean(contextMenu);
+  }, [contextMenu]);
+
   const onPaneClick = useCallback(() => {
+    if (contextMenuOpenRef.current) return;
+    if (performance.now() < ignorePaneClickUntilRef.current) return;
+    closeContextMenu();
     applyLocalSelection(null);
     onSelectNode?.(null);
-  }, [onSelectNode, applyLocalSelection]);
+  }, [onSelectNode, applyLocalSelection, closeContextMenu]);
 
   const onNodesDelete = useCallback(
     (deletedNodes) => {
@@ -461,83 +586,112 @@ function GraphFlowInner({
     [graph, onConnectFeedback],
   );
 
-  const onDragOver = useCallback((event) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-  }, []);
-
   const onDrop = useCallback(
     (event) => {
       event.preventDefault();
-      const position = screenToFlowPosition({
-        x: event.clientX,
-        y: event.clientY,
-      });
+      event.stopPropagation();
+      clearDropGhost();
+      const host = flowHostRef.current;
+      const rect = host?.getBoundingClientRect();
+      const cx = rect ? rect.left + rect.width / 2 : event.clientX;
+      const cy = rect ? rect.top + rect.height / 2 : event.clientY;
+      const position = screenToFlowPosition({ x: cx, y: cy });
       onDropPaletteEntry?.(event, position);
     },
-    [screenToFlowPosition, onDropPaletteEntry],
+    [screenToFlowPosition, onDropPaletteEntry, clearDropGhost],
   );
 
-  const onMoveEnd = useCallback(
-    (_event, viewport) => {
-      lastViewportRef.current = viewport;
-      graph.setViewport(viewport);
+  const onDragOverCanvas = useCallback(
+    (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+      interactionProps.onDragOver?.(event);
     },
-    [graph],
+    [interactionProps.onDragOver],
   );
+
+  const onDragLeaveCanvas = useCallback(
+    (event) => {
+      interactionProps.onDragLeave?.(event);
+    },
+    [interactionProps.onDragLeave],
+  );
+
+  const {
+    onNodeContextMenu: baseNodeContextMenu,
+    onDragOver: _dropOnDragOver,
+    onDragLeave: _dropOnDragLeave,
+    ...reactFlowInteractionProps
+  } = interactionProps;
+
+  const onNodeContextMenu = useCallback((event, node) => {
+    applyLocalSelection(node.id);
+    baseNodeContextMenu?.(event, node);
+  }, [applyLocalSelection, baseNodeContextMenu]);
+
+  const removeEdgeById = useCallback((edgeId) => {
+    graph.dispatch('RemoveEdge', { edgeId });
+    closeContextMenu();
+  }, [graph, closeContextMenu]);
+
+  const paletteGhostLabel = paletteDragEntry?.label
+    || paletteDragEntry?.defaultNodeType
+    || '';
+  const paletteGhostIcon = paletteDragEntry?.icon || '◆';
 
   const nodeCount = projection?.nodes?.length ?? 0;
   const isEmpty = nodeCount === 0;
-  const onlyRenderVisible = nodeCount > 80;
-
+  const onlyRenderVisible = nodeCount > 48;
   const defaultEdgeOptions = useMemo(() => ({ ...EDGE_DEFAULTS }), []);
 
   return (
-    <div ref={flowHostRef} className="graph-flow-host">
+    <div
+      ref={flowHostRef}
+      className="graph-flow-host graph-flow-host--premium"
+      onDragOver={onDragOverCanvas}
+      onDragLeave={onDragLeaveCanvas}
+      onDrop={onDrop}
+    >
       <ReactFlow
       nodes={nodes}
       edges={edges}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
-      onNodeDragStart={onNodeDragStart}
-      onNodeDragStop={onNodeDragStop}
       onConnect={onConnect}
       isValidConnection={isValidConnection}
-      onConnectStart={onConnectStart}
-      onConnectEnd={onConnectEnd}
       onNodeClick={onNodeClick}
       onNodeDoubleClick={onNodeDoubleClick}
+      onNodeContextMenu={onNodeContextMenu}
       onPaneClick={onPaneClick}
       onNodesDelete={onNodesDelete}
       onEdgesDelete={onEdgesDelete}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
-      onMoveEnd={onMoveEnd}
       nodeTypes={NODE_TYPES}
       edgeTypes={EDGE_TYPES}
       defaultViewport={projection.viewport}
       defaultEdgeOptions={defaultEdgeOptions}
-      connectionLineType={ConnectionLineType.Bezier}
-      connectionLineStyle={{ stroke: 'var(--color-primary)', strokeWidth: 2, opacity: 0.55 }}
-      fitView={isEmpty}
+      fitView={false}
       onlyRenderVisibleElements={onlyRenderVisible}
-      nodesDraggable={false}
       nodeDragThreshold={NODE_CLICK_DRAG_THRESHOLD_PX}
-      selectNodesOnDrag={false}
       nodesFocusable
       elementsSelectable
       edgesFocusable={false}
       elevateNodesOnSelect
       deleteKeyCode={['Delete', 'Backspace']}
       multiSelectionKeyCode={['Meta', 'Control', 'Shift']}
-      minZoom={0.1}
-      maxZoom={3}
-      panOnScroll={false}
-      panOnDrag
+      minZoom={0.08}
+      maxZoom={2.5}
       zoomOnScroll
       zoomOnPinch
+      zoomOnDoubleClick={false}
+      autoPanOnNodeDrag={false}
+      selectNodesOnDrag={false}
       style={{ background: 'transparent', width: '100%', height: '100%' }}
       proOptions={{ hideAttribution: true }}
+      {...reactFlowInteractionProps}
+      onDragOver={onDragOverCanvas}
+      onDragLeave={onDragLeaveCanvas}
+      onDrop={onDrop}
     >
       <Background
         variant={BackgroundVariant.Dots}
@@ -546,20 +700,33 @@ function GraphFlowInner({
         color="var(--color-canvas-dot)"
         style={{ opacity: 0.8 }}
       />
-      <CanvasZoomControls lang={lang} />
-      <MiniMap
-        className="canvas-minimap"
-        position="bottom-right"
-        nodeColor={(node) => {
-          if (node.data?.executionPath) return 'var(--color-primary)';
-          if (node.data?.repairPulse) return 'var(--color-success)';
-          return 'var(--color-primary)';
+      <CanvasZoomControls lang={lang} onFitFlow={fitToFlow} />
+      <CanvasEnhancedMinimap lang={lang} />
+      <CanvasPerformanceOverlay />
+      <CanvasDropGhost
+        position={dropGhost}
+        label={paletteGhostLabel}
+        icon={paletteGhostIcon}
+      />
+      <CanvasContextMenu
+        menu={contextMenu}
+        onClose={closeContextMenu}
+        lang={lang}
+        onFitFlow={fitToFlow}
+        onGroupSelection={groupSelectedNodes}
+        onRemoveEdge={removeEdgeById}
+        actions={{
+          onInspect: (nodeId) => {
+            if (!nodeId) return;
+            ignorePaneClickUntilRef.current = performance.now() + 600;
+            applyLocalSelection(nodeId);
+            onSelectNode?.(nodeId);
+            onInspectNode?.(nodeId);
+          },
+          onDeleteNode: graphCanvasActions?.onDeleteNode,
+          onDuplicateNode: graphCanvasActions?.onDuplicateNode,
+          onAddAfterNode: graphCanvasActions?.onAddAfterNode,
         }}
-        nodeStrokeWidth={0}
-        maskColor="rgba(249, 250, 251, 0.82)"
-        pannable
-        zoomable
-        ariaLabel={lang === 'en' ? 'Canvas minimap' : 'Миникарта холста'}
       />
       {isEmpty && (
         <div
@@ -579,16 +746,38 @@ function GraphFlowInner({
   );
 }
 
+// Isolate canvas from parent App rerenders when props are stable.
+const MemoGraphFlowInner = memo(GraphFlowInner);
+
 /**
  * ReactFlowCanvas — wraps GraphFlowInner with ReactFlowProvider.
  * Accepts graph editor API + projection; no stack state needed.
  */
+function onCanvasProfileRender(id, phase, actualDuration) {
+  if (phase === 'update' && actualDuration > 12) {
+    try {
+      if (import.meta.env?.DEV || globalThis.__CICADA_PERF__) {
+        console.debug(`[canvas profiler] ${id}: ${actualDuration.toFixed(1)}ms`);
+      }
+    } catch { /* ignore */ }
+  }
+}
+
 export function ReactFlowCanvas(props) {
   const { onInsertNodeOnEdge, ...rest } = props;
+  const inner = <MemoGraphFlowInner {...rest} />;
+  const profiled = (import.meta.env?.DEV || globalThis.__CICADA_PERF__)
+    ? (
+      <Profiler id="GraphCanvas" onRender={onCanvasProfileRender}>
+        {inner}
+      </Profiler>
+    )
+    : inner;
+
   return (
     <ReactFlowProvider>
       <FlowEdgePickerHost onInsertOnEdge={onInsertNodeOnEdge}>
-        <GraphFlowInner {...rest} />
+        {profiled}
       </FlowEdgePickerHost>
     </ReactFlowProvider>
   );

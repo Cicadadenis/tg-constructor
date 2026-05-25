@@ -1,0 +1,18 @@
+/**
+ * MC Design System — stacking order.
+ */
+
+:root {
+  --mc-z-base: 0;
+  --mc-z-canvas: 1;
+  --mc-z-canvas-overlay: 5;
+  --mc-z-sticky: 10;
+  --mc-z-toolbar: 20;
+  --mc-z-panel: 30;
+  --mc-z-dropdown: 40;
+  --mc-z-floating: 50;
+  --mc-z-modal: 100;
+  --mc-z-tooltip: 110;
+  --mc-z-toast: 120;
+  --mc-z-max: 9999;
+}

@@ -1,0 +1,27 @@
+/**
+ * Tailwind entry — utilities extend MC tokens (foundation only).
+ */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  [data-mc-ds] {
+    font-family: var(--mc-font-sans);
+    color: var(--mc-color-text);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer components {
+  .mc-ds-canvas-host {
+    background-color: var(--mc-color-canvas-bg);
+    background-image: radial-gradient(
+      circle,
+      var(--mc-color-canvas-dot) 1px,
+      transparent 1.5px
+    );
+    background-size: 20px 20px;
+  }
+}

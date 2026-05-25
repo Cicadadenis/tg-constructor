@@ -20,7 +20,11 @@ import {
   executeCapability,
   type CapabilityExecuteResult,
 } from "../capabilityExecutors.js";
-import { applyExecutionEffects, freezeEffects } from "./executionEffects.mjs";
+import {
+  applyExecutionEffects,
+  freezeEffects,
+  type EmitEventEffect,
+} from "./executionEffects.mjs";
 import type { ExecutionIrPlan, ExecutionIrStep, RetryPolicy } from "./executionIr.js";
 import { getExecutionStep, getJoinBarrier } from "./executionIr.js";
 import {
@@ -74,6 +78,8 @@ export interface SchedulerRunOptions {
   traceStore?: InMemoryExecutionTraceStore;
   onTraceEvent?: (event: ExecutionTraceEvent) => void;
   enableTrace?: boolean;
+  /** Optional hook for emitEvent effects (subscriber layer, analytics, etc.). */
+  onEmitEvent?: (effect: EmitEventEffect) => void | Promise<void>;
 }
 
 export interface SchedulerRunResult {
@@ -255,6 +261,7 @@ export class ExecutionScheduler {
           executionId,
           options.replayOnly === true,
           stepPath,
+          options.onEmitEvent,
         );
         stepsExecuted += 1;
         snapshot = outcome.snapshot;
@@ -350,6 +357,7 @@ export class ExecutionScheduler {
     executionId: string,
     replayOnly: boolean,
     executionPath: readonly string[],
+    onEmitEvent?: (effect: EmitEventEffect) => void | Promise<void>,
   ): Promise<{
     snapshot: ExecutionStateSnapshot;
     nextStepIds: string[];
@@ -365,6 +373,8 @@ export class ExecutionScheduler {
         executionId,
         replayOnly,
         executionPath,
+        trace,
+        onEmitEvent,
       );
     }
 
@@ -381,6 +391,7 @@ export class ExecutionScheduler {
         replayOnly,
         executionPath,
         trace,
+        onEmitEvent,
       );
       await trace.nodeComplete(
         step,
@@ -410,6 +421,7 @@ export class ExecutionScheduler {
     replayOnly: boolean,
     executionPath: readonly string[],
     trace: ExecutionTraceCollector | null = null,
+    onEmitEvent?: (effect: EmitEventEffect) => void | Promise<void>,
   ): Promise<{
     snapshot: ExecutionStateSnapshot;
     nextStepIds: string[];
@@ -462,6 +474,7 @@ export class ExecutionScheduler {
             replayOnly,
             executionPath,
             trace,
+            onEmitEvent,
           ),
         ),
       );
@@ -635,7 +648,10 @@ export class ExecutionScheduler {
           try {
             const capResult = await executeCapability(capabilityId, execution);
             if (capResult.ok) {
-              await applyExecutionEffects(execution, capResult.effects, { replayOnly });
+              await applyExecutionEffects(execution, capResult.effects, {
+                replayOnly,
+                onEmitEvent,
+              });
             }
             if (trace) {
               execution.temp.__lastTraceEffects = capResult.effects;
@@ -725,7 +741,10 @@ export class ExecutionScheduler {
               try {
                 const compResult = await executeCapability(comp.capabilityId, execution);
                 if (compResult.ok) {
-                  await applyExecutionEffects(execution, compResult.effects, { replayOnly });
+                  await applyExecutionEffects(execution, compResult.effects, {
+                    replayOnly,
+                    onEmitEvent,
+                  });
                 }
               } finally {
                 clearNodeScope(execution);
@@ -793,6 +812,7 @@ export class ExecutionScheduler {
     replayOnly: boolean,
     executionPath: readonly string[],
     trace: ExecutionTraceCollector | null = null,
+    onEmitEvent?: (effect: EmitEventEffect) => void | Promise<void>,
   ): Promise<{ branchId: string; branchState: BranchRuntimeState }> {
     const completed: string[] = [];
     let current = entryStepId;
@@ -811,6 +831,7 @@ export class ExecutionScheduler {
         executionId,
         replayOnly,
         stepPath,
+        onEmitEvent,
       );
       completed.push(step.stepId);
 

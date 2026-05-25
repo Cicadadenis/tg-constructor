@@ -1,0 +1,27 @@
+/**
+ * MC Design System — soft elevation / shadows.
+ */
+
+:root {
+  --mc-shadow-none: none;
+  --mc-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --mc-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --mc-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.06), 0 2px 4px rgba(15, 23, 42, 0.04);
+  --mc-shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.08), 0 4px 8px rgba(15, 23, 42, 0.04);
+  --mc-shadow-xl: 0 20px 48px rgba(15, 23, 42, 0.12), 0 8px 16px rgba(15, 23, 42, 0.06);
+  --mc-shadow-floating: 0 8px 24px rgba(15, 23, 42, 0.1), 0 2px 8px rgba(15, 23, 42, 0.05);
+  --mc-shadow-inner: inset 0 1px 2px rgba(15, 23, 42, 0.05);
+
+  --mc-shadow-focus: 0 0 0 3px var(--mc-color-focus-ring);
+  --mc-shadow-focus-inset: inset 0 0 0 2px var(--mc-color-primary-border);
+
+  /* Semantic */
+  --mc-elevation-surface: var(--mc-shadow-xs);
+  --mc-elevation-card: var(--mc-shadow-sm);
+  --mc-elevation-card-hover: var(--mc-shadow-md);
+  --mc-elevation-panel: var(--mc-shadow-md);
+  --mc-elevation-dropdown: var(--mc-shadow-floating);
+  --mc-elevation-modal: var(--mc-shadow-xl);
+  --mc-elevation-node: var(--mc-shadow-sm);
+  --mc-elevation-node-selected: 0 0 0 2px var(--mc-color-primary-muted), var(--mc-shadow-md);
+}

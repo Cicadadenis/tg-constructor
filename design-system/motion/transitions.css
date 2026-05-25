@@ -1,0 +1,29 @@
+/**
+ * Utility transition classes (no Framer Motion required).
+ */
+.mc-transition {
+  transition: var(--mc-transition-interactive);
+}
+
+.mc-transition-fade {
+  transition: var(--mc-transition-fade);
+}
+
+.mc-animate-fade-in {
+  animation: mc-fade-in var(--mc-duration-slow) var(--mc-ease-out) both;
+}
+
+.mc-animate-fade-up {
+  animation: mc-fade-up var(--mc-duration-slow) var(--mc-ease-out) both;
+}
+
+@keyframes mc-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

@@ -75,6 +75,16 @@ import {
   initJammerFirmwareOnBoot,
 } from './services/espFirmwareRoutes.mjs';
 import { registerCleanUrlRouting } from './services/cleanUrlRouting.mjs';
+import { mountAnalyticsRoutes } from './services/analyticsApi.mjs';
+import { mountAiFlowAssistRoutes } from './services/aiFlowAssist.mjs';
+import { AI_FLOW_PROMPT_MAX_CHARS } from './core/ai/flowAssistConstants.mjs';
+import {
+  trackPreviewResponseAnalytics,
+  trackSessionStart,
+  AnalyticsEventTypes,
+  trackAnalyticsEvent,
+  getDefaultAnalyticsStore,
+} from './core/analytics/index.js';
 import { PROJECT_ID_RE } from './services/projectId.mjs';
 import { generateBotPyFromStacks } from './services/pythonCodegen.mjs';
 import { stripThinkingFromAiRaw } from './core/ai/llmOutput.js';
@@ -2998,6 +3008,15 @@ function validatePreviewUpload({ buffer, fileName, mimeType, imageOnly = false }
   throw new Error('Формат файла не разрешён или не распознан по magic bytes');
 }
 
+mountAnalyticsRoutes(app, { requireUserAuth });
+
+mountAiFlowAssistRoutes(app, {
+  requireUserAuth,
+  isProUser,
+  callGroq,
+  findUserById: findById,
+});
+
 /** Симуляция Telegram один шаг за запрос (состояние сценария хранится в сессии на стороне воркера). */
 app.post('/api/bot/preview', requireUserAuth, previewJsonParser, botPreviewRateLimit, async (req, res) => {
   try {
@@ -3148,7 +3167,38 @@ app.post('/api/bot/preview', requireUserAuth, previewJsonParser, botPreviewRateL
 
     if (out && out.ok === false) {
       const detail = typeof out.error === 'string' ? out.error : 'Ошибка выполнения превью';
+      trackAnalyticsEvent({
+        type: AnalyticsEventTypes.FLOW_FAILED,
+        botId: req.body?.botId || req.authUserId,
+        flowId: req.body?.flowId,
+        sessionId: rawSessionId,
+        properties: { error: detail },
+      }, getDefaultAnalyticsStore());
       return res.status(400).json({ error: detail });
+    }
+
+    const outbound = out.outbound ?? out.effects ?? [];
+    const traceEvents = out.trace ?? out.traceView?.events ?? [];
+    trackPreviewResponseAnalytics({
+      sessionId: rawSessionId,
+      subscriberId: req.authUserId,
+      botId: req.body?.botId || req.authUserId,
+      flowId: req.body?.flowId,
+      text,
+      callbackData,
+      outbound,
+      traceId: out.trace_id ?? out.traceId,
+      traceEvents,
+    });
+    if (!global.__previewSessionsStarted) global.__previewSessionsStarted = new Set();
+    const sessKey = `${req.authUserId}:${rawSessionId}`;
+    if (!global.__previewSessionsStarted.has(sessKey)) {
+      global.__previewSessionsStarted.add(sessKey);
+      trackSessionStart({
+        flowId: req.body?.flowId,
+        sessionId: rawSessionId,
+        subscriberId: req.authUserId,
+      }, getDefaultAnalyticsStore());
     }
 
     return res.json(out);
@@ -6585,7 +6635,7 @@ function buildNonJsonRepairPrompt() {
 }
 
 const AI_GENERATE_PUBLIC_ERROR = 'Cicada AI перегружен попробуйте позже';
-const AI_PROMPT_MAX_CHARS = 50;
+const AI_PROMPT_MAX_CHARS = AI_FLOW_PROMPT_MAX_CHARS;
 const AI_LLM_MAX_ATTEMPTS = 2; // initial generation + one LLM retry
 const AI_IR_REPAIR_MAX_PASSES = 2;
 const AI_GENERATE_TIMEOUT_MS = 9_000;

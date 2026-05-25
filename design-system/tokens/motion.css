@@ -1,0 +1,43 @@
+/**
+ * MC Design System — motion tokens (Framer Motion friendly durations/easings).
+ */
+
+:root {
+  --mc-duration-instant: 0ms;
+  --mc-duration-fast: 120ms;
+  --mc-duration-base: 180ms;
+  --mc-duration-slow: 240ms;
+  --mc-duration-slower: 320ms;
+
+  --mc-ease-linear: linear;
+  --mc-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --mc-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --mc-ease-spring: cubic-bezier(0.34, 1.2, 0.64, 1);
+  --mc-ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+
+  --mc-transition-colors: color var(--mc-duration-base) var(--mc-ease-out),
+    background-color var(--mc-duration-base) var(--mc-ease-out),
+    border-color var(--mc-duration-base) var(--mc-ease-out),
+    fill var(--mc-duration-base) var(--mc-ease-out),
+    stroke var(--mc-duration-base) var(--mc-ease-out);
+
+  --mc-transition-shadow: box-shadow var(--mc-duration-base) var(--mc-ease-out);
+
+  --mc-transition-transform: transform var(--mc-duration-base) var(--mc-ease-out);
+
+  --mc-transition-opacity: opacity var(--mc-duration-base) var(--mc-ease-out);
+
+  --mc-transition-interactive: var(--mc-transition-colors), var(--mc-transition-shadow), var(--mc-transition-transform);
+
+  --mc-transition-fade: opacity var(--mc-duration-slow) var(--mc-ease-out),
+    transform var(--mc-duration-slow) var(--mc-ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --mc-duration-fast: 0ms;
+    --mc-duration-base: 0ms;
+    --mc-duration-slow: 0ms;
+    --mc-duration-slower: 0ms;
+  }
+}

@@ -95,10 +95,10 @@ export function buildCanvasEdgePresentation(edge, document, highlight, splittabl
 
   return {
     type: 'flowBezier',
-    className: 'flow-bezier-edge-rf',
+    className: 'flow-bezier-edge-rf flow-edge--flow',
     style: { stroke: 'var(--color-border-strong)', strokeWidth: 1.5 },
     markerEnd: { type: 'arrowclosed', color: 'var(--color-border-strong)', width: 14, height: 14 },
-    animated: false,
-    data: { ...(edge.data || {}), splittable: false, invalid: false },
+    animated: true,
+    data: { ...(edge.data || {}), splittable: false, invalid: false, flowPath: true },
   };
 }

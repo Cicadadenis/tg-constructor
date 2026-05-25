@@ -1,0 +1,534 @@
+/**
+ * ManyChat-style SaaS editor shell — light canvas, floating panels, minimal chrome.
+ * Scoped to `.editor-shell--saas` (does not affect landing / legacy dark profile).
+ */
+
+.editor-shell.editor-shell--saas,
+.editor-shell--saas.editor-shell {
+  --color-primary: var(--mc-color-primary, #2563eb);
+  --color-primary-hover: var(--mc-color-primary-hover, #1d4ed8);
+  --color-primary-active: var(--mc-color-primary-active, #1e40af);
+  --color-primary-muted: var(--mc-color-primary-muted, #eff6ff);
+  --color-primary-border: var(--mc-color-primary-border, #bfdbfe);
+
+  --color-bg: var(--mc-color-canvas-bg, #e6eaf0);
+  --color-surface: var(--mc-color-surface, #ffffff);
+  --color-surface-muted: var(--mc-color-surface-muted, #f8fafc);
+  --color-surface-elevated: #ffffff;
+  --color-overlay: rgba(15, 23, 42, 0.32);
+
+  --color-border: rgba(15, 23, 42, 0.08);
+  --color-border-strong: rgba(15, 23, 42, 0.12);
+  --color-border-focus: var(--mc-color-primary, #2563eb);
+
+  --color-text: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94a3b8;
+  --color-text-inverse: #ffffff;
+
+  --color-canvas-bg: #e6eaf0;
+  --color-canvas-grid: #cbd5e1;
+  --color-canvas-dot: rgba(100, 116, 139, 0.42);
+  --layout-toast-bottom: 72px;
+
+  --layout-left-w: 300px;
+  --layout-right-w: 340px;
+
+  background: var(--color-canvas-bg);
+  color: var(--color-text);
+}
+
+.editor-shell.editor-shell--saas::before,
+.editor-shell.editor-shell--saas::after {
+  display: none !important;
+}
+
+/* ——— Minimal top bar (glass, borderless) ——— */
+.editor-shell--saas .mc-editor-topbar,
+.editor-shell--saas .editor-topbar.editor-shell__topbar {
+  position: relative;
+  z-index: var(--mc-z-toolbar, 20);
+  height: 52px;
+  min-height: 52px;
+  padding: 0 var(--mc-space-4, 16px);
+  gap: var(--mc-space-3, 12px);
+  background: rgba(255, 255, 255, 0.82) !important;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06) !important;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8), 0 4px 24px rgba(15, 23, 42, 0.04) !important;
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+}
+
+.editor-shell--saas .mc-editor-topbar__cluster {
+  display: flex;
+  align-items: center;
+  gap: var(--mc-space-2, 8px);
+  min-width: 0;
+}
+
+.editor-shell--saas .mc-editor-topbar__cluster--grow {
+  flex: 1;
+  justify-content: center;
+}
+
+.editor-shell--saas .mc-editor-topbar__cluster--end {
+  margin-left: auto;
+}
+
+.editor-shell--saas .tb-divider {
+  display: none;
+}
+
+.editor-shell--saas .tb-btn-ghost,
+.editor-shell--saas .tb-btn-ai,
+.editor-shell--saas .tb-btn-danger {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  color: var(--color-text-secondary);
+  border-radius: 10px;
+  min-height: 34px;
+  box-shadow: var(--mc-shadow-xs, 0 1px 2px rgba(15, 23, 42, 0.04));
+}
+
+.editor-shell--saas .tb-btn-ghost:hover {
+  background: #fff;
+  color: var(--color-text);
+  border-color: rgba(15, 23, 42, 0.12);
+}
+
+.editor-shell--saas .tb-btn-run {
+  border-radius: 10px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+}
+
+.editor-shell--saas .editor-brand-word {
+  font-family: var(--mc-font-sans, Inter, system-ui);
+  font-weight: 700;
+  color: var(--color-text);
+  background: none;
+  -webkit-text-fill-color: unset;
+}
+
+.editor-shell--saas .editor-brand-suffix {
+  color: var(--color-text-muted);
+}
+
+/* Hide desktop clutter — lives in overflow + canvas controls */
+@media (min-width: 768px) {
+  .editor-shell--saas .mc-editor-topbar__legacy-tools {
+    display: none;
+  }
+}
+
+/* ——— Stage: full-bleed canvas ——— */
+.editor-shell--saas .editor-shell__stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--color-canvas-bg);
+  background-image: radial-gradient(
+    circle,
+    var(--color-canvas-dot) 1px,
+    transparent 1.5px
+  );
+  background-size: 20px 20px;
+}
+
+.editor-shell--saas .editor-shell__canvas-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.editor-shell--saas .editor-shell--focus .editor-shell__canvas-layer {
+  inset: 0;
+}
+
+/* ——— Floating left rail ——— */
+.editor-shell--saas .mc-floating-rail {
+  position: absolute;
+  top: var(--mc-space-4, 16px);
+  left: var(--mc-space-4, 16px);
+  bottom: var(--mc-space-4, 16px);
+  width: min(var(--layout-left-w), calc(100% - 32px));
+  max-width: 320px;
+  z-index: var(--mc-z-panel, 30);
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--mc-radius-panel, 20px);
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  box-shadow: var(--mc-shadow-floating, 0 8px 32px rgba(15, 23, 42, 0.1));
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  overflow: hidden;
+}
+
+.editor-shell--saas .mc-floating-rail .control-panel,
+.editor-shell--saas .mc-floating-rail.app-zone--left {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  height: 100%;
+}
+
+.editor-shell--saas .control-panel__nav {
+  padding: var(--mc-space-2, 8px);
+  gap: 2px;
+  border-bottom: none;
+  background: transparent;
+}
+
+.editor-shell--saas .app-nav__item {
+  border-radius: 10px;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.editor-shell--saas .app-nav__item:hover {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+.editor-shell--saas .app-nav__item.active {
+  background: var(--color-primary-muted);
+  color: var(--color-primary);
+  box-shadow: none;
+}
+
+.editor-shell--saas .app-nav__item.active::before {
+  display: none;
+}
+
+.editor-shell--saas .control-panel__rail-tabs {
+  margin: 0 var(--mc-space-2, 8px);
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--color-surface-muted);
+  border: none;
+}
+
+.editor-shell--saas .control-panel__rail-tab {
+  border-radius: 9px;
+  border: none;
+  font-size: 12px;
+}
+
+.editor-shell--saas .control-panel__rail-tab.active {
+  background: #fff;
+  box-shadow: var(--mc-shadow-xs);
+  color: var(--color-primary);
+}
+
+/* ——— Floating inspector ——— */
+.editor-shell--saas .mc-floating-inspector {
+  position: absolute;
+  top: var(--mc-space-4, 16px);
+  right: var(--mc-space-4, 16px);
+  bottom: var(--mc-space-4, 16px);
+  width: min(var(--layout-right-w), calc(100% - 32px));
+  max-width: 360px;
+  z-index: var(--mc-z-panel, 30);
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--mc-radius-panel, 20px);
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  box-shadow: var(--mc-shadow-floating);
+  backdrop-filter: blur(20px);
+  overflow: hidden;
+}
+
+.editor-shell--saas .mc-floating-inspector.app-zone--right {
+  border: none !important;
+  background: transparent !important;
+}
+
+.editor-shell--saas .mc-floating-inspector--collapsed {
+  width: 52px;
+  min-width: 52px;
+}
+
+.editor-shell--saas .mc-floating-inspector--collapsed .app-inspector-body,
+.editor-shell--saas .mc-floating-inspector--collapsed .app-inspector-tabs {
+  display: none;
+}
+
+.editor-shell--saas .mc-inspector-panel__chrome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mc-space-2, 8px);
+  padding: var(--mc-space-2, 8px) var(--mc-space-3, 12px);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.05);
+  flex-shrink: 0;
+}
+
+.editor-shell--saas .mc-inspector-panel__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.editor-shell--saas .mc-inspector-panel__icon-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.editor-shell--saas .mc-inspector-panel__icon-btn:hover {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+.editor-shell--saas .mc-inspector-panel__props {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.editor-shell--saas .mc-editor-overflow__item {
+  outline: none;
+  cursor: pointer;
+}
+
+.editor-shell--saas .mc-editor-overflow__item[data-highlighted] {
+  background: var(--color-primary-muted);
+  color: var(--color-primary);
+}
+
+.editor-shell--saas .app-inspector-tabs {
+  padding: var(--mc-space-2, 8px) var(--mc-space-3, 12px) 0;
+  gap: var(--mc-space-1, 4px);
+  border-bottom: none;
+  background: transparent;
+}
+
+.editor-shell--saas .app-inspector-tab {
+  border-radius: 10px 10px 0 0;
+  border: none;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  padding: 8px 12px;
+}
+
+.editor-shell--saas .app-inspector-tab.active {
+  background: var(--color-surface-muted);
+  color: var(--color-primary);
+  border-bottom: 2px solid var(--color-primary);
+}
+
+.editor-shell--saas .app-inspector-body {
+  flex: 1;
+  min-height: 0;
+  background: transparent;
+}
+
+/* ——— Canvas host ——— */
+.editor-shell--saas .app-canvas-host {
+  width: 100%;
+  height: 100%;
+  background: transparent !important;
+}
+
+.editor-shell--saas .app-zone--center {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* Floating canvas toolbars */
+.editor-shell--saas .mc-canvas-dock {
+  position: absolute;
+  z-index: var(--mc-z-canvas-overlay, 8);
+  display: flex;
+  align-items: center;
+  gap: var(--mc-space-2, 8px);
+  padding: var(--mc-space-1, 4px);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  box-shadow: var(--mc-shadow-floating);
+  backdrop-filter: blur(12px);
+}
+
+.editor-shell--saas .mc-canvas-dock--top {
+  top: var(--mc-space-4, 16px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.editor-shell--saas .flow-history-toolbar,
+.editor-shell--saas .flow-layout-toolbar {
+  position: static;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  gap: 4px;
+}
+
+.editor-shell--saas .flow-history-toolbar__btn,
+.editor-shell--saas .flow-layout-toolbar__mode,
+.editor-shell--saas .flow-layout-toolbar__relayout {
+  border-radius: 10px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #fff;
+  color: var(--color-text-secondary);
+  min-height: 32px;
+}
+
+.editor-shell--saas .flow-layout-toolbar__mode--active {
+  background: var(--color-primary-muted);
+  color: var(--color-primary);
+  border-color: var(--color-primary-border);
+}
+
+.editor-shell--saas .flow-layout-toolbar__label {
+  display: none;
+}
+
+/* Panel edge toggles */
+.editor-shell--saas .mc-panel-toggle {
+  position: absolute;
+  z-index: calc(var(--mc-z-panel, 30) + 2);
+  width: 28px;
+  height: 28px;
+  border-radius: var(--mc-radius-full);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #fff;
+  color: var(--color-text-secondary);
+  box-shadow: var(--mc-shadow-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: var(--mc-transition-interactive, all 0.18s ease);
+}
+
+.editor-shell--saas .mc-panel-toggle:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary-border);
+}
+
+.editor-shell--saas .mc-panel-toggle--left {
+  left: var(--mc-space-3, 12px);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.editor-shell--saas .mc-panel-toggle--right {
+  right: var(--mc-space-3, 12px);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.editor-shell--saas .mc-focus-toggle {
+  position: absolute;
+  bottom: calc(var(--mc-space-3, 12px) + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--mc-z-floating, 50);
+  padding: 8px 16px;
+  border-radius: var(--mc-radius-full);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.95);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  box-shadow: var(--mc-shadow-floating);
+  cursor: pointer;
+  transition: var(--mc-transition-interactive);
+}
+
+.editor-shell--saas .mc-focus-toggle[aria-pressed='true'] {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+
+.editor-shell--saas .editor-shell__body.editor-shell--focus .mc-floating-rail,
+.editor-shell--saas .editor-shell__body.editor-shell--focus .mc-floating-inspector,
+.editor-shell--saas .editor-shell__body.editor-shell--focus .mc-panel-toggle--left,
+.editor-shell--saas .editor-shell__body.editor-shell--focus .mc-panel-toggle--right {
+  pointer-events: none;
+}
+
+.editor-shell--saas {
+  display: flex;
+  flex-direction: column;
+  height: var(--app-height, 100vh);
+  max-height: var(--app-height, 100vh);
+  overflow: hidden;
+}
+
+.editor-shell--saas .editor-shell__body--saas {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Mobile: keep zone switching, floating rails full width */
+@media (max-width: 767px) {
+  .editor-shell--saas .mc-floating-rail {
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: var(--layout-mobile-nav-h, 56px);
+    width: auto;
+    max-width: none;
+    border-radius: 0;
+  }
+
+  .editor-shell--saas .mc-floating-inspector {
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: var(--layout-mobile-nav-h, 56px);
+    width: auto;
+    max-width: none;
+    border-radius: 0;
+  }
+
+  .editor-shell--saas .mc-canvas-dock--top {
+    top: auto;
+    bottom: calc(var(--layout-mobile-nav-h, 56px) + 12px);
+  }
+
+  .editor-shell--saas .mc-editor-topbar__legacy-tools {
+    display: flex;
+  }
+}
+
+/* Validation / compile chips — softer on canvas */
+.editor-shell--saas .canvas-soft-validation-hint,
+.editor-shell--saas .canvas-compile-errors {
+  border-radius: 12px;
+  box-shadow: var(--mc-shadow-floating);
+}
+
+/* Toasts above focus toggle / mobile nav — full text visible */
+.editor-shell--saas .ds-toast-host {
+  top: auto;
+  bottom: calc(var(--layout-toast-bottom, 72px) + env(safe-area-inset-bottom, 0px));
+}
+
+.editor-shell--saas .ds-toast-host--mobile {
+  bottom: calc(var(--layout-mobile-nav-h, 56px) + 12px + env(safe-area-inset-bottom, 0px));
+}

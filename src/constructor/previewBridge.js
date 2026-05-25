@@ -39,6 +39,8 @@ function getOrCreatePreviewSessionId() {
  * @param {unknown} [params.event]
  * @param {ReadonlyArray} [params.palette]
  * @param {{ lang?: string, blockTypes?: ReadonlyArray }} [params.paletteOptions]
+ * @param {string} [params.flowId]
+ * @param {string} [params.botId]
  */
 export async function runDebugExecution({
   graphIR: _graphIR,
@@ -50,6 +52,8 @@ export async function runDebugExecution({
   event = null,
   palette = null,
   paletteOptions = {},
+  flowId = null,
+  botId = null,
 }) {
   if (!generatedPython || !String(generatedPython).trim()) {
     throw new Error('runDebugExecution: generatedPython is required (compile the graph first)');
@@ -89,6 +93,8 @@ export async function runDebugExecution({
       code: generatedPython,
       text: previewText,
       callbackData: previewCallback && previewCallback.length ? previewCallback : null,
+      flowId: flowId || undefined,
+      botId: botId || undefined,
     }),
   });
 

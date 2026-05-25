@@ -300,6 +300,17 @@ export function applyOperation(document, operation) {
         zoom: Number(payload.zoom ?? doc.viewport?.zoom ?? 1),
       };
       const prev = { ...doc.viewport };
+      const unchanged =
+        Math.abs((prev.x ?? 0) - viewport.x) < 0.01
+        && Math.abs((prev.y ?? 0) - viewport.y) < 0.01
+        && Math.abs((prev.zoom ?? 1) - viewport.zoom) < 0.0001;
+      if (unchanged) {
+        return {
+          ok: true,
+          document: doc,
+          inverse: createOperation('UpdateViewport', prev, { id: `${operation.id}:inv` }),
+        };
+      }
       return ok(
         { ...doc, viewport },
         createOperation('UpdateViewport', prev, { id: `${operation.id}:inv` }),

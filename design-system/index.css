@@ -1,0 +1,10 @@
+/**
+ * MC Design System — foundation entry (import once in app stylesheet).
+ */
+@import './tokens/index.css';
+@import './themes/index.css';
+@import './bridge/legacy-compat.css';
+@import './styles/states.css';
+@import './styles/primitives.css';
+@import './motion/transitions.css';
+@import './styles/tailwind-entry.css';

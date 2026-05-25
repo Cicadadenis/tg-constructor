@@ -12,5 +12,5 @@ export function getPortType(type) {
   return { input, output };
 }
 
-export { default } from './builder/nodeCard/FlowNodeCard.jsx';
-export { NODE_CARD_WIDTH } from './builder/nodeCard/FlowNodeCard.jsx';
+export { default } from './builder/visualNodes/VisualNodeCard.jsx';
+export { NODE_CARD_WIDTH } from './builder/visualNodes/visualNodeLayout.js';

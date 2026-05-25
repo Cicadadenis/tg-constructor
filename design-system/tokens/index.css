@@ -1,0 +1,10 @@
+/**
+ * MC Design System — token entry (import order matters).
+ */
+@import './colors.css';
+@import './spacing.css';
+@import './typography.css';
+@import './radius.css';
+@import './elevation.css';
+@import './motion.css';
+@import './z-index.css';

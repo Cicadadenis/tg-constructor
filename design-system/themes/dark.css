@@ -1,0 +1,51 @@
+/**
+ * MC Design System — dark theme (optional shell; editor may use legacy overrides).
+ */
+[data-mc-theme='dark'] {
+  color-scheme: dark;
+
+  --mc-color-primary: #60a5fa;
+  --mc-color-primary-hover: #93c5fd;
+  --mc-color-primary-active: #3b82f6;
+  --mc-color-primary-muted: rgba(59, 130, 246, 0.15);
+  --mc-color-primary-border: rgba(96, 165, 250, 0.35);
+  --mc-color-primary-subtle: rgba(59, 130, 246, 0.12);
+
+  --mc-color-bg: #0f172a;
+  --mc-color-bg-subtle: #1e293b;
+  --mc-color-surface: #1e293b;
+  --mc-color-surface-muted: #334155;
+  --mc-color-surface-elevated: #1e293b;
+  --mc-color-surface-sunken: #0f172a;
+  --mc-color-overlay: rgba(2, 6, 23, 0.72);
+  --mc-color-overlay-strong: rgba(2, 6, 23, 0.88);
+
+  --mc-color-canvas-bg: #111827;
+  --mc-color-canvas-grid: rgba(148, 163, 184, 0.12);
+  --mc-color-canvas-dot: rgba(148, 163, 184, 0.25);
+
+  --mc-color-border: rgba(148, 163, 184, 0.2);
+  --mc-color-border-subtle: rgba(148, 163, 184, 0.12);
+  --mc-color-border-strong: rgba(148, 163, 184, 0.35);
+  --mc-color-border-focus: #60a5fa;
+
+  --mc-color-text: #f8fafc;
+  --mc-color-text-secondary: #cbd5e1;
+  --mc-color-text-muted: #94a3b8;
+  --mc-color-text-disabled: #64748b;
+  --mc-color-text-inverse: #0f172a;
+
+  --mc-color-success-muted: rgba(22, 163, 74, 0.15);
+  --mc-color-warning-muted: rgba(217, 119, 6, 0.15);
+  --mc-color-danger-muted: rgba(220, 38, 38, 0.15);
+  --mc-color-info-muted: rgba(2, 132, 199, 0.15);
+
+  --mc-color-focus-ring: rgba(96, 165, 250, 0.4);
+  --mc-color-focus-ring-offset: #1e293b;
+
+  --mc-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --mc-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --mc-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --mc-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.4);
+  --mc-shadow-floating: 0 8px 28px rgba(0, 0, 0, 0.45);
+}

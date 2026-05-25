@@ -6,8 +6,8 @@ import React from 'react';
  */
 export default function CenterPanel({ children, canvasRef }) {
   return (
-    <div className="app-zone app-zone--center" data-zone="center" data-tour="canvas-area">
-      <div ref={canvasRef} className="app-canvas-host">
+    <div className="app-zone app-zone--center mc-canvas-zone" data-zone="center" data-tour="canvas-area">
+      <div ref={canvasRef} className="app-canvas-host mc-ds-canvas-host">
         {children}
       </div>
     </div>

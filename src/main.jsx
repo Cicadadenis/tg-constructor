@@ -7,7 +7,9 @@ import { prefetchCsrfToken } from './csrf.js';
 import { initDevErrorLogging } from './debug/devLog.js';
 import './index.css';
 import './layout/editor-shell.css';
+import { initMcDesignSystem } from '../design-system/index.js';
 
+initMcDesignSystem({ theme: 'light' });
 initDevErrorLogging();
 prefetchCsrfToken(API_URL).catch(() => {});
 

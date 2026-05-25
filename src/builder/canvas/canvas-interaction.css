@@ -1,0 +1,160 @@
+/* Premium canvas interaction polish */
+
+.graph-flow-host--premium {
+  --canvas-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.graph-flow-host--premium .react-flow__viewport {
+  transition: transform 0.05s linear;
+}
+
+.graph-flow-host--premium .react-flow__pane {
+  cursor: grab;
+}
+
+.graph-flow-host--premium .react-flow__pane:active {
+  cursor: grabbing;
+}
+
+/* Selection marquee */
+.graph-flow-host--premium .react-flow__selection {
+  background: rgba(37, 99, 235, 0.08);
+  border: 1px solid rgba(37, 99, 235, 0.35);
+  border-radius: 10px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6) inset;
+}
+
+.graph-flow-host--premium .react-flow__nodesselection-rect {
+  background: rgba(37, 99, 235, 0.06);
+  border: 1px dashed rgba(37, 99, 235, 0.45);
+  border-radius: 12px;
+}
+
+/* Magnetic handles while connecting */
+.graph-flow-host--premium .react-flow__handle {
+  transition: transform 0.15s var(--canvas-ease), opacity 0.15s ease, box-shadow 0.15s ease;
+}
+
+.graph-flow-host--premium .react-flow__handle.connectingto,
+.graph-flow-host--premium .react-flow__handle.connectingfrom,
+.graph-flow-host--premium .react-flow__handle.valid,
+.graph-flow-host--premium .flow-node-card:hover .flow-node-card__handle {
+  opacity: 1 !important;
+  transform: scale(1.35);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.2);
+}
+
+.graph-flow-host--premium .react-flow__connection-path {
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 6px rgba(37, 99, 235, 0.25));
+}
+
+/* Animated flow edges */
+@keyframes canvas-edge-flow {
+  from { stroke-dashoffset: 24; }
+  to { stroke-dashoffset: 0; }
+}
+
+.graph-flow-host--premium .flow-bezier-edge--flow .flow-bezier-edge__path,
+.graph-flow-host--premium .react-flow__edge.flow-edge--flow .react-flow__edge-path {
+  stroke-dasharray: 6 6;
+  animation: canvas-edge-flow 1.2s linear infinite;
+}
+
+.graph-flow-host--premium .flow-bezier-edge--hover .flow-bezier-edge__path,
+.graph-flow-host--premium .flow-add-step-edge--hover .flow-add-step-edge__path {
+  stroke-width: 2.25;
+}
+
+/* Plus button on edge — hint → active */
+.flow-add-step-edge__btn-wrap--hint .flow-add-step-edge__btn {
+  opacity: 0.35;
+  transform: scale(0.88);
+  pointer-events: none;
+}
+
+.flow-add-step-edge__btn-wrap--visible .flow-add-step-edge__btn,
+.flow-add-step-edge__btn--active {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.flow-add-step-edge__btn {
+  transition: transform 0.18s var(--canvas-ease), opacity 0.18s ease, box-shadow 0.18s ease;
+}
+
+.flow-add-step-edge--hover .flow-add-step-edge__path {
+  opacity: 1;
+  stroke: var(--color-primary-border, #bfdbfe);
+}
+
+/* Drop ghost */
+.canvas-drop-ghost__card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 2px dashed var(--color-primary, #2563eb);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 12px 32px rgba(37, 99, 235, 0.18);
+  backdrop-filter: blur(8px);
+  animation: canvas-ghost-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes canvas-ghost-pulse {
+  0%, 100% { opacity: 0.88; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.02); }
+}
+
+.canvas-drop-ghost__icon {
+  font-size: 18px;
+}
+
+.canvas-drop-ghost__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text, #0f172a);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Node drag physics */
+.graph-flow-host--premium .react-flow__node.dragging .flow-node-card__surface {
+  box-shadow: var(--shadow-lg), 0 0 0 2px var(--color-primary-muted);
+  transform: scale(1.02);
+  transition: transform 0.12s var(--canvas-ease), box-shadow 0.12s ease;
+}
+
+.graph-flow-host--premium .react-flow__node.dragging .cicada-node-hit {
+  cursor: grabbing;
+}
+
+/* Enhanced minimap */
+.graph-flow-host .canvas-minimap--enhanced.react-flow__minimap {
+  width: 168px;
+  height: 112px;
+  border-radius: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.1);
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(12px);
+  overflow: hidden;
+}
+
+.graph-flow-host .canvas-minimap--enhanced .react-flow__minimap-mask {
+  fill: rgba(37, 99, 235, 0.06);
+}
+
+.canvas-context-menu__danger[data-highlighted] {
+  color: var(--color-danger, #dc2626);
+}
+
+.canvas-zoom-controls__btn--flow {
+  font-size: 11px;
+  padding: 0 8px;
+  width: auto;
+  min-width: 32px;
+}

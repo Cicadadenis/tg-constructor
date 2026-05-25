@@ -265,4 +265,22 @@ export {
   type ExecutionTraceRecord,
 } from "./execution/index.js";
 
+export {
+  SubscriberStateManager,
+  SubscriberRuntimeAdapter,
+  createSubscriberStateManager,
+  getDefaultSubscriberStateManager,
+  applyExecutionEffectsWithSubscriber,
+  bootstrapSubscriberRuntime,
+  createSubscriberRepositories,
+  SubscriberEventTypes,
+  evaluateSegmentFilter,
+  evaluateDynamicCondition,
+  registerSubscriberCapabilityExtensions,
+  EventTriggerService,
+  type Subscriber,
+  type SubscriberContext,
+  type SegmentFilter,
+} from "../subscriber/index.js";
+
 

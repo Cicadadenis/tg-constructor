@@ -32,6 +32,10 @@
   pointer-events: all;
 }
 
+.flow-add-step-edge__btn-wrap--hint {
+  pointer-events: none;
+}
+
 .flow-add-step-edge__btn {
   width: 28px;
   height: 28px;

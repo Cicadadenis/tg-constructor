@@ -5,8 +5,8 @@
 const STACK_WIDTH = 220;
 const BLOCK_H = 112;
 const ROOT_PAD = 48;
-const NODE_W = 200;
-const NODE_H = 60;
+const NODE_W = 300;
+const NODE_H = 160;
 
 /** @param {object} stack */
 export function estimateStackHeight(stack) {

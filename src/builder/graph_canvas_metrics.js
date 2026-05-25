@@ -5,9 +5,9 @@
 export {
   NODE_CARD_WIDTH,
   BLOCK_W,
-  getFlowNodeCardLayout,
-  getCicadaNodeLayout,
-} from './nodeCard/nodeCardLayout.js';
+  getVisualNodeLayout as getFlowNodeCardLayout,
+  getVisualNodeLayout as getCicadaNodeLayout,
+} from './visualNodes/visualNodeLayout.js';
 
 /** Movement below this (px) counts as click, not drag (matches React Flow nodeDragThreshold). */
 export const NODE_CLICK_DRAG_THRESHOLD_PX = 5;

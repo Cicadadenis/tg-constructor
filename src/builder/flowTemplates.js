@@ -2,12 +2,14 @@
  * Starter templates for empty canvas onboarding — one-click load via example graph keys.
  */
 
-/** @typedef {'welcomeFlow' | 'shopBot' | 'aiAssistant' | 'supportBot'} FlowStarterTemplateId */
+/** @typedef {'welcomeFlow' | 'shopBot' | 'aiAssistant' | 'supportBot' | 'salonFunnel' | 'leadCapture'} FlowStarterTemplateId */
 
 /** @type {readonly { id: FlowStarterTemplateId, exampleKey: string, icon: string }[]} */
 export const FLOW_STARTER_TEMPLATE_DEFS = Object.freeze([
   { id: 'welcomeFlow', exampleKey: 'welcome', icon: '👋' },
   { id: 'shopBot', exampleKey: 'shop', icon: '🛍️' },
+  { id: 'salonFunnel', exampleKey: 'welcome', icon: '💇' },
+  { id: 'leadCapture', exampleKey: 'fsm', icon: '📋' },
   { id: 'aiAssistant', exampleKey: 'aiAssistant', icon: '🤖' },
   { id: 'supportBot', exampleKey: 'supportBot', icon: '🎧' },
 ]);
@@ -21,6 +23,8 @@ const COPY = {
     shopBot: { name: 'Shop Bot', desc: 'Catalog, cart, and product callbacks.' },
     aiAssistant: { name: 'AI Assistant', desc: 'Intent routing with classify + replies.' },
     supportBot: { name: 'Support Bot', desc: 'FAQ menu and ticket-style fallback.' },
+    salonFunnel: { name: 'Salon & booking', desc: 'Greet, menu, and appointment-style buttons.' },
+    leadCapture: { name: 'Lead capture', desc: 'FSM steps to collect name, phone, and consent.' },
     createWithAi: 'Create with AI',
     tour: 'Take a quick tour',
   },
@@ -32,6 +36,8 @@ const COPY = {
     shopBot: { name: 'Shop Bot', desc: 'Каталог, кошик і товари.' },
     aiAssistant: { name: 'AI Assistant', desc: 'Маршрутизація намірів через classify.' },
     supportBot: { name: 'Support Bot', desc: 'Меню підтримки та тікети.' },
+    salonFunnel: { name: 'Салон і запис', desc: 'Вітання, меню та кнопки для запису.' },
+    leadCapture: { name: 'Збір лідів', desc: 'FSM для імені, телефону та згоди.' },
     createWithAi: 'Створити через AI',
     tour: 'Швидкий тур',
   },
@@ -43,6 +49,8 @@ const COPY = {
     shopBot: { name: 'Shop Bot', desc: 'Каталог, корзина и товары.' },
     aiAssistant: { name: 'AI Assistant', desc: 'Маршрутизация намерений через classify.' },
     supportBot: { name: 'Support Bot', desc: 'Меню поддержки и тикеты.' },
+    salonFunnel: { name: 'Салон и запись', desc: 'Приветствие, меню и кнопки для записи.' },
+    leadCapture: { name: 'Сбор лидов', desc: 'FSM для имени, телефона и согласия.' },
     createWithAi: 'Создать через AI',
     tour: 'Быстрый тур',
   },

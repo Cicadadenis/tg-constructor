@@ -15,6 +15,8 @@ function nodeVisualKey(n) {
     n.selected ? 1 : 0,
     d.label,
     d.canvasBlockType,
+    d.visualType,
+    d.runtimeType,
     d.previewEpoch,
     d.repairPulse ? 1 : 0,
     d.executionPath ? 1 : 0,
@@ -71,6 +73,23 @@ export function flowEdgesNeedUpdate(current, next) {
  * @param {{ repairIds?: Set<string>, executionIds?: Set<string> }} highlight
  * @param {number | string | undefined} previewEpoch
  */
+/**
+ * Fast path — selection change only (no structural projection rebuild).
+ * @param {import('@xyflow/react').Node[]} current
+ * @param {string | null} selectedBlockId
+ */
+export function mergeSelectionOnNodes(current, selectedBlockId) {
+  if (!current?.length) return current;
+  let changed = false;
+  const next = current.map((n) => {
+    const sel = n.id === selectedBlockId;
+    if (Boolean(n.selected) === sel) return n;
+    changed = true;
+    return { ...n, selected: sel };
+  });
+  return changed ? next : current;
+}
+
 export function mergeProjectionNodes(current, projected, selectedBlockId, highlight, previewEpoch) {
   const repairIds = highlight?.repairIds || new Set();
   const executionIds = highlight?.executionIds || new Set();

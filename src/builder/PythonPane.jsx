@@ -6,6 +6,7 @@ import { getConstructorStrings } from '../builderI18n.js';
 import { useGraphPythonCompile } from './useGraphPythonCompile.js';
 import { VALIDATION_MODE } from '../constructor/graph_document/validation_modes.js';
 import { useGraphValidation } from './graphValidationContext.jsx';
+import './python-pane.css';
 
 function PythonPane({ getGraphDocument, graphRevision, isMobile, onClose }) {
   const ctx = React.useContext(BuilderUiContext);
@@ -92,63 +93,25 @@ function PythonPane({ getGraphDocument, graphRevision, isMobile, onClose }) {
   }, [emptyPreviewReason, ui]);
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      borderTop: '1px solid var(--border)',
-      flex: isMobile ? '1 1 auto' : '0 0 50%',
-      height: isMobile ? '100%' : undefined,
-      minHeight: 0,
-      minWidth: 0,
-      position: 'relative',
-    }}>
-      <div style={{
-        padding: '6px 10px',
-        fontSize: 9,
-        fontWeight: 700,
-        letterSpacing: '.12em',
-        textTransform: 'uppercase',
-        color: 'rgba(99,102,241,0.85)',
-        borderBottom: '1px solid var(--border)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 8,
-      }}>
+    <div className="python-pane">
+      <div className="python-pane__header">
         <span>{ui.pythonPreviewTitle || 'Python Preview'}</span>
       </div>
 
-      <div style={{
-        padding: '5px 10px',
-        display: 'flex',
-        borderBottom: '1px solid var(--border)',
-        minWidth: 0,
-        overflowX: 'auto',
-      }}>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-          gap: 6,
-          width: '100%',
-        }}>
+      <div className="python-pane__toolbar">
+        <div className="python-pane__toolbar-grid">
           {canClose && (
-            <button type="button" onClick={onClose} style={{ gridColumn: '1 / -1', padding: '4px 8px', fontSize: 10 }}>
+            <button type="button" onClick={onClose} style={{ gridColumn: '1 / -1' }}>
               × Закрыть
             </button>
           )}
-          <button
-            type="button"
-            onClick={copy}
-            disabled={isEmpty}
-            style={{ padding: '4px 10px', fontSize: 10, opacity: isEmpty ? 0.45 : 1 }}
-          >
+          <button type="button" onClick={copy} disabled={isEmpty}>
             {copied ? (ui.pythonCopied || 'Скопировано') : (ui.pythonCopy || 'Копировать')}
           </button>
           <button
             type="button"
             onClick={() => download('bot.py')}
             disabled={isEmpty || fullHasErrors}
-            style={{ padding: '4px 10px', fontSize: 10, opacity: isEmpty ? 0.45 : 1 }}
             title={fullHasErrors ? (ui.validationDownloadBlocked || 'Сначала исправьте ошибки проверки') : undefined}
           >
             {ui.pythonDownload || '↓ bot.py'}
@@ -157,43 +120,34 @@ function PythonPane({ getGraphDocument, graphRevision, isMobile, onClose }) {
       </div>
 
       {(pythonMeta.compileWarnings || []).length > 0 && !isEmpty && (
-        <div style={{ padding: '4px 10px', borderBottom: '1px solid var(--border)', fontSize: 9, color: 'rgba(251,191,36,0.75)', opacity: 0.85 }}>
+        <div className="python-pane__warnings">
           {(pythonMeta.compileWarnings || []).slice(0, 1).map((w, i) => (
             <div key={`w-${i}`}>{w}</div>
           ))}
         </div>
       )}
 
-      <div style={{
-        flex: 1,
-        margin: 0,
-        padding: isEmpty ? '24px 16px' : '7px 10px',
-        fontSize: isEmpty ? 12 : 9,
-        lineHeight: 1.65,
-        color: isEmpty ? 'var(--text3)' : 'var(--text2)',
-        fontFamily: isEmpty ? 'inherit' : 'var(--mono)',
-        overflowY: 'auto',
-        background: 'var(--bg)',
-        opacity: fullHasErrors ? 0.55 : 1,
-        display: isEmpty ? 'flex' : 'block',
-        alignItems: isEmpty ? 'center' : undefined,
-        justifyContent: isEmpty ? 'center' : undefined,
-        textAlign: isEmpty ? 'center' : 'left',
-      }}>
+      <div
+        className={[
+          'python-pane__code',
+          isEmpty ? 'python-pane__code--empty' : '',
+          fullHasErrors ? 'python-pane__code--dimmed' : '',
+        ].filter(Boolean).join(' ')}
+      >
         {isEmpty ? (
           <div style={{ maxWidth: 280 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text2)', marginBottom: 8 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary, var(--text2))', marginBottom: 8 }}>
               {emptyPreviewCopy.title}
             </div>
-            <div style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--text3)' }}>
+            <div style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--color-text-muted, var(--text3))' }}>
               {emptyPreviewCopy.hint}
             </div>
           </div>
         ) : (
           generatedPython.split('\n').map((line, i) => (
-            <div key={i} style={{ display: 'flex', gap: 8, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-              <span style={{ flexShrink: 0, width: 28, textAlign: 'right', opacity: 0.35 }}>{i + 1}</span>
-              <span style={{ flex: 1 }}>
+            <div key={i} className="python-pane__line">
+              <span className="python-pane__ln">{i + 1}</span>
+              <span className="python-pane__line-body">
                 {highlightPythonLine(line).map((tok) => (
                   <span key={tok.key} style={{ color: tok.color }}>{tok.text}</span>
                 ))}

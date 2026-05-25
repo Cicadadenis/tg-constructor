@@ -8,7 +8,7 @@ const ZOOM_STEP = 0.15;
  * @param {object} props
  * @param {string} [props.lang]
  */
-export default function CanvasZoomControls({ lang = 'ru' }) {
+export default function CanvasZoomControls({ lang = 'ru', onFitFlow }) {
   const { zoomIn, zoomOut, fitView } = useReactFlow();
   const zoom = useStore((s) => s.transform[2]);
   const displayZoom = Math.round((zoom || 1) * 100);
@@ -26,10 +26,10 @@ export default function CanvasZoomControls({ lang = 'ru' }) {
   }, [fitView]);
 
   const labels = lang === 'en'
-    ? { in: 'Zoom in', out: 'Zoom out', fit: 'Fit view' }
+    ? { in: 'Zoom in', out: 'Zoom out', fit: 'Fit view', flow: 'Fit flow' }
     : lang === 'uk'
-      ? { in: 'Збільшити', out: 'Зменшити', fit: 'Вмістити' }
-      : { in: 'Увеличить', out: 'Уменьшить', fit: 'Вместить' };
+      ? { in: 'Збільшити', out: 'Зменшити', fit: 'Вмістити', flow: 'Весь сценарій' }
+      : { in: 'Увеличить', out: 'Уменьшить', fit: 'Вместить', flow: 'Весь сценарий' };
 
   return (
     <div className="canvas-zoom-controls" role="toolbar" aria-label={lang === 'en' ? 'Zoom' : 'Масштаб'}>
@@ -63,6 +63,17 @@ export default function CanvasZoomControls({ lang = 'ru' }) {
       >
         ⊡
       </button>
+      {onFitFlow && (
+        <button
+          type="button"
+          className="canvas-zoom-controls__btn canvas-zoom-controls__btn--flow"
+          onClick={onFitFlow}
+          title={labels.flow}
+          aria-label={labels.flow}
+        >
+          ⤢
+        </button>
+      )}
     </div>
   );
 }

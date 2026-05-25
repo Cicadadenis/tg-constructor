@@ -9,6 +9,7 @@ import {
 } from './controlPanelConfig.js';
 import EmptyState from '../ui/EmptyState.jsx';
 import { SkeletonList } from '../ui/Skeleton.jsx';
+import ContextualHint from '../polish/ContextualHint.jsx';
 
 /**
  * SaaS-style left control panel: global actions, sections, searchable lists, bulk actions.
@@ -89,6 +90,22 @@ export default function LeftPanel({
   const flowsTabLabel = lang === 'en' ? 'Scenarios' : lang === 'uk' ? 'Сценарії' : 'Сценарии';
   const showBlocksRail = showPalette && automationRailTab === 'blocks';
   const showFlowsRail = section !== 'automation' || automationRailTab === 'flows';
+
+  const blocksHintKey = 'cicada_hint_blocks_v1';
+  const [blocksHintDismissed, setBlocksHintDismissed] = useState(() => {
+    try {
+      return localStorage.getItem(blocksHintKey) === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  const dismissBlocksHint = () => {
+    setBlocksHintDismissed(true);
+    try {
+      localStorage.setItem(blocksHintKey, '1');
+    } catch { /* ignore */ }
+  };
 
   const emptyCopy = useMemo(() => {
     if (section === 'automation') {
@@ -281,6 +298,25 @@ export default function LeftPanel({
 
       {showBlocksRail && (
         <div className="app-left__palette control-panel__palette" data-tour="block-palette">
+          {!blocksHintDismissed && (
+            <div style={{ padding: '0 var(--space-2) var(--space-1)' }}>
+              <ContextualHint
+                icon="🧱"
+                title={lang === 'en' ? 'Drag blocks to the canvas' : lang === 'uk' ? 'Перетягніть блоки на полотно' : 'Перетащите блоки на холст'}
+                text={lang === 'en'
+                  ? 'Pick a trigger or message block, drop it on the flow, then connect nodes.'
+                  : lang === 'uk'
+                    ? 'Оберіть тригер або повідомлення, перетягніть на flow і з’єднайте вузли.'
+                    : 'Выберите триггер или сообщение, перетащите на схему и соедините узлы.'}
+                actions={[{
+                  id: 'ok',
+                  label: lang === 'en' ? 'Got it' : lang === 'uk' ? 'Зрозуміло' : 'Понятно',
+                  onClick: dismissBlocksHint,
+                }]}
+                onDismiss={dismissBlocksHint}
+              />
+            </div>
+          )}
           <div className="app-zone__scroll control-panel__palette-scroll">
             {palette}
           </div>

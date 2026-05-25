@@ -2,8 +2,8 @@ import React from 'react';
 import {
   BaseEdge,
   EdgeLabelRenderer,
-  getBezierPath,
 } from '@xyflow/react';
+import { getFlowEdgePath } from '../canvas/edgePathUtils.js';
 
 /**
  * Flow edge with hover "+" to insert a step (quick block picker).
@@ -19,7 +19,7 @@ function FlowAddStepEdge({
   data,
   selected,
 }) {
-  const [edgePath, labelX, labelY] = getBezierPath({
+  const [edgePath, labelX, labelY] = getFlowEdgePath({
     sourceX,
     sourceY,
     targetX,
@@ -28,9 +28,9 @@ function FlowAddStepEdge({
     targetPosition,
   });
 
+  const invalid = Boolean(data?.invalid);
   const [hovered, setHovered] = React.useState(false);
   const showAdd = hovered || data?.pickerOpen;
-  const invalid = Boolean(data?.invalid);
 
   const onOpenPicker = (e) => {
     e.stopPropagation();
@@ -62,19 +62,27 @@ function FlowAddStepEdge({
           style={invalid ? { strokeDasharray: '4 4' } : undefined}
         />
       </g>
-      {showAdd && !invalid && (
+      {!invalid && (
         <EdgeLabelRenderer>
           <div
-            className="flow-add-step-edge__btn-wrap nodrag nopan"
+            className={[
+              'flow-add-step-edge__btn-wrap',
+              'nodrag',
+              'nopan',
+              showAdd ? 'flow-add-step-edge__btn-wrap--visible' : 'flow-add-step-edge__btn-wrap--hint',
+            ].join(' ')}
             style={{
               position: 'absolute',
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
-              pointerEvents: 'all',
+              pointerEvents: showAdd ? 'all' : 'none',
             }}
           >
             <button
               type="button"
-              className="flow-add-step-edge__btn"
+              className={[
+                'flow-add-step-edge__btn',
+                showAdd ? 'flow-add-step-edge__btn--active' : '',
+              ].filter(Boolean).join(' ')}
               title={data?.lang === 'en' ? 'Add step' : 'Добавить шаг'}
               aria-label={data?.lang === 'en' ? 'Add step' : 'Добавить шаг'}
               onClick={onOpenPicker}

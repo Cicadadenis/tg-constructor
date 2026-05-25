@@ -60,12 +60,28 @@ import {
 import { BlockInfoContext, AddBlockContext, BuilderUiContext } from './builderContext.js';
 import { AppLayoutProvider } from './layout/AppLayoutContext.jsx';
 import EditorShell from './layout/EditorShell.jsx';
+import { ChatSimulatorPanel } from './simulator/index.js';
+import { AnalyticsHub } from './analytics/index.js';
+import { registerFlow } from './analytics/client.js';
+import { getIncrementalCompileSnapshot } from './performance/incrementalCompile.js';
+import { AiFlowStudio } from './ai/index.js';
+import {
+  ProductWelcome,
+  GuidedActionBar,
+  GlobalLoading,
+  EditorKeyboardShortcuts,
+} from './polish/index.js';
+import { useAiFlowStore } from './ai/aiFlowStore.js';
 import LeftPanel from './layout/LeftPanel.jsx';
 import CenterPanel from './layout/CenterPanel.jsx';
 import RightInspectorPanel from './layout/RightInspectorPanel.jsx';
 import EntityInspectorPanel from './builder/inspector/EntityInspectorPanel.jsx';
 import MobileZoneNav from './layout/MobileZoneNav.jsx';
-import { useGraphEditor } from './constructor/graph_document/useGraphEditor.js';
+import { StoreProvider } from './app/StoreProvider.jsx';
+import { useEditorStoreBindings } from './app/editorStoreBindings.js';
+import ConnectedGraphCanvas from './builder/ConnectedGraphCanvas.jsx';
+import { useGraphStore } from './stores/graphStore.js';
+import { useUiStore } from './stores/uiStore.js';
 import {
   migrateGraphDocument,
 } from './constructor/graph_document/graph_migration.js';
@@ -105,8 +121,6 @@ import {
   assertPaletteIntegrity,
 } from './constructor/graph_document/graph_ui_palette.js';
 import {
-  normalizeInboundEvent,
-  resolveEventToPaletteEntry,
   matchLegacyEventStringRule,
 } from './constructor/graph_document/palette_event_resolver.js';
 import {
@@ -134,8 +148,9 @@ import {
 } from './builder/graph_node_delete.js';
 import { getChainStepBelow } from './builder/blockLayout.js';
 import { applyFlowBuilderLayout } from './builder/flowLayout/applyFlowBuilderLayout.js';
-import FlowLayoutToolbar from './builder/flowLayout/FlowLayoutToolbar.jsx';
-import FlowHistoryToolbar from './builder/flowLayout/FlowHistoryToolbar.jsx';
+import CanvasFloatingControls from './layout/CanvasFloatingControls.jsx';
+import EditorOverflowMenu, { EditorOverflowItem, EditorOverflowSeparator } from './layout/EditorOverflowMenu.jsx';
+import './layout/editor-saas-shell.css';
 import ToastHost from './ui/ToastHost.jsx';
 import EmptyState from './ui/EmptyState.jsx';
 import {
@@ -149,6 +164,7 @@ import { shouldShowCanvasOnboardingOverlay } from './constructor/graph_document/
 import FlowCanvasEmptyState from './builder/FlowCanvasEmptyState.jsx';
 import { exampleKeyForTemplate } from './builder/flowTemplates.js';
 import { scheduleCanvasFocusAfterMutation } from './builder/canvas_graph_focus.js';
+import { useSelectionStore } from './stores/selectionStore.js';
 import { useCanvasAutosave } from './app/autosave/useCanvasAutosave.js';
 import { useUserProjects } from './app/hooks/useUserProjects.js';
 import '@xyflow/react/dist/style.css';
@@ -253,7 +269,8 @@ async function loadProjectFromCloud(projectId) {
 const SERVER_PROJECT_STORAGE_KEY = 'cicada_server_project_id';
 
 function generatePreviewCodegenSnapshot(getDocument, options = {}) {
-  return buildPreviewCodegenSnapshot(getDocument, options);
+  const doc = typeof getDocument === 'function' ? getDocument() : getDocument;
+  return getIncrementalCompileSnapshot(doc, () => buildPreviewCodegenSnapshot(doc, options));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -454,24 +471,6 @@ function saveCanvasForKey(key, graph) {
   _saveCanvasForKey(key, graph);
 }
 
-const PREVIEW_SESSION_STORAGE_KEY = 'cicada_preview_session_id';
-
-function getOrCreatePreviewSessionId() {
-  try {
-    let s = sessionStorage.getItem(PREVIEW_SESSION_STORAGE_KEY);
-    if (!s || s.length < 8) {
-      s =
-        typeof crypto !== 'undefined' && crypto.randomUUID
-          ? crypto.randomUUID()
-          : `pv_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
-      sessionStorage.setItem(PREVIEW_SESSION_STORAGE_KEY, s);
-    }
-    return s;
-  } catch {
-    return `pv_${Date.now()}`;
-  }
-}
-
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -483,295 +482,6 @@ function fileToBase64(file) {
     r.onerror = () => reject(r.error || new Error('read failed'));
     r.readAsDataURL(file);
   });
-}
-
-const TELEGRAM_HTML_TAGS = new Set(['b', 'strong', 'i', 'em', 'u', 'ins', 's', 'strike', 'del', 'code', 'pre', 'a']);
-const HTML_ENTITY_MAP = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
-
-function decodeHtmlEntities(text) {
-  return String(text ?? '').replace(/&(#x[0-9a-fA-F]+|#\d+|[a-zA-Z]+);/g, (m, ent) => {
-    if (ent[0] === '#') {
-      const n = ent[1]?.toLowerCase() === 'x'
-        ? Number.parseInt(ent.slice(2), 16)
-        : Number.parseInt(ent.slice(1), 10);
-      return Number.isFinite(n) ? String.fromCodePoint(n) : m;
-    }
-    return HTML_ENTITY_MAP[ent] ?? m;
-  });
-}
-
-function safePreviewHref(href) {
-  const s = String(href || '').trim();
-  return /^(https?:|tg:|mailto:)/i.test(s) ? s : '';
-}
-
-function parseTelegramHtmlText(text) {
-  const root = { tag: null, children: [] };
-  const stack = [root];
-  const re = /<\/?([a-zA-Z][\w-]*)(?:\s+[^>]*)?>/g;
-  let last = 0;
-  let m;
-
-  const pushText = (value) => {
-    if (value) stack[stack.length - 1].children.push(decodeHtmlEntities(value));
-  };
-
-  while ((m = re.exec(String(text ?? '')))) {
-    pushText(String(text ?? '').slice(last, m.index));
-    const raw = m[0];
-    const tag = String(m[1] || '').toLowerCase();
-    last = re.lastIndex;
-    if (!TELEGRAM_HTML_TAGS.has(tag)) {
-      pushText(raw);
-      continue;
-    }
-    if (raw.startsWith('</')) {
-      const idx = stack.findLastIndex((node) => node.tag === tag);
-      if (idx > 0) stack.length = idx;
-      continue;
-    }
-    const hrefMatch = tag === 'a' ? raw.match(/\shref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i) : null;
-    const rawHref = hrefMatch ? decodeHtmlEntities(hrefMatch[1] || hrefMatch[2] || hrefMatch[3] || '') : '';
-    const node = {
-      tag,
-      attrs: hrefMatch ? { href: safePreviewHref(rawHref) } : {},
-      children: [],
-    };
-    stack[stack.length - 1].children.push(node);
-    if (!raw.endsWith('/>')) stack.push(node);
-  }
-  pushText(String(text ?? '').slice(last));
-  return root.children;
-}
-
-function findUnescapedMarker(text, marker, start) {
-  let i = start;
-  while (i < text.length) {
-    const at = text.indexOf(marker, i);
-    if (at < 0) return -1;
-    let slashes = 0;
-    for (let j = at - 1; j >= 0 && text[j] === '\\'; j -= 1) slashes += 1;
-    if (slashes % 2 === 0) return at;
-    i = at + marker.length;
-  }
-  return -1;
-}
-
-function parseTelegramMarkdownV2Text(input) {
-  const text = String(input ?? '');
-  const nodes = [];
-  let plain = '';
-  let i = 0;
-
-  const flush = () => {
-    if (plain) {
-      nodes.push(plain);
-      plain = '';
-    }
-  };
-
-  while (i < text.length) {
-    if (text[i] === '\\' && i + 1 < text.length) {
-      plain += text[i + 1];
-      i += 2;
-      continue;
-    }
-
-    if (text.startsWith('```', i)) {
-      const end = findUnescapedMarker(text, '```', i + 3);
-      if (end > i) {
-        flush();
-        nodes.push({ tag: 'pre', children: [text.slice(i + 3, end)] });
-        i = end + 3;
-        continue;
-      }
-    }
-
-    if (text[i] === '`') {
-      const end = findUnescapedMarker(text, '`', i + 1);
-      if (end > i) {
-        flush();
-        nodes.push({ tag: 'code', children: [text.slice(i + 1, end)] });
-        i = end + 1;
-        continue;
-      }
-    }
-
-    const marker = text.startsWith('__', i) ? '__' : text.startsWith('||', i) ? '||' : text[i];
-    const tag = marker === '__' ? 'u'
-      : marker === '||' ? 'spoiler'
-      : marker === '*' ? 'strong'
-      : marker === '_' ? 'em'
-      : marker === '~' ? 's'
-      : null;
-    if (tag) {
-      const end = findUnescapedMarker(text, marker, i + marker.length);
-      if (end > i) {
-        flush();
-        nodes.push({ tag, children: parseTelegramMarkdownV2Text(text.slice(i + marker.length, end)) });
-        i = end + marker.length;
-        continue;
-      }
-    }
-
-    if (text[i] === '[') {
-      const labelEnd = findUnescapedMarker(text, ']', i + 1);
-      if (labelEnd > i && text[labelEnd + 1] === '(') {
-        const urlEnd = findUnescapedMarker(text, ')', labelEnd + 2);
-        if (urlEnd > labelEnd) {
-          flush();
-          nodes.push({
-            tag: 'a',
-            attrs: { href: text.slice(labelEnd + 2, urlEnd).replace(/\\(.)/g, '$1') },
-            children: parseTelegramMarkdownV2Text(text.slice(i + 1, labelEnd)),
-          });
-          i = urlEnd + 1;
-          continue;
-        }
-      }
-    }
-
-    plain += text[i];
-    i += 1;
-  }
-
-  flush();
-  return nodes;
-}
-
-function renderPreviewRichNode(node, key) {
-  if (typeof node === 'string') return <React.Fragment key={key}>{node}</React.Fragment>;
-  const children = (node.children || []).map((child, i) => renderPreviewRichNode(child, `${key}.${i}`));
-  switch (node.tag) {
-    case 'b':
-    case 'strong':
-      return <strong key={key}>{children}</strong>;
-    case 'i':
-    case 'em':
-      return <em key={key}>{children}</em>;
-    case 'u':
-    case 'ins':
-      return <span key={key} style={{ textDecoration: 'underline', textUnderlineOffset: 2 }}>{children}</span>;
-    case 's':
-    case 'strike':
-    case 'del':
-      return <span key={key} style={{ textDecoration: 'line-through' }}>{children}</span>;
-    case 'code':
-      return <code key={key} style={{ background: 'rgba(15,23,42,0.75)', borderRadius: 4, padding: '1px 4px' }}>{children}</code>;
-    case 'pre':
-      return <code key={key} style={{ display: 'block', background: 'rgba(15,23,42,0.75)', borderRadius: 6, padding: '6px 7px', margin: '3px 0', whiteSpace: 'pre-wrap' }}>{children}</code>;
-    case 'a': {
-      const href = safePreviewHref(node.attrs?.href);
-      if (!href) return <span key={key}>{children}</span>;
-      return <a key={key} href={href} target="_blank" rel="noreferrer" style={{ color: '#93c5fd' }}>{children}</a>;
-    }
-    case 'spoiler':
-      return <span key={key} style={{ background: 'rgba(148,163,184,0.35)', borderRadius: 3, padding: '0 2px' }}>{children}</span>;
-    default:
-      return <React.Fragment key={key}>{children}</React.Fragment>;
-  }
-}
-
-function PreviewRichText({ text, format }) {
-  const fmt = String(format || '').toLowerCase();
-  const nodes = fmt === 'html'
-    ? parseTelegramHtmlText(text)
-    : (fmt === 'markdown_v2' || fmt === 'markdownv2')
-      ? parseTelegramMarkdownV2Text(text)
-      : [String(text ?? '')];
-  return <>{nodes.map((node, i) => renderPreviewRichNode(node, `pvrt.${i}`))}</>;
-}
-
-function previewFormatFromOutbound(o) {
-  const parseMode = String(o?.parse_mode || o?.parseMode || o?.params?.parse_mode || '').toLowerCase();
-  if (o?.type === 'html' || parseMode === 'html') return 'html';
-  if (o?.type === 'markdown_v2' || parseMode === 'markdownv2' || parseMode === 'markdown_v2') return 'markdown_v2';
-  return '';
-}
-
-/** Label for reply/inline button (worker may send plain strings or { text, callback_data, url }). */
-function previewKeyboardButtonLabel(btn) {
-  if (btn == null) return '';
-  if (typeof btn === 'string') return btn;
-  if (typeof btn === 'object' && btn.text != null) return String(btn.text);
-  return String(btn);
-}
-
-/** Stable React key for preview keyboard buttons (survives reorder/delete). */
-function previewKeyboardButtonKey(prefix, rowIndex, colIndex, btn) {
-  const label = previewKeyboardButtonLabel(btn);
-  const cd = typeof btn === 'object' && btn != null ? String(btn.callback_data ?? '') : label;
-  const url = typeof btn === 'object' && btn != null ? String(btn.url ?? '') : '';
-  return `${prefix}:r${rowIndex}:c${colIndex}:${label}:${cd}:${url}`;
-}
-
-function previewKeyboardRows(keyboard) {
-  if (!Array.isArray(keyboard) || keyboard.length === 0) return [];
-  if (Array.isArray(keyboard[0])) return keyboard;
-  return [keyboard];
-}
-
-function previewNormalizeReplyKeyboard(keyboard) {
-  return previewKeyboardRows(keyboard).map((row) =>
-    (Array.isArray(row) ? row : [])
-      .map((btn) => previewKeyboardButtonLabel(btn))
-      .filter((lbl) => lbl.length > 0),
-  ).filter((row) => row.length > 0);
-}
-
-function previewNormalizeInlineKeyboard(keyboard) {
-  return previewKeyboardRows(keyboard).map((row) =>
-    (Array.isArray(row) ? row : []).map((btn) => {
-      if (typeof btn === 'string') {
-        return { text: btn, callback_data: btn, url: null };
-      }
-      const text = previewKeyboardButtonLabel(btn);
-      return {
-        text,
-        callback_data: btn?.callback_data != null ? btn.callback_data : text,
-        url: btn?.url ?? null,
-      };
-    }),
-  ).filter((row) => row.length > 0);
-}
-
-function previewOutboundToEntries(outbound) {
-  const skip = new Set(['answer_callback', 'set_commands']);
-  const entries = [];
-  for (const o of outbound || []) {
-    if (skip.has(o.type)) continue;
-    const format = previewFormatFromOutbound(o);
-    if (o.type === 'send_message' || o.type === 'markdown' || o.type === 'html' || o.type === 'markdown_v2') {
-      entries.push({ role: 'bot', kind: 'text', text: o.text ?? '', format });
-    } else if (o.type === 'reply_keyboard') {
-      entries.push({
-        role: 'bot',
-        kind: 'reply_keyboard',
-        text: o.text ?? '',
-        format,
-        keyboard: previewNormalizeReplyKeyboard(o.keyboard),
-      });
-    } else if (o.type === 'inline_keyboard') {
-      entries.push({
-        role: 'bot',
-        kind: 'inline_keyboard',
-        text: o.text ?? '',
-        format,
-        rows: previewNormalizeInlineKeyboard(o.keyboard),
-      });
-    } else if (o.type === 'photo') {
-      entries.push({
-        role: 'bot',
-        kind: 'text',
-        text: `[фото] ${o.source ?? ''}${o.caption ? `\n${o.caption}` : ''}`,
-      });
-    } else if (o.type === 'api_call') {
-      entries.push({ role: 'bot', kind: 'sys', text: `API ${o.method ?? '?'}` });
-    } else {
-      entries.push({ role: 'bot', kind: 'sys', text: String(o.type || '?') });
-    }
-  }
-  return entries;
 }
 
 function OnboardingTour({ steps, stepIndex, onNext, onPrev, onSkip, labels }) {
@@ -930,6 +640,7 @@ const AI_GEN_LOADING_STEPS = [
   'Проверяю сценарии',
   'Готово',
 ];
+/** Legacy modal limit; AI Flow Studio uses src/ai/promptTemplates.js (2000). */
 const AI_PROMPT_MAX_CHARS = 50;
 
 // ─── GRAPH-NATIVE HELPERS ─────────────────────────────────────────────────
@@ -950,6 +661,7 @@ import {
   graphCanChainAfter,
   resolveUiAttachmentTargetNodeId,
   resolveFlowInsertAnchorId,
+  resolvePaletteChainParentId,
   graphUniqueBlockLabel,
 } from './app/graph/graphHelpers.js';
 import { UnknownBlockTypeError } from './constructor/graph_document/graph_node_payload.js';
@@ -983,18 +695,43 @@ export default function App() {
     [uiLang, builderBlockTypes, graphPalette, builderUi],
   );
 
-  const graph = useGraphEditor();
-  // Memoize per-revision so ReactFlow / projection consumers don't see a new
-  // object identity on every unrelated App render. The graph editor API's
-  // accessors are stable, so depending on them is safe.
-  const graphRevision = React.useMemo(
-    () => graph.getGraphDocument().metadata.revision,
-    [graph, graph.getGraphDocument().metadata.revision],
-  );
-  const graphHistory = React.useMemo(
-    () => (graph.getHistoryState ? graph.getHistoryState() : { canUndo: false, canRedo: false }),
-    [graph, graphRevision],
-  );
+  const {
+    graph,
+    graphRevision,
+    canvasProjection,
+    graphHistory,
+    selectedBlockId,
+    setSelectedBlockId,
+    mobileAttentionBlockId,
+    setMobileAttentionBlockId,
+    draggingPaletteEntry,
+    setDraggingPaletteEntry,
+    repairHighlight,
+    setRepairHighlight,
+    activeProjectId,
+    setActiveProjectId,
+    projectName,
+    setProjectName,
+    flowLayoutMode,
+    setFlowLayoutMode,
+    serverRunProjectId,
+    setServerRunProjectId,
+    previewPanelOpen,
+    setPreviewPanelOpen,
+    previewPanelPos,
+    setPreviewPanelPos,
+    analyticsPanelOpen,
+    setAnalyticsPanelOpen,
+    analyticsPanelPos,
+    setAnalyticsPanelPos,
+    debugTraceId,
+    setDebugTraceId,
+    ui: uiSlice,
+    setUi,
+    showToast: showToastFromStore,
+    preview: previewSlice,
+    setPreview,
+  } = useEditorStoreBindings();
   const syncGraphUidSequence = useCallback(() => {
     syncUidSequenceFromGraph(graph.getGraphDocument());
   }, [graph]);
@@ -1006,40 +743,37 @@ export default function App() {
   /** Legacy autosave guard — old bundles still assign .current during graph loads */
   const skipNextCanvasSave = useRef(false);
   const { userProjects, setUserProjects, loadUserProjects, projectsLoading } = useUserProjects();
-  const canvasProjection = React.useMemo(
-    () => graph.getCanvasProjection(),
-    [graph, graphRevision],
-  );
-
   const graphNodeCount = React.useMemo(
     () => Object.keys(graph.getGraphDocument().nodes || {}).length,
     [graph, graphRevision],
   );
 
+  const canvasOnboardingDismissed = uiSlice.canvasOnboardingDismissed;
+
   const showCanvasOnboarding = React.useMemo(() => {
+    if (canvasOnboardingDismissed || draggingPaletteEntry) return false;
     const doc = graph.getGraphDocument();
     return shouldShowCanvasOnboardingOverlay(doc);
-  }, [graph, graphRevision, graphNodeCount]);
+  }, [graph, graphRevision, graphNodeCount, canvasOnboardingDismissed, draggingPaletteEntry]);
 
-  const [debugTraceId, setDebugTraceId] = useState(null);
-  const [debugTraceOpen, setDebugTraceOpen] = useState(false);
-  const [debugCodegenSnapshot, setDebugCodegenSnapshot] = useState(null);
-  const [selectedBlockId, setSelectedBlockId] = useState(null);
-  const [mobileAttentionBlockId, setMobileAttentionBlockId] = useState(null);
-  const [showInstructions, setShowInstructions] = useState(false);
-  /** { type, props } — окно справки по кнопке «i» на блоке */
-  const [draggingPaletteEntry, setDraggingPaletteEntry] = useState(null);
+  const handlePaletteDragStart = useCallback((entry) => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.classList.toggle('cicada-palette-dragging', Boolean(entry));
+    }
+    setDraggingPaletteEntry(entry);
+    if (entry) {
+      useUiStore.getState().patch({ canvasOnboardingDismissed: true });
+    }
+  }, [setDraggingPaletteEntry]);
+
+  const debugTraceOpen = useUiStore((s) => s.debugTraceOpen);
+  const setDebugTraceOpen = (open) => setUi({ debugTraceOpen: open });
+  const debugCodegenSnapshot = useUiStore((s) => s.debugCodegenSnapshot);
+  const setDebugCodegenSnapshot = (snap) => setUi({ debugCodegenSnapshot: snap });
+  const showInstructions = uiSlice.showInstructions;
+  const setShowInstructions = (v) => setUi({ showInstructions: v });
   const canvasRef = useRef(null);
   const applyCanvasLayoutRef = useRef(null);
-  const [flowLayoutMode, setFlowLayoutMode] = useState(() => {
-    if (typeof window === 'undefined') return 'AUTO';
-    try {
-      return normalizeFlowLayoutMode(localStorage.getItem('cicada-flow-layout-mode'));
-    } catch {
-      return 'AUTO';
-    }
-  });
-
   const applyCanvasLayout = useCallback((modeOverride) => {
     const mode = normalizeFlowLayoutMode(modeOverride ?? flowLayoutMode);
     return applyFlowBuilderLayout(graph, mode);
@@ -1064,16 +798,10 @@ export default function App() {
   }, [graph]);
 
   const handleFlowLayoutModeChange = useCallback((mode) => {
-    const normalized = normalizeFlowLayoutMode(mode);
-    setFlowLayoutMode(normalized);
-    try {
-      localStorage.setItem('cicada-flow-layout-mode', normalized);
-    } catch {
-      /* ignore quota */
-    }
+    const normalized = setFlowLayoutMode(mode);
     graph.dispatch('PatchMetadata', { patch: { layoutMode: normalized } });
     applyFlowBuilderLayout(graph, normalized);
-  }, [graph]);
+  }, [graph, setFlowLayoutMode]);
 
   const handleFitAllCanvasNodes = useCallback(() => {
     applyCanvasLayout();
@@ -1093,17 +821,29 @@ export default function App() {
   const [profileInitialTab, setProfileInitialTab] = useState('profile');
   const [authTab, setAuthTab] = useState('login'); // 'login' | 'register'
   const [oauth2faPending, setOauth2faPending] = useState(false);
-  const [projectName, setProjectName] = useState('');
-  const [activeProjectId, setActiveProjectId] = useState(null);
-  const [serverRunProjectId, setServerRunProjectId] = useState(null);
-  const [showExamples, setShowExamples] = useState(false);
+  const analyticsFlowId = activeProjectId || 'draft-flow';
+  const analyticsNodeIds = React.useMemo(() => {
+    const doc = graph.getGraphDocument();
+    return Object.keys(doc?.nodes || {});
+  }, [graph, graphRevision]);
+
+  useEffect(() => {
+    if (analyticsNodeIds.length) {
+      registerFlow(analyticsFlowId, analyticsNodeIds);
+    }
+  }, [analyticsFlowId, analyticsNodeIds.join('|')]);
+
+  const showExamples = uiSlice.showExamples;
+  const setShowExamples = (v) => setUi({ showExamples: v });
   /** Якорь кнопки «Примеры» — меню рендерим в portal, иначе перекрывается холстом / stacking context шапки */
   const examplesToggleRef = useRef(null);
   const [examplesMenuRect, setExamplesMenuRect] = useState(null);
   const filesMenuToggleRef = useRef(null);
   const [filesMenuRect, setFilesMenuRect] = useState(null);
-  const [showLibrary, setShowLibrary] = useState(false);
-  const [showAIModal, setShowAIModal] = useState(false);
+  const showLibrary = uiSlice.showLibrary;
+  const setShowLibrary = (v) => setUi({ showLibrary: v });
+  const showAIModal = uiSlice.showAIModal;
+  const setShowAIModal = (v) => setUi({ showAIModal: v });
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiLoadingStep, setAiLoadingStep] = useState(0);
@@ -1113,21 +853,20 @@ export default function App() {
   const [landingInfoPage, setLandingInfoPage] = useState(null); // features | templates | docs | pricing | null
   const [proMonthlyUsd, setProMonthlyUsd] = useState(null);
 
-  // Toast notification state
-  const [toast, setToast] = useState(null); // { message, type, visible }
+  const toast = uiSlice.toast;
   const toastTimeoutRef = useRef(null);
   const showToast = useCallback((message, type = 'info', duration = 3500) => {
     if (!message) return;
+    showToastFromStore(message, type);
     if (toastTimeoutRef.current) {
       window.clearTimeout(toastTimeoutRef.current);
       toastTimeoutRef.current = null;
     }
-    setToast({ message, type, visible: true });
     toastTimeoutRef.current = window.setTimeout(() => {
-      setToast((prev) => prev ? { ...prev, visible: false } : prev);
+      useUiStore.getState().hideToast();
       toastTimeoutRef.current = null;
     }, duration);
-  }, []);
+  }, [showToastFromStore]);
 
   const handleGraphUndo = useCallback(() => {
     const result = graph.undo();
@@ -1233,6 +972,8 @@ export default function App() {
     setShowProfileModal(true);
   }, [currentUser]);
 
+  const aiStudioOpen = useAiFlowStore((s) => s.studioOpen);
+
   const openAiGeneratorModal = useCallback(() => {
     if (!canUseAiGenerator) {
       openPremiumPurchase();
@@ -1242,8 +983,16 @@ export default function App() {
     setAiError('');
     setAiPartialResult(null);
     setAiDiagnosticsOpen(false);
-    setShowAIModal(true);
+    useAiFlowStore.getState().patch({ studioOpen: true, prompt: '', plan: null, error: null });
   }, [canUseAiGenerator, openPremiumPurchase]);
+
+  const handleEditorClosePanels = useCallback(() => {
+    if (aiStudioOpen) useAiFlowStore.getState().patch({ studioOpen: false });
+    if (showProfileModal) setShowProfileModal(false);
+    if (showLibrary) setShowLibrary(false);
+    if (showInstructions) setShowInstructions(false);
+    setShowAIModal(false);
+  }, [aiStudioOpen, showProfileModal, showLibrary, showInstructions]);
 
   const openAdminMenu = useCallback(async (section = '') => {
     const target = section ? `/admin#${section}` : '/admin';
@@ -1292,17 +1041,67 @@ export default function App() {
   }, [currentUser]);
 
   // 3-zone layout state
-  const [appSection, setAppSection] = useState('automation');
-  const [mobileZone, setMobileZone] = useState('canvas');
-  const [inspectorTab, setInspectorTab] = useState('props');
+  const appSection = uiSlice.appSection;
+  const setAppSection = (v) => setUi({ appSection: v });
+  const mobileZone = uiSlice.mobileZone;
+  const setMobileZone = (v) => setUi({ mobileZone: v });
+  const inspectorTab = uiSlice.inspectorTab;
+  const setInspectorTab = (v) => setUi({ inspectorTab: v });
   const [listSearch, setListSearch] = useState('');
   const [listFilter, setListFilter] = useState('all');
   const isMobile = isMobileBuilderViewport();
-  const [isMobileView, setIsMobileView] = useState(() => isMobileBuilderViewport());
+  const isMobileView = uiSlice.isMobileView;
+  const setIsMobileView = (v) => setUi({ isMobileView: v });
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [showFilesMenu, setShowFilesMenu] = useState(false);
-  const [tourActive, setTourActive] = useState(false);
-  const [tourStep, setTourStep] = useState(0);
+  const tourActive = uiSlice.tourActive;
+  const setTourActive = (v) => setUi({ tourActive: v });
+  const tourStep = uiSlice.tourStep;
+  const setTourStep = (v) => setUi({ tourStep: v });
+
+  const guidedCanvasActions = React.useMemo(() => {
+    if (appSection !== 'automation' || showCanvasOnboarding || !currentUser) return [];
+    const en = uiLang === 'en';
+    const actions = [];
+    if (graphNodeCount > 0) {
+      actions.push({
+        id: 'blocks',
+        icon: '🧱',
+        label: en ? 'Blocks' : 'Блоки',
+        title: en ? 'Open block palette' : 'Открыть палитру блоков',
+        onClick: () => {
+          if (isMobileView) setMobileZone('left');
+        },
+      });
+      if (canUseAiGenerator) {
+        actions.push({
+          id: 'ai',
+          icon: '✨',
+          label: en ? 'AI flow' : 'AI сценарий',
+          onClick: openAiGeneratorModal,
+        });
+      }
+      actions.push({
+        id: 'tour',
+        icon: '?',
+        label: en ? 'Tour' : 'Тур',
+        onClick: () => { setTourStep(0); setTourActive(true); },
+      });
+    }
+    return actions;
+  }, [
+    appSection,
+    showCanvasOnboarding,
+    currentUser,
+    graphNodeCount,
+    uiLang,
+    canUseAiGenerator,
+    isMobileView,
+    openAiGeneratorModal,
+    setTourStep,
+    setTourActive,
+    setMobileZone,
+  ]);
 
   useLayoutEffect(() => {
     if (!showExamples) {
@@ -1337,6 +1136,21 @@ export default function App() {
   const onboardingKey = currentUser?.id
     ? `cicada_onboarding_v2_${currentUser.id}_${isMobileView ? 'mobile' : 'desktop'}`
     : null;
+
+  const productWelcomeKey = currentUser?.id
+    ? `cicada_product_welcome_v3_${currentUser.id}`
+    : null;
+
+  const [showProductWelcome, setShowProductWelcome] = useState(false);
+
+  useEffect(() => {
+    if (!productWelcomeKey || !currentUser) return;
+    try {
+      if (!localStorage.getItem(productWelcomeKey)) setShowProductWelcome(true);
+    } catch { /* ignore */ }
+  }, [productWelcomeKey, currentUser?.id]);
+
+  const aiGlobalLoading = useAiFlowStore((s) => s.loading);
 
   const onboardingSteps = React.useMemo(() => {
     const ui = builderUi;
@@ -1530,11 +1344,14 @@ export default function App() {
     return () => clearTimeout(id);
   }, [currentUser, onboardingKey]);
 
+  const onboardingStepsRef = useRef(onboardingSteps);
+  onboardingStepsRef.current = onboardingSteps;
+
   useEffect(() => {
     if (!tourActive) return;
-    const step = onboardingSteps[tourStep];
+    const step = onboardingStepsRef.current[tourStep];
     if (step?.onEnter) step.onEnter();
-  }, [tourActive, tourStep, onboardingSteps]);
+  }, [tourActive, tourStep]);
 
   const finishTour = useCallback(() => {
     if (onboardingKey) {
@@ -1550,8 +1367,13 @@ export default function App() {
     if (conflict) return { ok: false, error: conflict };
     const doc = graph.getGraphDocument();
     const effectiveParentId = resolveFlowInsertAnchorId(doc, parentId, type);
-    const parent = doc.nodes[effectiveParentId];
-    if (!parent) return { ok: false, error: 'Unknown parent' };
+    const parent = effectiveParentId ? doc.nodes[effectiveParentId] : null;
+    if (!parent) {
+      return {
+        ok: false,
+        error: uiLang === 'en' ? 'Select a step on the canvas first' : 'Сначала выберите шаг на холсте',
+      };
+    }
     const newPos = {
       x: parent.position.x,
       y: parent.position.y + getChainStepBelow(parent, doc),
@@ -1852,10 +1674,11 @@ export default function App() {
 
   const handleInspectNode = useCallback((nodeId) => {
     if (!nodeId) return;
-    setSelectedBlockId(nodeId);
+    handleSelectNode(nodeId);
     setInspectorTab('props');
+    useSelectionStore.getState().requestInspectorReveal();
     if (isMobileView) setMobileZone('right');
-  }, [isMobileView]);
+  }, [handleSelectNode, isMobileView, setInspectorTab, setMobileZone]);
 
   /** Stack «i» help — focus right inspector instead of a modal. */
   const handleBlockInfoRequest = useCallback((info) => {
@@ -1863,9 +1686,10 @@ export default function App() {
     if (nodeId && graph.getGraphDocument().nodes[nodeId]) {
       handleSelectNode(nodeId);
       setInspectorTab('props');
+      useSelectionStore.getState().requestInspectorReveal();
       if (isMobileView) setMobileZone('right');
     }
-  }, [graph, handleSelectNode, isMobileView]);
+  }, [graph, handleSelectNode, isMobileView, setInspectorTab, setMobileZone]);
 
   const handleConnectFeedback = useCallback((result) => {
     if (!result) return;
@@ -2073,7 +1897,11 @@ export default function App() {
     onDeleteNode: handleRequestDeleteNode,
     onDuplicateNode: handleDuplicateNode,
     onAddAfterNode: handleAddAfterNode,
-  }), [handleSelectNode, handleRequestDeleteNode, handleDuplicateNode, handleAddAfterNode]);
+    onInlineEdit: (nodeId, field, value) => {
+      if (!nodeId || !field) return;
+      patchNodeData(graph, nodeId, { [field]: value });
+    },
+  }), [handleSelectNode, handleRequestDeleteNode, handleDuplicateNode, handleAddAfterNode, graph]);
 
   const handleDeleteBlock = useCallback((_stackIdOrNodeId, blockId) => {
     handleRequestDeleteNode(blockId);
@@ -2353,8 +2181,11 @@ export default function App() {
   }, [resolveAttachmentEditNodeId, graph, showToast, uiLang]);
 
   const endPaletteDrag = useCallback(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.classList.remove('cicada-palette-dragging');
+    }
     setDraggingPaletteEntry(null);
-  }, []);
+  }, [setDraggingPaletteEntry]);
 
   // Helper: find first outgoing flow edge from node
   const getOutgoingEdge = useCallback((doc, nodeId) => {
@@ -2425,9 +2256,12 @@ export default function App() {
   }, [graph, getVisibleCanvasMetrics]);
 
   const handleCanvasDrop = useCallback((event, flowPosition) => {
-    const paletteId = event?.dataTransfer?.getData('cicada/palette-id');
+    const dt = event?.dataTransfer;
+    const paletteId = dt?.getData('cicada/palette-id') || dt?.getData('text/plain') || '';
     const paletteOpts = { lang: uiLang, blockTypes: builderBlockTypes };
-    const entry = paletteId ? getPaletteEntry(paletteId, paletteOpts) : draggingPaletteEntry;
+    const entry = paletteId
+      ? getPaletteEntry(paletteId.trim(), paletteOpts)
+      : draggingPaletteEntry;
     if (!entry || entry.type !== 'node') {
       endPaletteDrag();
       return;
@@ -2440,7 +2274,7 @@ export default function App() {
       endPaletteDrag();
       return;
     }
-    const position = flowPosition ?? { x: 120, y: 120 };
+    const position = flowPosition ?? getCanvasCenterPosition();
     const legacyAttachTypes = [...UI_ATTACHMENT_LEGACY_BLOCK_TYPES, 'media'];
     if (selectedBlockId && legacyAttachTypes.includes(type)) {
       const out = attachLegacyUiToNode(selectedBlockId, type, props);
@@ -2464,10 +2298,11 @@ export default function App() {
       }
     }
     const nodeId = uid();
+    const doc = graph.getGraphDocument();
+    const chainParentId = resolvePaletteChainParentId(doc, selectedBlockId, type);
 
-    // If a block is selected, insert the new block after it in the chain.
-    if (selectedBlockId) {
-      const inserted = insertNodeAfter(selectedBlockId, nodeId, type, props);
+    if (chainParentId) {
+      const inserted = insertNodeAfter(chainParentId, nodeId, type, props);
       if (!inserted?.ok) {
         showToast(inserted?.errorDetail?.fix || inserted?.error || 'Не удалось добавить узел в цепочку', 'info');
         endPaletteDrag();
@@ -2475,11 +2310,13 @@ export default function App() {
       }
       setSelectedBlockId(nodeId);
     } else {
-      // No parent selected — create an independent branch at canvas center
+      if (selectedBlockId && !doc.nodes[selectedBlockId]) {
+        setSelectedBlockId(null);
+      }
       const result = graphAddNode(graph, {
         nodeId,
         type,
-        position: getCanvasCenterPosition(),
+        position,
         data: props,
       });
       if (!result?.ok) {
@@ -2490,9 +2327,8 @@ export default function App() {
       setSelectedBlockId(nodeId);
     }
     endPaletteDrag();
-    applyCanvasLayoutRef.current?.();
-    focusCanvasAfterContent();
-  }, [endPaletteDrag, currentUser, showToast, graph, draggingPaletteEntry, uiLang, builderBlockTypes, builderUi, selectedBlockId, insertNodeAfter, getCanvasCenterPosition, attachLegacyUiToNode, focusCanvasAfterContent]);
+    useSelectionStore.getState().requestCanvasFocus(nodeId);
+  }, [endPaletteDrag, currentUser, showToast, graph, draggingPaletteEntry, uiLang, builderBlockTypes, builderUi, selectedBlockId, insertNodeAfter, getCanvasCenterPosition, attachLegacyUiToNode]);
 
 
   const handleClearCanvas = useCallback(async () => {
@@ -2511,6 +2347,7 @@ export default function App() {
     }
     setSelectedBlockId(null);
     setActiveProjectId(null);
+    useUiStore.getState().patch({ canvasOnboardingDismissed: false });
     saveCanvasForKey(canvasStorageKey, graph);
     showToast('Холст очищен', 'info');
   }, [graph, builderUi.clearCanvas, showToast, canvasStorageKey]);
@@ -2547,6 +2384,7 @@ export default function App() {
     setSelectedBlockId(null);
     setActiveProjectId(null);
     setProjectName('');
+    useUiStore.getState().patch({ canvasOnboardingDismissed: false });
     saveCanvasForKey(canvasStorageKey, graph);
     focusCanvasAfterContent();
     showToast(
@@ -2649,13 +2487,18 @@ export default function App() {
       return;
     }
     const nodeId = uid();
-    if (selectedBlockId) {
-      const inserted = insertNodeAfter(selectedBlockId, nodeId, type, props);
+    const doc = graph.getGraphDocument();
+    const chainParentId = resolvePaletteChainParentId(doc, selectedBlockId, type);
+    if (chainParentId) {
+      const inserted = insertNodeAfter(chainParentId, nodeId, type, props);
       if (!inserted?.ok) {
         showToast(inserted?.error || 'Не удалось добавить узел', 'info');
         return;
       }
     } else {
+      if (selectedBlockId && !doc.nodes[selectedBlockId]) {
+        setSelectedBlockId(null);
+      }
       const result = graphAddNode(graph, { nodeId, type, position, data: props });
       if (!result?.ok) {
         showToast(result?.error || 'Не удалось добавить узел', 'info');
@@ -2663,7 +2506,7 @@ export default function App() {
       }
     }
     setSelectedBlockId(nodeId);
-    applyCanvasLayoutRef.current?.();
+    useSelectionStore.getState().requestCanvasFocus(nodeId);
     focusMobileAddedBlock(nodeId);
   }, [
     builderUi,
@@ -2718,7 +2561,7 @@ export default function App() {
       }
     }
     setSelectedBlockId(nodeId);
-    applyCanvasLayoutRef.current?.();
+    useSelectionStore.getState().requestCanvasFocus(nodeId);
     focusMobileAddedBlock(nodeId);
     } catch (err) {
       const msg = err instanceof UnknownBlockTypeError
@@ -3010,41 +2853,37 @@ export default function App() {
     input.click();
   }, [showToast, graph, beginLoad, syncGraphUidSequence]);
 
-  // Bot run/stop: sandbox (тест 5 мин на холсте) и server (Premium) — независимые слоты
-  const [isSandboxRunning, setIsSandboxRunning] = useState(false);
-  const [isServerRunning, setIsServerRunning] = useState(false);
-  const [isStartingSandbox, setIsStartingSandbox] = useState(false);
-  const [isStartingServer, setIsStartingServer] = useState(false);
-  const [startBotError, setStartBotError] = useState(null);
-  const [isStoppingSandbox, setIsStoppingSandbox] = useState(false);
-  const [isStoppingServer, setIsStoppingServer] = useState(false);
-  const [stopBotError, setStopBotError] = useState(null);
-  const [sandboxSecondsLeft, setSandboxSecondsLeft] = useState(null);
+  const {
+    isSandboxRunning,
+    isServerRunning,
+    isStartingSandbox,
+    isStartingServer,
+    startBotError,
+    isStoppingSandbox,
+    isStoppingServer,
+    stopBotError,
+    sandboxSecondsLeft,
+  } = previewSlice;
+  const setIsSandboxRunning = (v) => setPreview({ isSandboxRunning: v });
+  const setIsServerRunning = (v) => setPreview({ isServerRunning: v });
+  const setIsStartingSandbox = (v) => setPreview({ isStartingSandbox: v });
+  const setIsStartingServer = (v) => setPreview({ isStartingServer: v });
+  const setStartBotError = (v) => setPreview({ startBotError: v });
+  const setIsStoppingSandbox = (v) => setPreview({ isStoppingSandbox: v });
+  const setIsStoppingServer = (v) => setPreview({ isStoppingServer: v });
+  const setStopBotError = (v) => setPreview({ stopBotError: v });
+  const setSandboxSecondsLeft = (v) => setPreview({ sandboxSecondsLeft: v });
   const sandboxCountdownRef = useRef(null);
   const botDebugModeRef = useRef('sandbox');
 
-  const [previewPanelOpen, setPreviewPanelOpen] = useState(false);
-  const [publishBusy, setPublishBusy] = useState(false);
-  const [previewMessages, setPreviewMessages] = useState([]);
-  const [previewDraft, setPreviewDraft] = useState('');
-  const [previewBusy, setPreviewBusy] = useState(false);
-  const [previewErr, setPreviewErr] = useState(null);
-  const previewScrollRef = useRef(null);
-  const previewPanelRef = useRef(null);
-  const previewFileInputRef = useRef(null);
-  /** null — позиция по умолчанию (правый нижний угол); иначе фиксированные left/top в px */
-  const [previewPanelPos, setPreviewPanelPos] = useState(null);
-  const previewDragRef = useRef(null);
-
-  const [botDebugOpen, setBotDebugOpen] = useState(false);
-  const [graphDiagOpen, setGraphDiagOpen] = useState(false);
-  const [graphStrictMode, setGraphStrictMode] = useState(() => {
-    try {
-      return localStorage.getItem('cicada_graph_strict') === '1';
-    } catch {
-      return false;
-    }
-  });
+  const publishBusy = useUiStore((s) => s.publishBusy);
+  const setPublishBusy = (v) => setUi({ publishBusy: v });
+  const botDebugOpen = uiSlice.botDebugOpen;
+  const setBotDebugOpen = (v) => setUi({ botDebugOpen: v });
+  const graphDiagOpen = uiSlice.graphDiagOpen;
+  const setGraphDiagOpen = (v) => setUi({ graphDiagOpen: v });
+  const graphStrictMode = uiSlice.graphStrictMode;
+  const setGraphStrictMode = (v) => useUiStore.getState().setGraphStrictMode(v);
 
   const softValidationStatus = useGraphSoftValidation(graph.getGraphDocument, graphRevision);
 
@@ -3058,12 +2897,6 @@ export default function App() {
   const [validationOverlayActive, setValidationOverlayActive] = useState(false);
   const [lastRepairResult, setLastRepairResult] = useState(null);
   const [repairBusy, setRepairBusy] = useState(false);
-  const [repairHighlight, setRepairHighlight] = useState({
-    nodeIds: [],
-    edgeIds: [],
-    until: 0,
-    kind: null,
-  });
 
   /** Focus canvas on diagnostic target — pulse highlight, selection, viewport pan. */
   const handleHighlightCompileNodes = useCallback((target, kind = 'compile') => {
@@ -3661,163 +3494,6 @@ export default function App() {
     [graph, graphRevision],
   );
 
-  const runPreviewStep = useCallback(
-    async ({ text = '', callbackData = null, event = null }) => {
-      setPreviewBusy(true);
-      setPreviewErr(null);
-      try {
-        const snap = generateBotPythonSnapshot();
-        setDebugCodegenSnapshot(snap);
-        const { runDebugExecution } = await import('./constructor/previewBridge.js');
-        const out = await runDebugExecution({
-          graphIR: snap.graph,
-          generatedPython: snap.generatedPython,
-          compileWarnings: snap.compileWarnings,
-          transpileTrace: snap.transpileTrace,
-          text: text != null ? String(text) : '',
-          callbackData,
-          event,
-          palette: graphPalette,
-          paletteOptions: { lang: uiLang, blockTypes: builderBlockTypes },
-        });
-        if (out.debugSnapshot) setDebugCodegenSnapshot(out.debugSnapshot);
-        if (out.traceId) {
-          setDebugTraceId(out.traceId);
-          setDebugTraceOpen(true);
-        }
-        const raw = { ok: true, outbound: out.effects ?? [] };
-        if (Array.isArray(raw.outbound) && raw.outbound.length) {
-          setPreviewMessages((prev) => [...prev, ...previewOutboundToEntries(raw.outbound)]);
-        }
-      } catch (e) {
-        setPreviewErr(e.message || String(e));
-      } finally {
-        setPreviewBusy(false);
-      }
-    },
-    [generateBotPythonSnapshot, graphPalette, uiLang, builderBlockTypes],
-  );
-
-  const sendPreviewUserText = useCallback(
-    async (t) => {
-      const text = String(t ?? '').trim();
-      if (!text || previewBusy) return;
-      setPreviewMessages((prev) => [...prev, { role: 'user', kind: 'text', text }]);
-      await runPreviewStep({ event: { kind: 'text', text } });
-    },
-    [runPreviewStep, previewBusy],
-  );
-
-  const sendPreviewPaletteEvent = useCallback(
-    async (inboundEvent, userLabel) => {
-      if (previewBusy) return;
-      const label = userLabel || normalizeInboundEvent(inboundEvent).text || inboundEvent?.kind || 'event';
-      setPreviewMessages((prev) => [...prev, { role: 'user', kind: 'text', text: label }]);
-      const entry = resolveEventToPaletteEntry(inboundEvent, graphPalette, {
-        lang: uiLang,
-        blockTypes: builderBlockTypes,
-      });
-      if (entry && import.meta.env?.DEV) {
-        console.warn(
-          `[palette-debug] preview event → entry ${entry.id} (${entry.type}/${entry.paletteKind})`,
-        );
-      }
-      await runPreviewStep({ event: inboundEvent });
-    },
-    [previewBusy, runPreviewStep, graphPalette, uiLang, builderBlockTypes],
-  );
-
-  const sendPreviewUserVoice = useCallback(
-    () => sendPreviewPaletteEvent({ kind: 'voice' }, '🎤 голосовое'),
-    [sendPreviewPaletteEvent],
-  );
-
-  const sendPreviewUserSticker = useCallback(
-  () => sendPreviewPaletteEvent(
-      { kind: 'sticker', stickerId: 'preview_sticker_file_id', stickerEmoji: '🙂' },
-      '🎭 стикер',
-    ),
-    [sendPreviewPaletteEvent],
-  );
-
-  const sendPreviewUserCommand = useCallback(
-    (cmd) => {
-      const c = String(cmd || '').trim();
-      if (!c) return;
-      const command = c.startsWith('/') ? c : `/${c}`;
-      return sendPreviewPaletteEvent({ kind: 'command', command, text: command }, command);
-    },
-    [sendPreviewPaletteEvent],
-  );
-
-  const sendPreviewUserFile = useCallback(
-    async (file) => {
-      if (!file || previewBusy) return;
-      const name = file.name || 'file';
-      setPreviewMessages((prev) => [
-        ...prev,
-        { role: 'user', kind: 'document', fileName: name, text: `[file] ${name}` },
-      ]);
-      await sendPreviewPaletteEvent({ kind: 'document', fileId: name }, `📎 ${name}`);
-    },
-    [previewBusy, sendPreviewPaletteEvent],
-  );
-
-  const sendPreviewCallback = useCallback(
-    async (data) => {
-      const cb = normalizeCallbackData(data);
-      if (!cb || previewBusy) return;
-      setPreviewMessages((prev) => [...prev, { role: 'user', kind: 'text', text: `ⓘ ${cb}` }]);
-      await runPreviewStep({ event: { kind: 'callback', callbackData: cb } });
-    },
-    [runPreviewStep, previewBusy],
-  );
-
-  const resetPreviewSession = useCallback(() => {
-    try {
-      sessionStorage.removeItem(PREVIEW_SESSION_STORAGE_KEY);
-    } catch { /* ignore */ }
-    setPreviewMessages([]);
-    setPreviewErr(null);
-    setPreviewDraft('');
-  }, []);
-
-  const startPreviewPanelDrag = useCallback((e) => {
-    if (e.button !== 0) return;
-    const el = e.target;
-    if (el.closest && (el.closest('button') || el.closest('input') || el.closest('a'))) return;
-    const panel = previewPanelRef.current;
-    if (!panel) return;
-    const rect = panel.getBoundingClientRect();
-    setPreviewPanelPos({ left: rect.left, top: rect.top });
-    previewDragRef.current = {
-      startX: e.clientX,
-      startY: e.clientY,
-      originLeft: rect.left,
-      originTop: rect.top,
-      width: rect.width,
-      height: rect.height,
-    };
-    const move = (ev) => {
-      const d = previewDragRef.current;
-      if (!d) return;
-      let left = d.originLeft + (ev.clientX - d.startX);
-      let top = d.originTop + (ev.clientY - d.startY);
-      const margin = 8;
-      left = Math.max(margin, Math.min(left, window.innerWidth - d.width - margin));
-      top = Math.max(margin, Math.min(top, window.innerHeight - d.height - margin));
-      setPreviewPanelPos({ left, top });
-    };
-    const up = () => {
-      previewDragRef.current = null;
-      window.removeEventListener('mousemove', move);
-      window.removeEventListener('mouseup', up);
-    };
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', up);
-    e.preventDefault();
-  }, []);
-
   const startBotDebugPanelDrag = useCallback((e) => {
     if (e.button !== 0) return;
     const el = e.target;
@@ -3853,12 +3529,6 @@ export default function App() {
     window.addEventListener('mouseup', up);
     e.preventDefault();
   }, []);
-
-  useEffect(() => {
-    if (!previewPanelOpen) return;
-    const el = previewScrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [previewPanelOpen, previewMessages, previewBusy]);
 
   useEffect(() => {
     if (!botDebugOpen) return;
@@ -4078,7 +3748,6 @@ export default function App() {
 
   const handleGlobalPreview = useCallback(() => {
     setPreviewPanelOpen((v) => !v);
-    setPreviewErr(null);
   }, []);
 
   const canRunFlowTest = graphHasRunnableBot(graph, currentUser);
@@ -4608,6 +4277,7 @@ export default function App() {
   }
 
   return (
+    <StoreProvider>
     <BuilderUiContext.Provider value={builderUiContextValue}>
     <GraphValidationProvider
       softStatus={graphValidationContextValue.softStatus}
@@ -4625,10 +4295,10 @@ export default function App() {
     >
     <AddBlockContext.Provider value={addBlockFromContext}>
     <BlockInfoContext.Provider value={handleBlockInfoRequest}>
-    <div className="editor-shell">
+    <div className="editor-shell editor-shell--saas" data-editor-ui="saas">
       {/* Top bar */}
-      <div className="editor-topbar editor-shell__topbar">
-        <div className="editor-topbar__brand" style={{ flexShrink: isMobileView ? 1 : 0, minWidth: 0, display:'flex', alignItems:'center', gap: isMobileView ? 8 : 10 }}>
+      <div className="editor-topbar editor-shell__topbar mc-editor-topbar">
+        <div className="mc-editor-topbar__cluster editor-topbar__brand" style={{ flexShrink: isMobileView ? 1 : 0, minWidth: 0, display:'flex', alignItems:'center', gap: isMobileView ? 8 : 10 }}>
           <img src={cicadaLogo} alt="" className="editor-brand-logo" />
           <div style={{ display:'flex', alignItems:'baseline', lineHeight:1 }}>
             <span className="editor-brand-word">Cicada</span>
@@ -4649,9 +4319,9 @@ export default function App() {
           </div>
         )}
         {!isMobileView && <div className="tb-divider" />}
-        {/* Desktop-only buttons */}
+        {/* Desktop: secondary actions in overflow (primary bar = run + ···) */}
         {!isMobileView && (
-          <>
+          <div className="mc-editor-topbar__cluster mc-editor-topbar__legacy-tools">
             <div style={{ position: 'relative' }}>
               <button
                 ref={examplesToggleRef}
@@ -4706,9 +4376,17 @@ export default function App() {
               data-tour="bot-preview"
               title={builderUi.previewTitle}
               type="button"
-              onClick={() => { setPreviewPanelOpen(v => !v); setPreviewErr(null); }}
+              onClick={() => setPreviewPanelOpen((v) => !v)}
               style={previewPanelOpen ? { outline: '1px solid rgba(56,189,248,0.55)', borderRadius: 8 } : undefined}
             >💬</button>
+            <button
+              className="tb-btn tb-btn-ghost"
+              data-tour="analytics-hub"
+              title={uiLang === 'en' ? 'Analytics' : 'Аналитика'}
+              type="button"
+              onClick={() => setAnalyticsPanelOpen((v) => !v)}
+              style={analyticsPanelOpen ? { outline: '1px solid rgba(99,102,241,0.45)', borderRadius: 8 } : undefined}
+            >📊</button>
             <button
               className="tb-btn tb-btn-ghost"
               data-tour="top-debug-desktop"
@@ -4731,29 +4409,69 @@ export default function App() {
                 {builderUi.projectBadge(projectName.trim() || '…')}
               </div>
             )}
+          </div>
+        )}
+        {!isMobileView && currentUser && (
+          <div className="mc-editor-topbar__cluster">
+            <EditorOverflowMenu lang={uiLang}>
+              <EditorOverflowItem onSelect={() => setShowExamples(true)}>
+                {builderUi.examplesOpen}
+              </EditorOverflowItem>
+              <EditorOverflowItem onSelect={openAiGeneratorModal}>
+                {canUseAiGenerator ? `✨ ${builderUi.aiTitle}` : `🔒 ${builderUi.aiTitleDisabled}`}
+              </EditorOverflowItem>
+              <EditorOverflowItem onSelect={handleClearCanvas}>
+                {builderUi.clearCanvas}
+              </EditorOverflowItem>
+              <EditorOverflowSeparator />
+              <EditorOverflowItem onSelect={handleGraphUndo} disabled={!graphHistory.canUndo}>
+                {uiLang === 'en' ? 'Undo' : 'Отменить'}
+              </EditorOverflowItem>
+              <EditorOverflowItem onSelect={handleGraphRedo} disabled={!graphHistory.canRedo}>
+                {uiLang === 'en' ? 'Redo' : 'Повторить'}
+              </EditorOverflowItem>
+              <EditorOverflowSeparator />
+              <EditorOverflowItem onSelect={() => setShowFilesMenu(true)}>
+                {builderUi.filesMenuTitle}
+              </EditorOverflowItem>
+              <EditorOverflowItem onSelect={() => setPreviewPanelOpen(true)}>
+                {builderUi.previewTitle}
+              </EditorOverflowItem>
+              <EditorOverflowItem onSelect={() => setBotDebugOpen(true)}>
+                {builderUi.debugTitle}
+              </EditorOverflowItem>
+              <EditorOverflowSeparator />
+              <EditorOverflowItem onSelect={() => setShowInstructions(true)}>
+                {uiLang === 'en' ? 'Help' : 'Справка'}
+              </EditorOverflowItem>
+            </EditorOverflowMenu>
+          </div>
+        )}
+        {!isMobileView && (
+          <div className="mc-editor-topbar__cluster mc-editor-topbar__cluster--primary">
             {!isSandboxRunning ? (
               <>
-              <button
-                className="tb-btn tb-btn-run"
-                data-tour="run-desktop"
-                onClick={startBot}
-                disabled={
-                  isStartingSandbox
-                  || !graphHasRunnableBot(graph, currentUser)
-                }
-                title={
-                  !graphHasBotBlock(graph)
-                    ? builderUi.addBotTokenTitle
-                    : !graphHasRunnableBot(graph, currentUser)
-                      ? builderUi.needBotToken
-                      : builderUi.start
-                }
-              >{builderUi.start}</button>
-              {isServerRunning && (
-                <span style={{ fontSize:10, color:'#38bdf8', fontFamily:'var(--mono)' }} title={builderUi.serverRunningParallel}>
-                  ☁ {builderUi.serverRunning}
-                </span>
-              )}
+                <button
+                  className="tb-btn tb-btn-run"
+                  data-tour="run-desktop"
+                  onClick={startBot}
+                  disabled={
+                    isStartingSandbox
+                    || !graphHasRunnableBot(graph, currentUser)
+                  }
+                  title={
+                    !graphHasBotBlock(graph)
+                      ? builderUi.addBotTokenTitle
+                      : !graphHasRunnableBot(graph, currentUser)
+                        ? builderUi.needBotToken
+                        : builderUi.start
+                  }
+                >{builderUi.start}</button>
+                {isServerRunning && (
+                  <span style={{ fontSize:10, color:'#38bdf8', fontFamily:'var(--mono)' }} title={builderUi.serverRunningParallel}>
+                    ☁ {builderUi.serverRunning}
+                  </span>
+                )}
               </>
             ) : (
               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
@@ -4779,12 +4497,12 @@ export default function App() {
                 >{isStoppingSandbox ? '…' : builderUi.stop}</button>
               </div>
             )}
-          </>
+          </div>
         )}
 
         {currentUser ? (
-          <>
-            <div style={{ flex:1 }} />
+          <div className="mc-editor-topbar__cluster mc-editor-topbar__cluster--end">
+            <div style={{ flex:1, minWidth: 8 }} />
             {isAdmin ? (
               <TopBarAdminButton
                 isMobileView={isMobileView}
@@ -4953,9 +4671,9 @@ export default function App() {
               </div>
               {!isMobileView && <span style={{ fontSize: 13, color: 'var(--text)', fontWeight: 500 }}>{currentUser.name}</span>}
             </button>
-          </>
+          </div>
         ) : (
-          <>
+          <div className="mc-editor-topbar__cluster mc-editor-topbar__cluster--end">
             <div style={{ flex:1 }} />
             <button
               onClick={() => { setAuthTab('login'); setShowAuthModal(true); }}
@@ -4967,17 +4685,7 @@ export default function App() {
                 boxShadow: '0 4px 18px rgba(249,115,22,0.4)', whiteSpace: 'nowrap',
               }}
             >Войти</button>
-          </>
-        )}
-        {!isMobileView && (
-          <button
-            className="tb-btn tb-btn-ghost"
-            data-tour="top-help-desktop"
-            onClick={() => setShowInstructions(true)}
-            style={{ marginLeft: 6 }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = '#fbbf24'; e.currentTarget.style.color = '#fbbf24'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = ''; e.currentTarget.style.color = ''; }}
-          >📖</button>
+          </div>
         )}
         {isMobileView && (
           <div style={{ position: 'relative', flexShrink: 0, marginLeft: 4 }}>
@@ -5012,549 +4720,18 @@ export default function App() {
           }}
         />
       )}
-      {showAIModal && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 9999,
-          background: 'rgba(0,0,0,0.85)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: 'max(12px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) max(12px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px))',
-          boxSizing: 'border-box',
-          backdropFilter: 'blur(4px)',
-        }} onClick={() => !aiLoading && setShowAIModal(false)}>
-          <div style={{
-            width: '90%', maxWidth: 520,
-            maxHeight: 'min(90dvh, calc(100% - 24px))',
-            background: 'var(--bg2)', borderRadius: 16,
-            border: '1px solid rgba(251,191,36,0.25)',
-            boxShadow: '0 0 60px rgba(251,191,36,0.08), 0 24px 60px rgba(0,0,0,0.7)',
-            display: 'flex', flexDirection: 'column',
-            overflow: 'hidden',
-            minHeight: 0,
-          }} onClick={e => e.stopPropagation()}>
+      <AiFlowStudio
+        open={aiStudioOpen}
+        onClose={() => {
+          useAiFlowStore.getState().patch({ studioOpen: false });
+          setShowAIModal(false);
+        }}
+        onApplyStacks={applyAiGeneratedStacks}
+        canUseAi={canUseAiGenerator}
+        onUpgrade={openPremiumPurchase}
+        lang={uiLang}
+      />
 
-            {/* Header */}
-            <div style={{
-              padding: '18px 20px', borderBottom: '1px solid rgba(255,255,255,0.07)',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              background: 'linear-gradient(135deg, rgba(251,191,36,0.06) 0%, transparent 100%)',
-              flexShrink: 0,
-            }}>
-              <div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: '#fbbf24', fontFamily: 'Syne, system-ui', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  ✨ Создать бота с AI
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 3 }}>
-                  Опиши бота — AI сгенерирует схему блоков. Короткого запроса обычно мало: нужны состояния, кнопки и переходы.
-                </div>
-              </div>
-              <button
-                onClick={() => setShowAIModal(false)}
-                disabled={aiLoading}
-                style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,0.06)', color: 'var(--text)', fontSize: 18, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: aiLoading ? 0.4 : 1 }}
-              >×</button>
-            </div>
-
-            {/* Body — scrollable when diagnostics / long errors overflow viewport */}
-            <div
-              style={{
-                padding: '20px',
-                flex: 1,
-                minHeight: 0,
-                overflowY: 'auto',
-                overflowX: 'hidden',
-                WebkitOverflowScrolling: 'touch',
-                overscrollBehavior: 'contain',
-              }}
-            >
-              {/* Примеры подсказки */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12, alignItems: 'center' }}>
-                {[
-                  { label: 'Бот приветствует и показывает меню', text: 'Бот приветствует и показывает меню' },
-                  { label: 'Заказ: имя и телефон', text: 'Бот принимает заказы, спрашивает имя и телефон' },
-                  { label: 'Бот калькулятор', text: 'Бот калькулятор' },
-                  { label: 'Бот с оплатой подписки', text: 'Бот с оплатой подписки' },
-                ].map((ex) => (
-                  <button
-                    key={ex.label}
-                    type="button"
-                    title={ex.text.length > 80 ? 'Вставить подробное техническое описание сценария' : undefined}
-                    onClick={() => setAiPrompt(ex.text.slice(0, AI_PROMPT_MAX_CHARS))}
-                    disabled={aiLoading}
-                    style={{
-                      padding: '5px 10px', borderRadius: 20, fontSize: 11,
-                      background: 'rgba(251,191,36,0.07)', color: '#fbbf24',
-                      border: '1px solid rgba(251,191,36,0.2)', cursor: 'pointer',
-                      fontFamily: 'system-ui', transition: 'all 0.15s',
-                      opacity: aiLoading ? 0.5 : 1,
-                      maxWidth: '100%',
-                    }}
-                  >{ex.label}</button>
-                ))}
-              </div>
-
-              {/* Textarea */}
-              <textarea
-                value={aiPrompt}
-                onChange={(e) => {
-                  setAiPrompt(e.target.value.slice(0, AI_PROMPT_MAX_CHARS));
-                  if (aiPartialResult?.skeletonFallback) {
-                    setAiPartialResult(null);
-                    setAiDiagnosticsOpen(false);
-                  }
-                }}
-                disabled={aiLoading}
-                maxLength={AI_PROMPT_MAX_CHARS}
-                placeholder="Опиши идею бота до 50 символов"
-                rows={10}
-                style={{
-                  width: '100%', boxSizing: 'border-box',
-                  background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)',
-                  borderRadius: 10, padding: '12px 14px',
-                  color: 'var(--text)', fontSize: 13, lineHeight: 1.6,
-                  fontFamily: 'system-ui', resize: 'vertical',
-                  outline: 'none', transition: 'border 0.2s',
-                }}
-                onFocus={e => e.target.style.borderColor = 'rgba(251,191,36,0.5)'}
-                onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.12)'}
-              />
-              <div style={{ marginTop: 6, textAlign: 'right', fontSize: 11, color: aiPromptTooLong ? '#f87171' : 'var(--text3)' }}>
-                {aiPrompt.length}/{AI_PROMPT_MAX_CHARS}
-              </div>
-
-              {/* Error */}
-              {aiError && (
-                <div style={{ marginTop: 10, padding: '10px 14px', borderRadius: 8, background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.25)', color: '#f87171', fontSize: 12 }}>
-                  {aiError}
-                </div>
-              )}
-
-              {aiPartialResult && (
-                <div
-                  style={{
-                    marginTop: 12,
-                    padding: 12,
-                    borderRadius: 12,
-                    background: 'rgba(15,23,42,0.58)',
-                    border: '1px solid rgba(251,191,36,0.22)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 10,
-                  }}
-                >
-                  {aiPartialResult.executionMode === 'FALLBACK_SKELETON' && (
-                    <div
-                      role="alert"
-                      style={{
-                        padding: '10px 12px',
-                        borderRadius: 10,
-                        background: 'rgba(245,158,11,0.14)',
-                        border: '1px solid rgba(245,158,11,0.32)',
-                        color: '#fbbf24',
-                        fontSize: 12,
-                        fontWeight: 800,
-                        lineHeight: 1.45,
-                      }}
-                    >
-                      Запущен аварийный режим (без AI логики)
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
-                    <div>
-                      <div style={{ fontSize: 13, color: '#fbbf24', fontWeight: 800 }}>
-                        {aiPartialResult.skeletonFallback
-                          ? 'Аварийный сценарий готов'
-                          : aiPartialResult.templateMode
-                            ? 'Готовый шаблон собран'
-                            : aiPartialResult.recoveryMode
-                            ? 'Сценарий оптимизирован для стабильного выполнения'
-                            : 'Сценарий сгенерирован частично'}
-                      </div>
-                      <div style={{ marginTop: 3, fontSize: 11, color: 'var(--text3)', lineHeight: 1.45 }}>
-                        {aiPartialResult.skeletonFallback
-                          ? 'Упрощённая схема без сложной логики — можно применить и доработать вручную.'
-                          : aiPartialResult.templateMode
-                            ? 'Использован проверенный шаблон — можно сразу применить на холст и доработать.'
-                          : aiPartialResult.recoveryMode
-                            ? 'Первая попытка AI не собрала полную схему; применена упрощённая рабочая версия.'
-                          : aiPartialResult.canRunPartial
-                            ? 'Часть сценария готова — можно добавить на холст и проверить.'
-                            : 'Автоматически применить схему нельзя — попробуйте сгенерировать снова или упростите запрос.'}
-                      </div>
-                    </div>
-                  </div>
-
-                  {!aiDiagnosticsOpen && aiPartialResult.sections.whatWorks.length > 0 && (
-                    <ul style={{ margin: 0, paddingLeft: 18, fontSize: 11, color: 'var(--text3)', lineHeight: 1.55 }}>
-                      {aiPartialResult.sections.whatWorks.slice(0, 4).map((item, index) => (
-                        <li key={`${item.code || 'work'}-${index}`}>{item.title}{item.detail ? ` — ${item.detail}` : ''}</li>
-                      ))}
-                    </ul>
-                  )}
-
-                  {aiDiagnosticsOpen && (
-                    <>
-                      {(aiPartialResult.executionMode || aiPartialResult.rootCause) && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                          <span style={{
-                            padding: '3px 7px',
-                            borderRadius: 999,
-                            background: aiPartialResult.aiConfidenceLabel === 'HIGH'
-                              ? 'rgba(34,197,94,0.1)'
-                              : aiPartialResult.aiConfidenceLabel === 'MEDIUM'
-                                ? 'rgba(245,158,11,0.1)'
-                                : 'rgba(248,113,113,0.1)',
-                            color: aiPartialResult.aiConfidenceLabel === 'HIGH'
-                              ? '#86efac'
-                              : aiPartialResult.aiConfidenceLabel === 'MEDIUM'
-                                ? '#fbbf24'
-                                : '#fca5a5',
-                            border: '1px solid rgba(255,255,255,0.14)',
-                            fontFamily: 'var(--mono, ui-monospace, monospace)',
-                            fontSize: 10,
-                          }}>
-                            уверенность: {aiPartialResult.aiConfidenceLabel}
-                          </span>
-                          {aiPartialResult.executionMode && (
-                            <span style={{ padding: '3px 7px', borderRadius: 999, background: 'rgba(245,158,11,0.1)', color: '#fbbf24', border: '1px solid rgba(245,158,11,0.18)', fontFamily: 'var(--mono, ui-monospace, monospace)', fontSize: 10 }}>
-                              режим: {aiPartialResult.executionMode}
-                            </span>
-                          )}
-                          {aiPartialResult.rootCause && (
-                            <span style={{ padding: '3px 7px', borderRadius: 999, background: 'rgba(248,113,113,0.1)', color: '#fca5a5', border: '1px solid rgba(248,113,113,0.18)', fontFamily: 'var(--mono, ui-monospace, monospace)', fontSize: 10 }}>
-                              причина: {aiPartialResult.rootCause}
-                            </span>
-                          )}
-                          <span style={{
-                            padding: '3px 7px',
-                            borderRadius: 999,
-                            fontFamily: 'var(--mono, ui-monospace, monospace)',
-                            fontSize: 10,
-                            color: aiPartialResult.safeToRun ? '#86efac' : '#fca5a5',
-                            background: aiPartialResult.safeToRun ? 'rgba(34,197,94,0.12)' : 'rgba(248,113,113,0.12)',
-                            border: aiPartialResult.safeToRun ? '1px solid rgba(34,197,94,0.22)' : '1px solid rgba(248,113,113,0.22)',
-                          }}>
-                            можно применить: {aiPartialResult.safeToRun ? 'да' : 'нет'}
-                          </span>
-                        </div>
-                      )}
-
-                      {aiPartialResult.reasonCodes.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                          {aiPartialResult.reasonCodes.map((code) => (
-                            <span
-                              key={code}
-                              style={{
-                                padding: '3px 7px',
-                                borderRadius: 999,
-                                background: 'rgba(59,130,246,0.1)',
-                                color: '#93c5fd',
-                                border: '1px solid rgba(59,130,246,0.18)',
-                                fontFamily: 'var(--mono, ui-monospace, monospace)',
-                                fontSize: 10,
-                              }}
-                            >
-                              {code}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-
-                      <AiDiagnosticSection
-                        title="Что готово"
-                        items={aiPartialResult.sections.whatWorks}
-                        emptyText="Запущена базовая версия сценария (без сложной логики)."
-                      />
-                      <AiDiagnosticSection
-                        title="Что исправлено"
-                        items={aiPartialResult.sections.whatWasFixed}
-                        emptyText="Автоисправления не применялись."
-                      />
-                      <AiDiagnosticSection
-                        title="Что не удалось"
-                        items={aiPartialResult.sections.whatFailed}
-                        emptyText="Оставшихся диагностик нет."
-                      />
-                    </>
-                  )}
-
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      disabled={!aiPartialResult.canRunPartial || aiLoading}
-                      onClick={() => applyAiGeneratedStacks(aiPartialResult.raw.stacks, {
-                        partial: true,
-                        skeletonFallback: aiPartialResult.skeletonFallback,
-                        templateMode: aiPartialResult.templateMode,
-                        templateLabel: aiPartialResult.raw?.meta?.semanticTemplate === 'calculator'
-                          ? 'Калькулятор'
-                          : aiPartialResult.raw?.meta?.semanticTemplate,
-                        recoveryMode: aiPartialResult.recoveryMode,
-                      })}
-                      style={{
-                        padding: '8px 10px',
-                        borderRadius: 9,
-                        border: '1px solid rgba(34,197,94,0.25)',
-                        background: aiPartialResult.canRunPartial ? 'rgba(34,197,94,0.16)' : 'rgba(34,197,94,0.06)',
-                        color: aiPartialResult.canRunPartial ? '#86efac' : 'rgba(134,239,172,0.35)',
-                        cursor: aiPartialResult.canRunPartial && !aiLoading ? 'pointer' : 'not-allowed',
-                        fontSize: 12,
-                        fontWeight: 700,
-                      }}
-                    >
-                      {aiPartialResult.skeletonFallback
-                        ? 'Применить аварийный сценарий'
-                        : aiPartialResult.templateMode || aiPartialResult.recoveryMode
-                          ? 'Применить на холст'
-                          : 'Применить частично'}
-                    </button>
-                    {!aiPartialResult.skeletonFallback && (
-                      <button
-                        type="button"
-                        disabled={aiLoading || aiPromptTooShort || aiPromptTooLong}
-                        onClick={runAiGeneration}
-                        style={{
-                          padding: '8px 10px',
-                          borderRadius: 9,
-                          border: '1px solid rgba(251,191,36,0.25)',
-                          background: 'rgba(251,191,36,0.1)',
-                          color: '#fbbf24',
-                          cursor: aiLoading || aiPromptTooShort || aiPromptTooLong ? 'not-allowed' : 'pointer',
-                          fontSize: 12,
-                          fontWeight: 700,
-                        }}
-                      >
-                        Сгенерировать снова
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setAiDiagnosticsOpen((open) => !open)}
-                      style={{
-                        padding: '8px 10px',
-                        borderRadius: 9,
-                        border: '1px solid rgba(148,163,184,0.22)',
-                        background: 'rgba(148,163,184,0.08)',
-                        color: '#cbd5e1',
-                        cursor: 'pointer',
-                        fontSize: 12,
-                        fontWeight: 700,
-                      }}
-                    >
-                      {aiDiagnosticsOpen ? 'Скрыть подробности' : 'Подробности'}
-                    </button>
-                  </div>
-
-                  {aiDiagnosticsOpen && (
-                    <pre
-                      style={{
-                        margin: 0,
-                        maxHeight: 180,
-                        overflow: 'auto',
-                        padding: 10,
-                        borderRadius: 8,
-                        background: 'rgba(0,0,0,0.24)',
-                        color: '#cbd5e1',
-                        fontSize: 10,
-                        lineHeight: 1.45,
-                        whiteSpace: 'pre-wrap',
-                      }}
-                    >
-                      {JSON.stringify({
-                        status: aiPartialResult.status,
-                        reason: aiPartialResult.reason,
-                        reasonCodes: aiPartialResult.reasonCodes,
-                        executionMode: aiPartialResult.executionMode,
-                        rootCause: aiPartialResult.rootCause,
-                        aiConfidenceLabel: aiPartialResult.aiConfidenceLabel,
-                        executionDecisionScore: aiPartialResult.executionDecisionScore,
-                        isDegraded: aiPartialResult.isDegraded,
-                        isAIGenerated: aiPartialResult.isAIGenerated,
-                        diagnostics: aiPartialResult.raw.diagnostics || [],
-                        repairActions: aiPartialResult.raw.repairActions || [],
-                        userActions: aiPartialResult.userActions,
-                      }, null, 2)}
-                    </pre>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div style={{ padding: '0 20px 20px', display: 'flex', gap: 10, flexShrink: 0 }}>
-              <button
-                onClick={() => setShowAIModal(false)}
-                disabled={aiLoading}
-                style={{
-                  flex: 1, padding: '11px', borderRadius: 10, fontSize: 13,
-                  background: 'rgba(255,255,255,0.05)', color: 'var(--text3)',
-                  border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', fontFamily: 'Syne, system-ui',
-                }}
-              >Отмена</button>
-              <button
-                disabled={!canSubmitAiPrompt}
-                onClick={runAiGeneration}
-                style={{
-                  flex: 2, padding: '11px', borderRadius: 10, fontSize: 13, fontWeight: 600,
-                  background: !canSubmitAiPrompt
-                    ? 'rgba(251,191,36,0.15)'
-                    : 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
-                  color: !canSubmitAiPrompt ? 'rgba(251,191,36,0.4)' : '#000',
-                  border: 'none', cursor: !canSubmitAiPrompt ? 'not-allowed' : 'pointer',
-                  fontFamily: 'Syne, system-ui', transition: 'all 0.2s',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                }}
-              >
-                {aiLoading ? (
-                  <>
-                    <span style={{ display: 'inline-block', width: 14, height: 14, border: '2px solid rgba(251,191,36,0.3)', borderTopColor: '#fbbf24', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-                    {AI_GEN_LOADING_STEPS[aiLoadingStep]}
-                  </>
-                ) : aiPartialResult?.skeletonFallback ? 'Измените описание для новой попытки' : '✨ Сгенерировать'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {showAIModal && aiLoading && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 10040,
-            background: 'rgba(8,10,18,0.88)',
-            backdropFilter: 'blur(14px)',
-            WebkitBackdropFilter: 'blur(14px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 20,
-          }}
-          aria-busy="true"
-          aria-live="polite"
-        >
-          <style>{`
-            @keyframes aiGenPulse {
-              0%, 100% { opacity: 0.35; transform: scale(0.92); }
-              50% { opacity: 0.9; transform: scale(1.05); }
-            }
-            @keyframes aiGenSpin {
-              to { transform: rotate(360deg); }
-            }
-            @keyframes aiGenShimmer {
-              0% { background-position: -200% center; }
-              100% { background-position: 200% center; }
-            }
-            @keyframes aiGenDot {
-              0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
-              40% { opacity: 1; transform: translateY(-3px); }
-            }
-          `}</style>
-          <div
-            style={{
-              width: 'min(440px, 100%)',
-              padding: '40px 36px',
-              borderRadius: 22,
-              background: 'linear-gradient(165deg, rgba(28,30,38,0.97) 0%, rgba(12,14,20,0.99) 100%)',
-              border: '1px solid rgba(251,191,36,0.38)',
-              boxShadow:
-                '0 0 0 1px rgba(251,191,36,0.1), 0 28px 90px rgba(0,0,0,0.72), 0 0 140px rgba(251,191,36,0.07)',
-              textAlign: 'center',
-              fontFamily: 'Syne, system-ui, sans-serif',
-            }}
-          >
-            <div style={{ position: 'relative', width: 92, height: 92, margin: '0 auto 26px' }}>
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: -10,
-                  borderRadius: '50%',
-                  background: 'radial-gradient(circle, rgba(251,191,36,0.28) 0%, transparent 68%)',
-                  animation: 'aiGenPulse 2.2s ease-in-out infinite',
-                }}
-              />
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  borderRadius: '50%',
-                  border: '3px solid rgba(251,191,36,0.18)',
-                  borderTopColor: '#fbbf24',
-                  borderRightColor: 'rgba(251,191,36,0.45)',
-                  animation: 'aiGenSpin 1s linear infinite',
-                }}
-              />
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 16,
-                  borderRadius: 18,
-                  background: 'linear-gradient(145deg, rgba(251,191,36,0.2), rgba(245,158,11,0.06))',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 38,
-                  lineHeight: 1,
-                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
-                }}
-              >
-                ✨
-              </div>
-            </div>
-            <div
-              style={{
-                fontSize: 23,
-                fontWeight: 800,
-                letterSpacing: '-0.02em',
-                background: 'linear-gradient(90deg, #fef3c7, #fbbf24, #d97706, #fbbf24, #fef3c7)',
-                backgroundSize: '200% auto',
-                WebkitBackgroundClip: 'text',
-                backgroundClip: 'text',
-                color: 'transparent',
-                animation: 'aiGenShimmer 2.8s linear infinite',
-                marginBottom: 14,
-              }}
-            >
-              Создаём вашего бота
-            </div>
-            <div
-              style={{
-                fontSize: 14,
-                fontWeight: 600,
-                color: 'rgba(226,232,240,0.92)',
-                lineHeight: 1.55,
-                minHeight: 46,
-                transition: 'opacity 0.35s ease',
-              }}
-            >
-              {AI_GEN_LOADING_STEPS[aiLoadingStep]}
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'center',
-                gap: 6,
-                marginTop: 18,
-              }}
-            >
-              {[0, 1, 2].map((i) => (
-                <span
-                  key={i}
-                  style={{
-                    width: 7,
-                    height: 7,
-                    borderRadius: '50%',
-                    background: '#fbbf24',
-                    animation: `aiGenDot 1.2s ease-in-out ${i * 0.18}s infinite`,
-                  }}
-                />
-              ))}
-            </div>
-            <div style={{ marginTop: 22, fontSize: 11, color: 'rgba(148,163,184,0.88)', lineHeight: 1.45 }}>
-              Подождите — AI собирает и проверяет сценарий. Обычно это от нескольких секунд до минуты.
-            </div>
-          </div>
-        </div>
-      )}
       {showInstructions && (
           <InstructionsModal lang={uiLang} onClose={() => setShowInstructions(false)} />
         )}
@@ -5787,7 +4964,6 @@ export default function App() {
               data-tour="bot-preview"
               onClick={() => {
                 setPreviewPanelOpen((v) => !v);
-                setPreviewErr(null);
                 setMobileMoreOpen(false);
               }}
               style={{
@@ -5852,6 +5028,23 @@ export default function App() {
         document.body,
       )}
 
+      <GlobalLoading
+        open={Boolean(aiGlobalLoading)}
+        label={uiLang === 'en' ? 'Generating flow…' : uiLang === 'uk' ? 'Генеруємо сценарій…' : 'Генерируем сценарий…'}
+      />
+
+      <ProductWelcome
+        open={showProductWelcome && Boolean(currentUser)}
+        onClose={() => setShowProductWelcome(false)}
+        onStartTour={() => {
+          setShowProductWelcome(false);
+          setTourStep(0);
+          setTourActive(true);
+        }}
+        lang={uiLang}
+        storageKey={productWelcomeKey}
+      />
+
       {currentUser ? (
         <AppLayoutProvider
           isMobile={isMobileView}
@@ -5864,7 +5057,28 @@ export default function App() {
           listFilter={listFilter}
           setListFilter={setListFilter}
         >
+        <EditorKeyboardShortcuts
+          enabled={appSection === 'automation'}
+          lang={uiLang}
+          onUndo={handleGraphUndo}
+          onRedo={handleGraphRedo}
+          onSave={() => { void persistProjectToCloud(); }}
+          onClosePanels={handleEditorClosePanels}
+        />
         <EditorShell
+          lang={uiLang}
+          canvasControls={appSection === 'automation' && !isMobileView ? (
+            <CanvasFloatingControls
+              canUndo={graphHistory.canUndo}
+              canRedo={graphHistory.canRedo}
+              onUndo={handleGraphUndo}
+              onRedo={handleGraphRedo}
+              layoutMode={flowLayoutMode}
+              onLayoutModeChange={handleFlowLayoutModeChange}
+              onRelayout={() => applyCanvasLayout()}
+              lang={uiLang}
+            />
+          ) : null}
           left={(
             <LeftPanel
               lang={uiLang}
@@ -5885,7 +5099,7 @@ export default function App() {
               listLoading={projectsLoading && appSection === 'automation'}
               palette={(
                 <Sidebar
-                  onDragStart={setDraggingPaletteEntry}
+                  onDragStart={handlePaletteDragStart}
                   onDragEnd={endPaletteDrag}
                   onTapAdd={isMobileView ? addBlockFromPaletteTap : null}
                 />
@@ -5894,40 +5108,9 @@ export default function App() {
           )}
           center={appSection === 'automation' ? (
             <CenterPanel canvasRef={canvasRef}>
-              <div style={{ position:'absolute', inset:0, pointerEvents:'none', overflow:'hidden', zIndex:0 }}>
-                <div style={{ position:'absolute', top:'-10%', left:'15%', width:500, height:500, borderRadius:'50%', background:'radial-gradient(ellipse,rgba(99,102,241,0.08) 0%,transparent 70%)', animation:'editorOrbFloat 9s ease-in-out infinite' }} />
-                <div style={{ position:'absolute', bottom:'-5%', right:'10%', width:420, height:420, borderRadius:'50%', background:'radial-gradient(ellipse,rgba(249,115,22,0.06) 0%,transparent 70%)', animation:'editorOrbFloat 12s ease-in-out infinite reverse' }} />
-                <div style={{ position:'absolute', top:'40%', right:'30%', width:260, height:260, borderRadius:'50%', background:'radial-gradient(ellipse,rgba(6,182,212,0.05) 0%,transparent 70%)', animation:'editorOrbFloat 7s ease-in-out infinite 2s' }} />
-                <div style={{ position:'absolute', left:0, right:0, height:2, background:'linear-gradient(90deg,transparent,rgba(99,102,241,0.15),rgba(249,115,22,0.1),transparent)', animation:'editorScanLine 8s linear infinite', opacity:0.6, pointerEvents:'none' }} />
-              </div>
-              <FlowHistoryToolbar
-                canUndo={graphHistory.canUndo}
-                canRedo={graphHistory.canRedo}
-                onUndo={handleGraphUndo}
-                onRedo={handleGraphRedo}
-                lang={uiLang}
-              />
-              <FlowLayoutToolbar
-                mode={flowLayoutMode}
-                onModeChange={handleFlowLayoutModeChange}
-                onRelayout={() => applyCanvasLayout()}
-                lang={uiLang}
-              />
               <div style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
                 <GraphCanvasActionsProvider value={graphCanvasActions}>
-                  <GraphCanvas
-                    graph={graph}
-                    projection={canvasProjection}
-                    selectedBlockId={selectedBlockId}
-                    repairHighlightNodeIds={
-                      repairHighlight.until > Date.now() ? repairHighlight.nodeIds : []
-                    }
-                    repairHighlightEdgeIds={
-                      repairHighlight.until > Date.now() ? repairHighlight.edgeIds : []
-                    }
-                    highlightKind={
-                      repairHighlight.until > Date.now() ? repairHighlight.kind : null
-                    }
+                  <ConnectedGraphCanvas
                     lang={uiLang}
                     onSelectNode={handleSelectNode}
                     onInspectNode={handleInspectNode}
@@ -5949,6 +5132,10 @@ export default function App() {
                   for (const op of operations || []) graph.dispatch(op.type, op.payload);
                 }}
               />
+              <GuidedActionBar
+                actions={guidedCanvasActions}
+                visible={guidedCanvasActions.length > 0 && mobileZone === 'canvas'}
+              />
               <FlowCanvasEmptyState
                 show={showCanvasOnboarding}
                 lang={uiLang}
@@ -5956,6 +5143,7 @@ export default function App() {
                 onApplyTemplate={handleApplyFlowTemplate}
                 onOpenAi={openAiGeneratorModal}
                 onStartTour={() => { setTourStep(0); setTourActive(true); }}
+                busy={aiGlobalLoading}
               />
             </CenterPanel>
           ) : (
@@ -6267,334 +5455,40 @@ export default function App() {
         />
       )}
 
-      {currentUser && previewPanelOpen && (
-        <div
-          ref={previewPanelRef}
-          style={{
-            position: 'fixed',
-            ...(previewPanelPos
-              ? {
-                  left: previewPanelPos.left,
-                  top: previewPanelPos.top,
-                  right: 'auto',
-                  bottom: 'auto',
-                  ...(isMobileView
-                    ? { width: 'calc(100vw - 16px)', maxWidth: 420, height: 'min(480px, 52vh)' }
-                    : { width: 340, height: 'min(480px, 52vh)' }),
-                }
-              : isMobileView
-                ? { left: 8, right: 8, bottom: 72, top: '12vh', maxHeight: '70vh' }
-                : { right: 20, bottom: 20, width: 340, height: 'min(480px, 52vh)' }),
-            zIndex: 9600,
-            display: 'flex',
-            flexDirection: 'column',
-            background: 'linear-gradient(160deg,#111318,#0c0e13)',
-            border: '1px solid rgba(56,189,248,0.28)',
-            borderRadius: 14,
-            boxShadow: '0 24px 50px rgba(0,0,0,0.55)',
-            overflow: 'hidden',
-            fontFamily: 'Syne,system-ui, sans-serif',
-          }}
-        >
-          <div
-            role="presentation"
-            onMouseDown={startPreviewPanelDrag}
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '10px 12px', borderBottom: '1px solid rgba(255,255,255,0.07)',
-              background: 'rgba(56,189,248,0.06)',
-              cursor: 'grab',
-              userSelect: 'none',
-            }}
-          >
-            <div style={{ fontSize: 13, fontWeight: 800, color: '#e2e8f0' }}>
-              Чат-превью
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                type="button"
-                onClick={() => { resetPreviewSession(); showToast('Сессия превью сброшена', 'info'); }}
-                style={{
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  borderRadius: 8, padding: '4px 8px',
-                  fontSize: 11, color: 'rgba(226,232,240,0.85)', background: 'transparent', cursor: 'pointer',
-                }}
-              >
-                Новая сессия
-              </button>
-              <button
-                type="button"
-                aria-label="Закрыть"
-                onClick={() => setPreviewPanelOpen(false)}
-                style={{
-                  border: 'none', background: 'rgba(255,255,255,0.06)',
-                  color: '#94a3b8', cursor: 'pointer', borderRadius: 8,
-                  width: 30, height: 30, fontSize: 16, lineHeight: 1,
-                }}
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-          <div style={{ fontSize: 10, color: 'rgba(148,163,184,0.9)', padding: '6px 12px', lineHeight: 1.45 }}>
-            Сервер выполняет сценарий через mock Telegram (без вашего Bot API) на установленном ядре{' '}
-            <span style={{ color: '#7dd3fc' }}>cicada-studio</span>.
-          </div>
-          <div
-            ref={previewScrollRef}
-            style={{
-              flex: 1, minHeight: 0,
-              overflowY: 'auto', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8,
-            }}
-          >
-            {previewMessages.length === 0 && (
-              <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.85)', padding: '8px 0' }}>
-            Например, отправьте <strong>/start</strong>, текст или файл (как в Telegram). Нажимайте кнопки — для превью это те же сообщения/callback.
-              </div>
-            )}
-            {previewMessages.map((m, i) => (
-              <div
-                key={i}
-                style={{
-                  alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
-                  maxWidth: '92%',
-                  borderRadius: 12,
-                  padding: '8px 11px',
-                  fontSize: 12,
-                  whiteSpace: 'pre-wrap',
-                  lineHeight: 1.45,
-                  background:
-                    m.role === 'user'
-                      ? 'linear-gradient(135deg,#0369a1,#0ea5e9)'
-                      : m.kind === 'sys'
-                      ? 'rgba(255,255,255,0.04)'
-                      : 'rgba(30,41,59,0.85)',
-                  color: m.role === 'user' ? '#f8fafc' : 'rgba(241,245,249,0.95)',
-                  border: m.role === 'user' ? 'none' : '1px solid rgba(148,163,184,0.15)',
-                }}
-              >
-                {m.role === 'bot' && m.kind === 'reply_keyboard' && (m.text || '').trim().length > 0 && (
-                  <div style={{ marginBottom: 8 }}><PreviewRichText text={m.text} format={m.format} /></div>
-                )}
-                {m.role === 'bot' && m.kind === 'inline_keyboard' && (m.text || '').trim().length > 0 && (
-                  <div style={{ marginBottom: 8 }}><PreviewRichText text={m.text} format={m.format} /></div>
-                )}
-                {m.role === 'bot' && m.kind === 'text' && <span><PreviewRichText text={m.text} format={m.format} /></span>}
-                {m.role === 'user' && m.kind === 'text' && <span>{m.text}</span>}
-                {m.role === 'user' && (m.kind === 'document' || m.kind === 'photo') && (
-                  <span>
-                    {m.kind === 'photo' ? '🖼 ' : '📎 '}{m.fileName || 'файл'}
-                    {m.caption ? `\n${m.caption}` : ''}
-                  </span>
-                )}
-                {m.role === 'bot' && m.kind === 'sys' && (
-                  <span style={{ opacity: 0.75, fontFamily: 'var(--mono,monospace)', fontSize: 10 }}>{m.text}</span>
-                )}
-                {m.role === 'bot' && m.kind === 'reply_keyboard' && Array.isArray(m.keyboard) && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                    {m.keyboard.flatMap((row, ri) => (Array.isArray(row) ? row : []).map((lbl, ci) => (
-                      <button
-                        key={previewKeyboardButtonKey('reply', ri, ci, lbl)}
-                        type="button"
-                        disabled={previewBusy}
-                        onClick={() => sendPreviewUserText(lbl)}
-                        style={{
-                          border: '1px solid rgba(56,189,248,0.35)',
-                          background: 'rgba(14,165,233,0.12)',
-                          color: '#e0f2fe', borderRadius: 8,
-                          padding: '5px 9px', fontSize: 11, cursor: previewBusy ? 'wait' : 'pointer',
-                          fontFamily: 'inherit',
-                        }}
-                      >
-                        {lbl}
-                      </button>
-                    )))}
-                  </div>
-                )}
-                {m.role === 'bot' && m.kind === 'inline_keyboard' && Array.isArray(m.rows) && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-                    {m.rows.map((row, ri) => (
-                      <div key={`inline-row-${ri}-${(row || []).map((b) => previewKeyboardButtonKey('row', ri, 0, b)).join('|')}`} style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                        {(row || []).map((btn, bi) => {
-                          const label = btn?.text ?? '';
-                          const cd = normalizeCallbackData(
-                            btn?.callback_data != null ? btn.callback_data : label,
-                          );
-                          const url = btn?.url;
-                          if (url) {
-                            const safeUrl = safePreviewHref(url);
-                            if (!safeUrl) return null;
-                            return (
-                              <a
-                                key={previewKeyboardButtonKey('inline-url', ri, bi, btn)}
-                                href={safeUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                style={{
-                                  border: '1px solid rgba(167,139,250,0.45)',
-                                  background: 'rgba(139,92,246,0.12)',
-                                  color: '#ede9fe', borderRadius: 8,
-                                  padding: '5px 9px', fontSize: 11,
-                                  textDecoration: 'none',
-                                }}
-                              >
-                                {label}
-                              </a>
-                            );
-                          }
-                          return (
-                            <button
-                              key={previewKeyboardButtonKey('inline', ri, bi, btn)}
-                              type="button"
-                              disabled={previewBusy || !cd}
-                              onClick={() => sendPreviewCallback(cd)}
-                              style={{
-                                border: '1px solid rgba(167,139,250,0.35)',
-                                background: 'rgba(139,92,246,0.12)',
-                                color: '#ede9fe', borderRadius: 8,
-                                padding: '5px 9px', fontSize: 11,
-                                cursor: previewBusy ? 'wait' : 'pointer',
-                                fontFamily: 'inherit',
-                              }}
-                            >
-                              {label || cd}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-            {previewBusy && (
-              <div style={{ fontSize: 11, color: 'rgba(148,163,184,0.8)', alignSelf: 'center' }}>
-                …
-              </div>
-            )}
-          </div>
-          {previewErr && (
-            <div style={{ padding: '0 12px 8px', fontSize: 11, color: '#fca5a5', whiteSpace: 'pre-wrap' }}>
-              {previewErr}
-            </div>
-          )}
-          <div style={{ display: 'flex', gap: 6, padding: 10, borderTop: '1px solid rgba(255,255,255,0.07)', alignItems: 'center' }}>
-            <input
-              ref={previewFileInputRef}
-              type="file"
-              style={{ display: 'none' }}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) sendPreviewUserFile(f);
-                e.target.value = '';
-              }}
-            />
-            <button
-              type="button"
-              disabled={previewBusy}
-              title="Прикрепить файл"
-              aria-label="Прикрепить файл"
-              onClick={() => previewFileInputRef.current?.click()}
-              style={{
-                flexShrink: 0,
-                width: 38,
-                height: 38,
-                borderRadius: 10,
-                border: '1px solid rgba(255,255,255,0.14)',
-                background: 'rgba(15,23,42,0.75)',
-                color: '#94a3b8',
-                fontSize: 18,
-                lineHeight: 1,
-                cursor: previewBusy ? 'wait' : 'pointer',
-              }}
-            >
-              📎
-            </button>
-            <button
-              type="button"
-              disabled={previewBusy}
-              onClick={() => sendPreviewPaletteEvent({ kind: 'start', text: '/start' }, '/start')}
-              style={{
-                flexShrink: 0, padding: '0 10px', borderRadius: 8,
-                border: '1px solid rgba(249,115,22,0.4)', background: 'rgba(249,115,22,0.1)',
-                color: '#f97316', fontSize: 11, cursor: previewBusy ? 'wait' : 'pointer',
-              }}
-            >
-              /start
-            </button>
-            <button
-              type="button"
-              disabled={previewBusy}
-              title="Голосовое (on_voice)"
-              onClick={sendPreviewUserVoice}
-              style={{
-                flexShrink: 0, padding: '0 8px', borderRadius: 8,
-                border: '1px solid rgba(129,140,248,0.4)', background: 'rgba(129,140,248,0.1)',
-                color: '#a5b4fc', fontSize: 11, cursor: previewBusy ? 'wait' : 'pointer',
-              }}
-            >
-              🎤
-            </button>
-            <button
-              type="button"
-              disabled={previewBusy}
-              title="Стикер (on_sticker)"
-              onClick={sendPreviewUserSticker}
-              style={{
-                flexShrink: 0, padding: '0 8px', borderRadius: 8,
-                border: '1px solid rgba(244,114,182,0.4)', background: 'rgba(244,114,182,0.1)',
-                color: '#f9a8d4', fontSize: 11, cursor: previewBusy ? 'wait' : 'pointer',
-              }}
-            >
-              🎭
-            </button>
-            <button
-              type="button"
-              disabled={previewBusy}
-              title="Команда /help"
-              onClick={() => sendPreviewUserCommand('/help')}
-              style={{
-                flexShrink: 0, padding: '0 8px', borderRadius: 8,
-                border: '1px solid rgba(251,191,36,0.4)', background: 'rgba(251,191,36,0.1)',
-                color: '#fcd34d', fontSize: 11, cursor: previewBusy ? 'wait' : 'pointer',
-              }}
-            >
-              /cmd
-            </button>
-            <input
-              value={previewDraft}
-              onChange={e => setPreviewDraft(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  sendPreviewUserText(previewDraft);
-                  setPreviewDraft('');
-                }
-              }}
-              placeholder="Текст как в Telegram..."
-              disabled={previewBusy}
-              style={{
-                flex: 1, borderRadius: 10,
-                border: '1px solid rgba(255,255,255,0.1)',
-                background: 'rgba(15,23,42,0.7)', color: '#f1f5f9',
-                padding: '8px 10px', fontSize: 13, outline: 'none',
-              }}
-            />
-            <button
-              type="button"
-              disabled={previewBusy}
-              onClick={() => { sendPreviewUserText(previewDraft); setPreviewDraft(''); }}
-              style={{
-                flexShrink: 0, padding: '0 14px', borderRadius: 10,
-                border: 'none', background: 'linear-gradient(135deg,#0ea5e9,#0369a1)',
-                color: '#fff', fontWeight: 700, fontSize: 12, cursor: previewBusy ? 'wait' : 'pointer',
-              }}
-            >
-              Отпр.
-            </button>
-          </div>
-        </div>
-      )}
+      <ChatSimulatorPanel
+        open={Boolean(currentUser && previewPanelOpen)}
+        onClose={() => setPreviewPanelOpen(false)}
+        isMobileView={isMobileView}
+        panelPos={previewPanelPos}
+        onPanelPosChange={setPreviewPanelPos}
+        generateCodegenSnapshot={generateBotPythonSnapshot}
+        getGraphDocument={() => graph.getGraphDocument()}
+        graphPalette={graphPalette}
+        paletteOptions={{ lang: uiLang, blockTypes: builderBlockTypes }}
+        onHighlightNodes={(ids) => handleTraceHighlightChange({ active: ids })}
+        onTraceId={(id) => {
+          if (id) {
+            setDebugTraceId(id);
+            setDebugTraceOpen(true);
+          }
+        }}
+        onDebugSnapshot={setDebugCodegenSnapshot}
+        botName={projectName || 'Test Bot'}
+        flowId={analyticsFlowId}
+      />
+
+      <AnalyticsHub
+        open={Boolean(currentUser && analyticsPanelOpen)}
+        onClose={() => setAnalyticsPanelOpen(false)}
+        flowId={analyticsFlowId}
+        nodeIds={analyticsNodeIds}
+        getGraphDocument={() => graph.getGraphDocument()}
+        onHighlightNodes={(ids) => handleTraceHighlightChange({ active: ids })}
+        lastTraceId={debugTraceId}
+        panelPos={analyticsPanelPos}
+        onPanelPosChange={setAnalyticsPanelPos}
+        isMobileView={isMobileView}
+      />
 
       {graphDiagOpen && (
         <div
@@ -6908,5 +5802,6 @@ export default function App() {
     </AddBlockContext.Provider>
     </GraphValidationProvider>
     </BuilderUiContext.Provider>
+    </StoreProvider>
   );
 }

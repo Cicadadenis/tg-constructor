@@ -3,8 +3,9 @@
  */
 
 import { hasIncomingFlowEdge } from '../../builder/blockLayout.js';
-import { getFlowNodeCardLayout } from '../../builder/graph_canvas_metrics.js';
-import { getNodeCardContent } from '../../builder/nodeCard/nodeCardContent.js';
+import { getVisualNodeLayout } from '../../builder/visualNodes/visualNodeLayout.js';
+import { resolveVisualType } from '../../builder/visualNodes/runtimeToVisual.js';
+import { buildVisualNodeContent } from '../../builder/visualNodes/visualNodeContent.js';
 import { getNodePortDescriptors } from './operation_registry.js';
 import { projectionNodesSignature } from './projection_signature.js';
 import { getBlockDef, getPaletteBlockTypes } from '../../constructor/block_catalog.js';
@@ -27,26 +28,22 @@ export function projectGraphDocumentToCanvas(document) {
         const kbNode = findKeyboardNodeForOwner(doc, node.id);
         const keyboardButtonCount = kbNode ? countKeyboardButtons(kbNode.data) : 0;
         const registryDef = getBlockDefinition(resolvedType);
-        const cardContent = getNodeCardContent(
-          resolvedType,
-          node.data,
-          { ...node.meta, keyboardButtonCount, keyboardNodeId: kbNode?.id || null },
-          {
-            label: def?.label || resolvedType,
-            description: registryDef?.description,
-            category: registryDef?.category,
-            isChainRoot,
-          },
-        );
+        const cardContent = buildVisualNodeContent({
+          runtimeType: resolvedType,
+          props: node.data,
+          meta: { ...node.meta, keyboardButtonCount, keyboardNodeId: kbNode?.id || null },
+          paletteLabel: def?.label || resolvedType,
+          description: registryDef?.description,
+          isChainRoot,
+        });
         const outputPorts = (getNodePortDescriptors(resolvedType).outputs || []).map((p) => ({
           id: p.id || 'flow',
           label: p.edgeLabel || p.label || null,
         }));
-        const layout = getFlowNodeCardLayout({
-          type: resolvedType,
+        const visualType = resolveVisualType(resolvedType);
+        const layout = getVisualNodeLayout({
           isChainRoot,
           bodyLineCount: cardContent.bodyLineCount,
-          canStack: def?.canStack !== false,
           outputPorts,
         });
         return {
@@ -55,13 +52,16 @@ export function projectGraphDocumentToCanvas(document) {
           position: { ...node.position },
           width: layout.hitW,
           height: layout.hitH,
-          className: 'cicada-node flow-node-card-projection',
+          className: 'cicada-node visual-node-projection flow-node-card-projection',
           selectable: true,
           focusable: true,
           dragHandle: '.cicada-node-hit',
           data: {
             /** Projection-only; mirrors GraphDocument.node.type — never persisted in node.data */
             canvasBlockType: resolvedType,
+            /** Editor visual layer — not used by compiler */
+            runtimeType: resolvedType,
+            visualType,
             props: { ...node.data },
             meta: {
               ...node.meta,

@@ -1,0 +1,5 @@
+/**
+ * MC Design System foundation — opt-in layer (does not remove legacy DS).
+ * Load after legacy tokens so bridge maps --color-* → --mc-*.
+ */
+@import '../../design-system/index.css';

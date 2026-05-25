@@ -1,0 +1,134 @@
+/* Python preview — fills inspector code tab */
+
+.python-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+}
+
+.python-pane__header {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(99, 102, 241, 0.85);
+  border-bottom: 1px solid var(--color-border, var(--border));
+}
+
+.editor-shell--saas .python-pane__header {
+  color: var(--color-primary);
+}
+
+.python-pane__toolbar {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--color-border, var(--border));
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.python-pane__toolbar-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  width: 100%;
+}
+
+.python-pane__toolbar-grid button {
+  padding: 6px 10px;
+  font-size: 11px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border, var(--border));
+  background: var(--color-surface-muted, rgba(255, 255, 255, 0.06));
+  color: var(--color-text-secondary, var(--text2));
+  cursor: pointer;
+}
+
+.python-pane__toolbar-grid button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.python-pane__toolbar-grid button:not(:disabled):hover {
+  border-color: var(--color-primary-border, var(--border));
+  color: var(--color-primary, var(--text));
+}
+
+.python-pane__warnings {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--color-border, var(--border));
+  font-size: 10px;
+  color: rgba(251, 191, 36, 0.9);
+  line-height: 1.4;
+}
+
+.python-pane__code {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 11px;
+  line-height: 1.65;
+  color: var(--color-text-secondary, var(--text2));
+  font-family: var(--font-mono, var(--mono));
+  overflow: auto;
+  background: var(--color-surface-muted, rgba(255, 255, 255, 0.04));
+  border-top: none;
+}
+
+.python-pane__code--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 12px;
+  color: var(--color-text-muted, var(--text3));
+  font-family: inherit;
+}
+
+.python-pane__code--dimmed {
+  opacity: 0.55;
+}
+
+.python-pane__line {
+  display: flex;
+  gap: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.python-pane__ln {
+  flex-shrink: 0;
+  width: 28px;
+  text-align: right;
+  opacity: 0.35;
+  user-select: none;
+}
+
+.python-pane__line-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.mc-inspector-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.app-inspector-body > .mc-inspector-panel__code,
+.app-inspector-body > .mc-inspector-panel__props {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}

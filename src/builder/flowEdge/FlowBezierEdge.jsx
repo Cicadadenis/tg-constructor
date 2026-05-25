@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { BaseEdge, getBezierPath } from '@xyflow/react';
+import { BaseEdge } from '@xyflow/react';
+import { getFlowEdgePath } from '../canvas/edgePathUtils.js';
 
 /**
  * Visible smooth bezier connector between flow nodes.
@@ -18,7 +19,7 @@ function FlowBezierEdge({
   style,
 }) {
   const [hovered, setHovered] = useState(false);
-  const [edgePath] = getBezierPath({
+  const [edgePath] = getFlowEdgePath({
     sourceX,
     sourceY,
     targetX,
@@ -34,6 +35,7 @@ function FlowBezierEdge({
     data?.executionPath ? 'flow-bezier-edge--execution' : '',
     data?.repairPath ? 'flow-bezier-edge--repair' : '',
     data?.invalid ? 'flow-bezier-edge--invalid' : '',
+    data?.flowPath ? 'flow-bezier-edge--flow' : '',
   ].filter(Boolean).join(' ');
 
   return (

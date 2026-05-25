@@ -1,100 +1,28 @@
 /**
- * React hook — GraphEditorStore with dispatch-only mutation contract.
+ * Graph editor hook — backed by Zustand graphStore (fine-grained subscriptions).
  */
 
-import { useCallback, useRef, useState } from 'react';
-import { createGraphEditorStore } from './graph_editor_store.js';
+import { useEffect, useRef } from 'react';
+import { useGraphStore } from '../../stores/graphStore.js';
+import { useGraphApi, useGraphRevision } from '../../stores/hooks/useGraphSelectors.js';
 
 /**
  * @param {object} [options]
  * @param {object} [options.seed] — initial GraphDocument seed
  */
 export function useGraphEditor(options = {}) {
-  const storeRef = useRef(null);
-  if (!storeRef.current) {
-    storeRef.current = createGraphEditorStore(options.seed);
-  }
+  const initialized = useGraphStore((s) => s.initialized);
+  const seedRef = useRef(options.seed);
 
-  const [, setRevision] = useState(0);
-  const refresh = useCallback(() => setRevision((n) => n + 1), []);
+  useEffect(() => {
+    if (!initialized) {
+      useGraphStore.getState().init(seedRef.current || {});
+    }
+  }, [initialized]);
 
-  const store = storeRef.current;
-
-  const dispatch = useCallback(
-    (operationOrType, payload, meta) => {
-      const result = store.dispatch(operationOrType, payload, meta);
-      if (result.ok) refresh();
-      return result;
-    },
-    [store, refresh],
-  );
-
-  const undo = useCallback(() => {
-    const result = store.undo();
-    refresh();
-    return result;
-  }, [store, refresh]);
-
-  const redo = useCallback(() => {
-    const result = store.redo();
-    refresh();
-    return result;
-  }, [store, refresh]);
-
-  const setViewport = useCallback(
-    (viewport) => {
-      const result = store.setViewport(viewport);
-      if (result.ok) refresh();
-      return result;
-    },
-    [store, refresh],
-  );
-
-  const resetGraphDocument = useCallback(
-    (seedDocument = {}) => {
-      const result = store.resetHistory(seedDocument);
-      refresh();
-      return result;
-    },
-    [store, refresh],
-  );
-
-  const actionsRef = useRef({
-    dispatch,
-    undo,
-    redo,
-    setViewport,
-    resetGraphDocument,
-  });
-  actionsRef.current = {
-    dispatch,
-    undo,
-    redo,
-    setViewport,
-    resetGraphDocument,
-  };
-
-  const apiRef = useRef(null);
-  if (!apiRef.current) {
-    apiRef.current = {
-      getGraphDocument: () => storeRef.current.getGraphDocument(),
-      getCanvasProjection: () => storeRef.current.getCanvasProjection(),
-      dispatch: (...args) => actionsRef.current.dispatch(...args),
-      undo: () => actionsRef.current.undo(),
-      redo: () => actionsRef.current.redo(),
-      setViewport: (...args) => actionsRef.current.setViewport(...args),
-      resetGraphDocument: (...args) => actionsRef.current.resetGraphDocument(...args),
-      canUndo: () => storeRef.current.canUndo(),
-      canRedo: () => storeRef.current.canRedo(),
-      getHistoryState: () => storeRef.current.getHistoryState(),
-      /** Bumped on dispatch / undo / redo — use as a React dependency */
-      get historyRevision() {
-        return storeRef.current.getHistoryState().cursor;
-      },
-    };
-  }
-
-  return apiRef.current;
+  useGraphRevision();
+  const api = useGraphApi();
+  return api;
 }
 
 /** @deprecated use useGraphEditor */

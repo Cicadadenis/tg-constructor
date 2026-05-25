@@ -1671,7 +1671,9 @@ function Sidebar({ onDragStart, onDragEnd, onTapAdd }) {
                     e.preventDefault();
                     return;
                   }
+                  e.dataTransfer.effectAllowed = 'move';
                   e.dataTransfer.setData('cicada/palette-id', b.id);
+                  e.dataTransfer.setData('text/plain', b.id);
                   const el = e.currentTarget;
                   const clone = el.cloneNode(true);
                   clone.style.position = 'absolute';
@@ -1683,7 +1685,10 @@ function Sidebar({ onDragStart, onDragEnd, onTapAdd }) {
                   requestAnimationFrame(() => document.body.removeChild(clone));
                   onDragStart(b);
                 }}
-                onDragEnd={() => { onDragEnd && onDragEnd(); }}
+                onDragEnd={() => {
+                  // Drop fires on canvas before dragend; defer clear so handleCanvasDrop still sees store entry.
+                  requestAnimationFrame(() => { onDragEnd?.(); });
+                }}
                 onClick={() => onTapAdd && onTapAdd(b)}
                 className="editor-sidebar-block"
                 title={b.label || display.label || b.id}

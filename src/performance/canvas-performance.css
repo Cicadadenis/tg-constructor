@@ -1,0 +1,64 @@
+.canvas-perf {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 40;
+  min-width: 200px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(12, 14, 22, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-family: ui-monospace, 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.88);
+  pointer-events: auto;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.canvas-perf__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.canvas-perf__close {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.canvas-perf__close:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.canvas-perf__grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 12px;
+  margin: 0;
+}
+
+.canvas-perf__grid dt {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.canvas-perf__grid dd {
+  margin: 0;
+  text-align: right;
+}
+
+.canvas-perf--warn {
+  color: #fbbf24;
+}

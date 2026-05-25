@@ -1,0 +1,95 @@
+/**
+ * MC Design System — semantic color tokens (ManyChat-inspired SaaS).
+ * Namespace: --mc-color-* / --mc-alpha-*
+ */
+
+:root,
+[data-mc-theme='light'] {
+  /* Brand */
+  --mc-color-primary-50: #eff6ff;
+  --mc-color-primary-100: #dbeafe;
+  --mc-color-primary-200: #bfdbfe;
+  --mc-color-primary-300: #93c5fd;
+  --mc-color-primary-400: #60a5fa;
+  --mc-color-primary-500: #3b82f6;
+  --mc-color-primary-600: #2563eb;
+  --mc-color-primary-700: #1d4ed8;
+  --mc-color-primary-800: #1e40af;
+  --mc-color-primary-900: #1e3a8a;
+
+  --mc-color-primary: var(--mc-color-primary-600);
+  --mc-color-primary-hover: var(--mc-color-primary-700);
+  --mc-color-primary-active: var(--mc-color-primary-800);
+  --mc-color-primary-muted: var(--mc-color-primary-50);
+  --mc-color-primary-border: var(--mc-color-primary-200);
+  --mc-color-primary-subtle: rgba(37, 99, 235, 0.08);
+
+  /* Neutrals */
+  --mc-color-neutral-0: #ffffff;
+  --mc-color-neutral-50: #f8fafc;
+  --mc-color-neutral-100: #f1f5f9;
+  --mc-color-neutral-200: #e2e8f0;
+  --mc-color-neutral-300: #cbd5e1;
+  --mc-color-neutral-400: #94a3b8;
+  --mc-color-neutral-500: #64748b;
+  --mc-color-neutral-600: #475569;
+  --mc-color-neutral-700: #334155;
+  --mc-color-neutral-800: #1e293b;
+  --mc-color-neutral-900: #0f172a;
+  --mc-color-neutral-950: #020617;
+
+  /* Surfaces */
+  --mc-color-bg: var(--mc-color-neutral-50);
+  --mc-color-bg-subtle: var(--mc-color-neutral-100);
+  --mc-color-surface: var(--mc-color-neutral-0);
+  --mc-color-surface-muted: var(--mc-color-neutral-100);
+  --mc-color-surface-elevated: var(--mc-color-neutral-0);
+  --mc-color-surface-sunken: var(--mc-color-neutral-100);
+  --mc-color-overlay: rgba(15, 23, 42, 0.4);
+  --mc-color-overlay-strong: rgba(15, 23, 42, 0.65);
+
+  /* Canvas — light, focus-oriented */
+  --mc-color-canvas-bg: #e6eaf0;
+  --mc-color-canvas-grid: var(--mc-color-neutral-200);
+  --mc-color-canvas-dot: rgba(100, 116, 139, 0.42);
+
+  /* Borders */
+  --mc-color-border: var(--mc-color-neutral-200);
+  --mc-color-border-subtle: rgba(226, 232, 240, 0.85);
+  --mc-color-border-strong: var(--mc-color-neutral-300);
+  --mc-color-border-focus: var(--mc-color-primary-500);
+
+  /* Text */
+  --mc-color-text: var(--mc-color-neutral-900);
+  --mc-color-text-secondary: var(--mc-color-neutral-600);
+  --mc-color-text-muted: var(--mc-color-neutral-500);
+  --mc-color-text-disabled: var(--mc-color-neutral-400);
+  --mc-color-text-inverse: var(--mc-color-neutral-0);
+  --mc-color-text-link: var(--mc-color-primary-600);
+  --mc-color-text-link-hover: var(--mc-color-primary-700);
+
+  /* Semantic */
+  --mc-color-success: #16a34a;
+  --mc-color-success-muted: #f0fdf4;
+  --mc-color-success-border: #bbf7d0;
+  --mc-color-warning: #d97706;
+  --mc-color-warning-muted: #fffbeb;
+  --mc-color-warning-border: #fde68a;
+  --mc-color-danger: #dc2626;
+  --mc-color-danger-muted: #fef2f2;
+  --mc-color-danger-border: #fecaca;
+  --mc-color-info: #0284c7;
+  --mc-color-info-muted: #f0f9ff;
+  --mc-color-info-border: #bae6fd;
+
+  /* Focus ring */
+  --mc-color-focus-ring: rgba(37, 99, 235, 0.35);
+  --mc-color-focus-ring-offset: var(--mc-color-neutral-0);
+
+  /* Node categories (flow builder) */
+  --mc-color-node-messaging: #2563eb;
+  --mc-color-node-logic: #7c3aed;
+  --mc-color-node-ai: #0891b2;
+  --mc-color-node-data: #059669;
+  --mc-color-node-trigger: #ea580c;
+}

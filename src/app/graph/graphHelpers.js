@@ -190,7 +190,7 @@ const SETTINGS_NODE_TYPES = new Set(['bot', 'version', 'commands', 'global']);
 export function resolveFlowInsertAnchorId(doc, anchorId, newType) {
   const id = String(anchorId || '').trim();
   const type = String(newType || '').trim();
-  if (!id || !doc?.nodes?.[id]) return id;
+  if (!id || !doc?.nodes?.[id]) return null;
 
   const anchorType = graphResolveNodeType(doc.nodes[id]);
   if (graphCanChainAfter(anchorType, type)) return id;
@@ -205,9 +205,21 @@ export function resolveFlowInsertAnchorId(doc, anchorId, newType) {
       (n) => graphResolveNodeType(n) === 'start',
     );
     if (starts.length === 1) return starts[0].id;
+    return null;
   }
 
-  return id;
+  return doc.nodes[id] ? id : null;
+}
+
+/**
+ * Valid chain-insert anchor for palette drop, or null → place at drop coordinates.
+ */
+export function resolvePaletteChainParentId(doc, selectedNodeId, newType) {
+  const id = String(selectedNodeId || '').trim();
+  if (!id) return null;
+  const effective = resolveFlowInsertAnchorId(doc, id, newType);
+  if (!effective || !doc?.nodes?.[effective]) return null;
+  return effective;
 }
 
 /**
