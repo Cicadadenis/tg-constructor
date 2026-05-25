@@ -32,8 +32,15 @@
 }
 
 .ds-skeleton--row {
-  height: 44px;
+  height: 52px;
   margin-bottom: var(--space-half);
+  border-radius: var(--radius-lg);
+}
+
+.ds-skeleton--card {
+  height: 72px;
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-1);
 }
 
 .ds-skeleton-list {
@@ -53,6 +60,18 @@
   padding: var(--space-3) var(--space-2);
   text-align: center;
   color: var(--color-text-secondary);
+  animation: ds-empty-in var(--motion-duration-slow) var(--motion-ease-out);
+}
+
+@keyframes ds-empty-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .ds-empty__icon {

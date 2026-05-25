@@ -151,7 +151,7 @@ function motionlessTraceContainer({ children }) {
 function motionlessTraceHeader({ onClose }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontWeight: 700 }}>
-      <span>Debug trace (read-only)</span>
+      <span>Conversation trace (read-only)</span>
       <button type="button" onClick={onClose}>✕</button>
     </div>
   );
@@ -161,7 +161,7 @@ function motionlessTimelineRow({ row }) {
   return (
     <div style={{ padding: '2px 0', opacity: 0.9 }}>
       <code>{row.kind}</code>
-      {row.nodeId ? <span> @ {row.nodeId}</span> : null}
+      {import.meta.env?.DEV && row.nodeId ? <span> @ {row.nodeId}</span> : null}
     </div>
   );
 }

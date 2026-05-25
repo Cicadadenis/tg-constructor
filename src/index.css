@@ -1,5 +1,7 @@
 @import './design-system/index.css';
 @import './polish/premium-polish.css';
+@import './polish/visual-polish.css';
+@import './ux/ux-interactions.css';
 
 *, *::before, *::after {
   box-sizing: border-box;

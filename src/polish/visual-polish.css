@@ -1,0 +1,468 @@
+/**
+ * Visual polish pass — Linear / Notion / ManyChat / Raycast.
+ * Neutral surfaces, single accent, 8px grid, soft elevation, micro-motion.
+ */
+
+/* ——— Extended tokens (editor SaaS scope) ——— */
+.editor-shell--saas {
+  --vp-accent: #2563eb;
+  --vp-accent-muted: #eff6ff;
+  --vp-accent-border: #dbeafe;
+
+  --vp-bg: #f4f5f7;
+  --vp-surface: #ffffff;
+  --vp-surface-raised: #ffffff;
+  --vp-surface-sunken: #f8f9fb;
+
+  --vp-border: rgba(15, 23, 42, 0.06);
+  --vp-border-strong: rgba(15, 23, 42, 0.1);
+
+  --vp-text: #0f172a;
+  --vp-text-secondary: #475569;
+  --vp-text-muted: #64748b;
+
+  --vp-radius-sm: 8px;
+  --vp-radius-md: 10px;
+  --vp-radius-lg: 12px;
+  --vp-radius-panel: 16px;
+
+  --vp-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --vp-shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.06);
+  --vp-shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08);
+  --vp-shadow-float: 0 12px 40px rgba(15, 23, 42, 0.1), 0 0 0 1px var(--vp-border);
+
+  --mc-shadow-xs: var(--vp-shadow-xs);
+  --mc-shadow-sm: var(--vp-shadow-sm);
+  --mc-shadow-floating: var(--vp-shadow-float);
+  --mc-radius-panel: var(--vp-radius-panel);
+
+  --color-bg: var(--vp-bg);
+  --color-surface: var(--vp-surface);
+  --color-surface-muted: var(--vp-surface-sunken);
+  --color-border: var(--vp-border);
+  --color-border-strong: var(--vp-border-strong);
+  --color-text: var(--vp-text);
+  --color-text-secondary: var(--vp-text-secondary);
+  --color-text-muted: var(--vp-text-muted);
+  --color-canvas-bg: #eceef2;
+  --color-canvas-dot: rgba(100, 116, 139, 0.22);
+
+  --shadow-xs: var(--vp-shadow-xs);
+  --shadow-sm: var(--vp-shadow-sm);
+  --shadow-md: var(--vp-shadow-md);
+}
+
+/* ——— Canvas: subtle dot grid, no radial noise ——— */
+.editor-shell--saas .editor-shell__stage {
+  background-color: var(--color-canvas-bg);
+  background-image: radial-gradient(circle, var(--color-canvas-dot) 0.75px, transparent 0.85px);
+  background-size: 16px 16px;
+}
+
+/* ——— Top bar: flat glass, thin border ——— */
+.editor-shell--saas .mc-editor-topbar,
+.editor-shell--saas .editor-topbar.editor-shell__topbar {
+  height: 48px;
+  min-height: 48px;
+  background: rgba(255, 255, 255, 0.88) !important;
+  border-bottom: 1px solid var(--vp-border) !important;
+  box-shadow: var(--vp-shadow-xs) !important;
+  backdrop-filter: blur(12px) saturate(1.1);
+}
+
+.editor-shell--saas .tb-btn-ghost,
+.editor-shell--saas .tb-btn-ai,
+.editor-shell--saas .tb-btn-danger {
+  border: 1px solid var(--vp-border);
+  box-shadow: none;
+  transition: var(--motion-transition-hover);
+}
+
+.editor-shell--saas .tb-btn-ghost:hover {
+  box-shadow: var(--vp-shadow-xs);
+}
+
+.editor-shell--saas .tb-btn-run {
+  background: var(--vp-accent) !important;
+  box-shadow: var(--vp-shadow-xs) !important;
+}
+
+.editor-shell--saas .tb-btn-run:hover {
+  box-shadow: var(--vp-shadow-sm) !important;
+}
+
+/* ——— Floating panels: unified elevation ——— */
+.editor-shell--saas .mc-floating-rail,
+.editor-shell--saas .mc-floating-inspector {
+  border-radius: var(--vp-radius-panel);
+  border: 1px solid var(--vp-border);
+  background: var(--vp-surface);
+  box-shadow: var(--vp-shadow-float);
+  backdrop-filter: blur(16px) saturate(1.05);
+  transition: box-shadow var(--motion-duration-slow) var(--motion-ease-out),
+    transform var(--motion-duration-slow) var(--motion-ease-out);
+}
+
+.editor-shell--saas .mc-floating-inspector {
+  max-width: min(var(--layout-right-w), calc(100% - 32px));
+}
+
+.editor-shell--saas .mc-floating-rail:hover,
+.editor-shell--saas .mc-floating-inspector:hover {
+  box-shadow: var(--vp-shadow-md), 0 0 0 1px var(--vp-border);
+}
+
+/* Panel toggle chips */
+.editor-shell--saas .mc-panel-toggle {
+  border: 1px solid var(--vp-border);
+  background: var(--vp-surface);
+  box-shadow: var(--vp-shadow-sm);
+  transition: var(--motion-transition-hover);
+}
+
+.editor-shell--saas .mc-panel-toggle:hover {
+  border-color: var(--vp-border-strong);
+  color: var(--vp-accent);
+}
+
+/* ——— Sidebar ——— */
+.editor-shell--saas .mc-sidebar {
+  background: var(--vp-surface-sunken);
+}
+
+.editor-shell--saas .mc-sidebar-nav {
+  border-right: 1px solid var(--vp-border);
+  background: var(--vp-surface);
+}
+
+.editor-shell--saas .mc-sidebar-nav__item {
+  border-radius: var(--vp-radius-sm);
+  transition: var(--motion-transition-hover);
+}
+
+.editor-shell--saas .mc-sidebar-nav__item:hover {
+  background: rgba(15, 23, 42, 0.04);
+}
+
+.editor-shell--saas .mc-sidebar-nav__item--active {
+  background: var(--vp-accent-muted);
+  color: var(--vp-accent);
+  box-shadow: none;
+}
+
+.editor-shell--saas .mc-sidebar-search__input {
+  border: 1px solid var(--vp-border);
+  border-radius: var(--vp-radius-sm);
+  transition: var(--motion-transition-hover);
+}
+
+.editor-shell--saas .mc-sidebar-search__input:focus {
+  border-color: var(--vp-accent-border);
+  box-shadow: var(--shadow-focus);
+}
+
+.editor-shell--saas .mc-sidebar-filter {
+  border: 1px solid transparent;
+  border-radius: var(--vp-radius-full);
+  transition: var(--motion-transition-hover);
+}
+
+.editor-shell--saas .mc-sidebar-filter--active {
+  background: var(--vp-surface);
+  border-color: var(--vp-border);
+  box-shadow: var(--vp-shadow-xs);
+  color: var(--vp-accent);
+}
+
+/* Flow cards */
+.editor-shell--saas .mc-flow-card {
+  border-radius: var(--vp-radius-lg);
+  border: 1px solid var(--vp-border);
+  box-shadow: none;
+  transition: var(--motion-transition-hover);
+}
+
+.editor-shell--saas .mc-flow-card:hover {
+  border-color: var(--vp-border-strong);
+  box-shadow: var(--vp-shadow-xs);
+  transform: translateY(-1px);
+}
+
+.editor-shell--saas .mc-flow-card--active {
+  border-color: var(--vp-accent-border);
+  background: var(--vp-accent-muted);
+  box-shadow: var(--vp-shadow-xs);
+}
+
+.editor-shell--saas .mc-flow-card__icon {
+  border-radius: var(--vp-radius-md);
+  background: var(--vp-surface-sunken);
+  transition: var(--motion-transition-hover);
+}
+
+.editor-shell--saas .mc-flows-panel__create-primary {
+  border-radius: var(--vp-radius-md);
+  box-shadow: var(--vp-shadow-xs);
+  transition: var(--motion-transition-hover);
+}
+
+.editor-shell--saas .mc-flows-panel__create-primary:hover {
+  box-shadow: var(--vp-shadow-sm);
+  transform: translateY(-1px);
+}
+
+/* ——— Inspector (fi-shell) ——— */
+.editor-shell--saas .fi-shell {
+  background: var(--vp-surface);
+  --fi-bg: var(--vp-surface);
+  --fi-bg-muted: var(--vp-surface-sunken);
+  --fi-border: var(--vp-border);
+  --fi-text: var(--vp-text);
+  --fi-text-muted: var(--vp-text-muted);
+  --fi-primary: var(--vp-accent);
+  --fi-primary-muted: var(--vp-accent-muted);
+}
+
+.editor-shell--saas .fi-shell__chrome {
+  border-bottom: 1px solid var(--vp-border);
+}
+
+.editor-shell--saas .fi-tabs__tab {
+  transition: var(--motion-transition-hover);
+}
+
+.editor-shell--saas .fi-tabs__tab:hover {
+  background: var(--vp-surface-sunken);
+}
+
+.editor-shell--saas .fi-quick-actions__btn--ai {
+  background: var(--vp-accent-muted) !important;
+  border-color: var(--vp-accent-border) !important;
+}
+
+.editor-shell--saas .fi-ai-strip {
+  background: var(--vp-accent-muted) !important;
+  border-color: var(--vp-accent-border) !important;
+}
+
+/* ——— Flow editor toolbar ——— */
+.editor-shell--saas .fe-toolbar {
+  border: 1px solid var(--vp-border);
+  box-shadow: var(--vp-shadow-sm);
+  backdrop-filter: blur(12px);
+}
+
+.editor-shell--saas .fe-toolbar__btn {
+  transition: var(--motion-transition-hover);
+}
+
+.editor-shell--saas .fe-toolbar__btn:hover:not(:disabled) {
+  background: var(--vp-surface-sunken);
+}
+
+/* ——— Canvas nodes ——— */
+.editor-shell--saas .visual-node-card__surface {
+  border: 1px solid var(--vp-border);
+  border-radius: var(--vp-radius-lg);
+  box-shadow: var(--vp-shadow-xs);
+}
+
+.editor-shell--saas .visual-node-card__header {
+  background: var(--vp-surface-sunken);
+  border-bottom: 1px solid var(--vp-border);
+}
+
+.editor-shell--saas .visual-node-card:hover .visual-node-card__surface,
+.editor-shell--saas .visual-node-card.selected .visual-node-card__surface {
+  box-shadow: var(--vp-shadow-sm), 0 0 0 2px var(--vp-accent-muted);
+}
+
+.editor-shell--saas .visual-node-card.selected .visual-node-card__surface {
+  box-shadow: var(--vp-shadow-md), 0 0 0 2px var(--vp-accent-border);
+}
+
+/* ——— Empty states ——— */
+.editor-shell--saas .ds-empty,
+.editor-shell--saas .fi-empty,
+.editor-shell--saas .flow-canvas-empty__card {
+  animation: vp-fade-up var(--motion-duration-slow) var(--motion-ease-out);
+}
+
+.editor-shell--saas .ds-empty__icon {
+  opacity: 0.35;
+  filter: grayscale(0.2);
+}
+
+.editor-shell--saas .flow-canvas-empty__card {
+  border: 1px solid var(--vp-border);
+  box-shadow: var(--vp-shadow-sm);
+  border-radius: var(--vp-radius-panel);
+}
+
+/* ——— Skeleton loading ——— */
+.editor-shell--saas .ds-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--vp-surface-sunken) 0%,
+    #eef0f4 50%,
+    var(--vp-surface-sunken) 100%
+  );
+  background-size: 200% 100%;
+}
+
+.editor-shell--saas .ds-skeleton--row {
+  height: 52px;
+  border-radius: var(--vp-radius-lg);
+}
+
+.editor-shell--saas .ds-skeleton-list {
+  gap: var(--space-1);
+}
+
+/* ——— Forms & buttons in shell ——— */
+.editor-shell--saas .ds-btn {
+  transition: var(--motion-transition-hover);
+}
+
+.editor-shell--saas .ds-btn--primary {
+  box-shadow: var(--vp-shadow-xs);
+}
+
+.editor-shell--saas .ds-btn--primary:hover:not(:disabled) {
+  box-shadow: var(--vp-shadow-sm);
+  transform: translateY(-0.5px);
+}
+
+.editor-shell--saas input,
+.editor-shell--saas textarea,
+.editor-shell--saas select {
+  border: 1px solid var(--vp-border);
+  transition: var(--motion-transition-hover);
+}
+
+/* ——— Simulator docked chrome (not Telegram device) ——— */
+.editor-shell--saas .chat-sim-panel--inspector-embed,
+.editor-shell--saas .chat-sim-panel--docked {
+  background: var(--vp-surface);
+}
+
+.editor-shell--saas .chat-sim-panel--inspector-embed .chat-sim-panel__main {
+  background: var(--vp-surface-sunken);
+}
+
+/* ——— Toast ——— */
+.editor-shell--saas .ds-toast {
+  border: 1px solid var(--vp-border);
+  box-shadow: var(--vp-shadow-md);
+}
+
+/* ——— Save indicator, hints ——— */
+.editor-shell--saas .mc-save-status,
+.editor-shell--saas .mc-contextual-hint {
+  border-radius: var(--vp-radius-md);
+  border-width: 1px;
+  box-shadow: none;
+}
+
+/* ——— Mobile zone nav ——— */
+.editor-shell--saas .mobile-zone-nav {
+  border-top: 1px solid var(--vp-border);
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.04);
+}
+
+/* ——— Dropdowns / menus ——— */
+.editor-shell--saas .mc-flow-card__dropdown,
+.editor-shell--saas .fi-dropdown {
+  border: 1px solid var(--vp-border);
+  border-radius: var(--vp-radius-md);
+  box-shadow: var(--vp-shadow-md);
+  animation: vp-scale-in var(--motion-duration-base) var(--motion-ease-out);
+}
+
+/* ——— Welcome: flat hero ——— */
+.editor-shell--saas .mc-welcome__hero {
+  background: var(--vp-accent-muted);
+}
+
+/* ——— Motion keyframes ——— */
+@keyframes vp-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes vp-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Floating simulator: neutral shell (device stays Telegram-dark) */
+.chat-sim-panel:not(.chat-sim-panel--docked):not(.chat-sim-panel--inspector-embed) {
+  background: var(--vp-surface, #fff);
+  border: 1px solid var(--vp-border, rgba(15, 23, 42, 0.08));
+  box-shadow: var(--vp-shadow-float, 0 12px 40px rgba(15, 23, 42, 0.12));
+  color: var(--vp-text, #0f172a);
+}
+
+.chat-sim-panel:not(.chat-sim-panel--docked) .chat-sim-panel__head {
+  background: var(--vp-surface-sunken, #f8f9fb);
+  border-bottom: 1px solid var(--vp-border);
+  cursor: grab;
+}
+
+.chat-sim-panel:not(.chat-sim-panel--docked) .chat-sim-panel__title {
+  color: var(--vp-text);
+}
+
+.chat-sim-panel:not(.chat-sim-panel--docked) .chat-sim-panel__view-toggle {
+  background: var(--vp-surface-sunken);
+  border: 1px solid var(--vp-border);
+}
+
+.chat-sim-panel:not(.chat-sim-panel--docked) .chat-sim-panel__view-toggle button.is-active {
+  background: var(--vp-surface);
+  color: var(--vp-accent);
+}
+
+.chat-sim-panel:not(.chat-sim-panel--docked) .chat-sim-panel__btn {
+  border: 1px solid var(--vp-border);
+  background: var(--vp-surface);
+  color: var(--vp-text-secondary);
+}
+
+.chat-sim-panel:not(.chat-sim-panel--docked) .chat-sim-panel__main {
+  background: var(--vp-surface-sunken);
+}
+
+.chat-sim-panel:not(.chat-sim-panel--docked) .chat-sim-panel__busy-bar {
+  background: var(--vp-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editor-shell--saas .mc-flow-card:hover,
+  .editor-shell--saas .ds-btn--primary:hover:not(:disabled),
+  .editor-shell--saas .mc-flows-panel__create-primary:hover {
+    transform: none;
+  }
+
+  .editor-shell--saas .ds-empty,
+  .editor-shell--saas .fi-empty,
+  .editor-shell--saas .flow-canvas-empty__card,
+  .editor-shell--saas .mc-flow-card__dropdown,
+  .editor-shell--saas .fi-dropdown {
+    animation: none;
+  }
+}

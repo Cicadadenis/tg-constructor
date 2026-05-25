@@ -1,100 +1,127 @@
 import React from 'react';
 import { getBlockDef } from '../../constructor/block_catalog.js';
 import { describeAllowedConnections } from '../../constructor/graph_document/operation_registry.js';
-import { getNodeCardContent } from '../nodeCard/nodeCardContent.js';
-import { categoryDisplayLabel, resolveProductCategory } from '../nodeCard/nodeCardTheme.js';
 import { getBlockDefinition } from '../../../core/blockRegistry.js';
 import { BuilderUiContext } from '../../builderContext.js';
 import { PropsPanel } from '../BuilderComponents.jsx';
-import InspectorSection from './InspectorSection.jsx';
+import FlowInspectorSection from '../../flow-editor/inspector/FlowInspectorSection.jsx';
+import {
+  FlowInspectorAudiencePanel,
+  FlowInspectorAnalyticsPanel,
+} from '../../flow-editor/inspector/FlowInspectorContextPanels.jsx';
+import { normalizeInspectorTab } from '../../flow-editor/inspector/inspectorTabs.js';
 import { useInspectorDraft } from './useInspectorDraft.js';
-import { fieldSectionFor, fieldsForSection } from './inspectorFieldSections.js';
+import { fieldsForSection } from './inspectorFieldSections.js';
 import './entity-inspector.css';
 
-function PortGroup({ title, ports }) {
-  if (!ports?.length) {
-    return (
-      <div>
-        <div className="entity-inspector__port-group-title">{title}</div>
-        <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</div>
-      </div>
-    );
-  }
+function FriendlyConnections({ allowed, lang }) {
+  const inLabel = lang === 'en' ? 'Comes from' : 'Приходит из';
+  const outLabel = lang === 'en' ? 'Goes to' : 'Ведёт к';
+  const emptyIn = lang === 'en' ? 'Flow start or any step' : 'Старт или любой шаг';
+  const emptyOut = lang === 'en' ? 'Next step or end' : 'Следующий шаг или конец';
+
+  const inputs = allowed?.inputs || [];
+  const outputs = allowed?.outputs || [];
+
   return (
-    <div>
-      <div className="entity-inspector__port-group-title">{title}</div>
-      <div className="entity-inspector__port-pills">
-        {ports.map((port) => (
-          <span key={port.id} className="entity-inspector__port-pill" title={port.kind}>
-            {port.label || port.id}
-          </span>
-        ))}
+    <div className="fi-connections">
+      <div className="fi-connections__row">
+        <div className="fi-connections__label">{inLabel}</div>
+        <div className="fi-connections__chips">
+          {inputs.length ? inputs.map((p) => (
+            <span key={p.id} className="fi-connections__chip">{p.label || p.id}</span>
+          )) : (
+            <span className="fi-connections__empty">{emptyIn}</span>
+          )}
+        </div>
       </div>
+      <div className="fi-connections__row">
+        <div className="fi-connections__label">{outLabel}</div>
+        <div className="fi-connections__chips">
+          {outputs.length ? outputs.map((p) => (
+            <span key={p.id} className="fi-connections__chip">{p.label || p.id}</span>
+          )) : (
+            <span className="fi-connections__empty">{emptyOut}</span>
+          )}
+        </div>
+      </div>
+      {allowed?.maxOutputs != null && (
+        <p className="fi-field__hint">
+          {lang === 'en'
+            ? `Up to ${allowed.maxOutputs} outgoing connection(s)`
+            : `До ${allowed.maxOutputs} исходящих связей`}
+        </p>
+      )}
     </div>
   );
 }
 
-function SchemaFields({ fields, draft, updateField, persistField, validation }) {
+function SchemaFields({ fields, draft, updateField, persistField, validation, lang, emptyHint }) {
   if (!fields.length) {
-    return (
-      <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: 0 }}>
-        Нет полей в этой секции.
-      </p>
-    );
+    return emptyHint ? <p className="fi-field__hint">{emptyHint}</p> : null;
   }
   return fields.map((field) => {
     const invalid = Boolean(validation);
+    const fieldValidation = invalid ? validation : null;
     return (
-      <label key={field.key} className="ds-field entity-inspector__field">
-        <span className="ds-field__label entity-inspector__field-label">{field.label}</span>
+      <label
+        key={field.key}
+        className={`fi-field entity-inspector__field${invalid ? ' fi-field--invalid' : ''}`}
+      >
+        <span className="fi-field__label entity-inspector__field-label">{field.label}</span>
         {field.tag === 'textarea' ? (
           <textarea
-            className={`entity-inspector__textarea ds-field__control${invalid ? ' ds-field__control--invalid' : ''}`}
+            className={`fi-field__textarea entity-inspector__textarea${invalid ? ' fi-field__input--invalid' : ''}`}
             rows={field.rows || 3}
             value={draft[field.key] ?? ''}
             onChange={(e) => updateField(field.key, e.target.value)}
             onBlur={(e) => persistField(field.key, e.target.value)}
             aria-invalid={invalid}
+            placeholder={field.placeholder}
           />
         ) : (
           <input
-            className={`entity-inspector__input ds-field__control${invalid ? ' ds-field__control--invalid' : ''}`}
+            className={`fi-field__input entity-inspector__input${invalid ? ' fi-field__input--invalid' : ''}`}
             type={field.secret ? 'password' : 'text'}
             value={draft[field.key] ?? ''}
             onChange={(e) => updateField(field.key, e.target.value)}
             onBlur={(e) => persistField(field.key, e.target.value)}
             aria-invalid={invalid}
+            placeholder={field.placeholder}
           />
         )}
-        {invalid && (
-          <p className="ds-field__error" role="alert">{validation}</p>
+        {fieldValidation && (
+          <p className="fi-field__error" role="alert">{fieldValidation}</p>
         )}
       </label>
     );
   });
 }
 
-const SECTION_LABELS = {
+const TAB_SECTION_LABELS = {
   ru: {
-    basic: 'Основные',
-    io: 'Входы и выходы',
-    execution: 'Выполнение',
-    ui: 'Интерфейс',
+    message: 'Сообщение',
+    behavior: 'Поведение',
+    connections: 'Связи',
+    timing: 'Тайминги и режим',
     advanced: 'Дополнительно',
+    developer: 'Разработчик',
   },
   en: {
-    basic: 'Basic settings',
-    io: 'Inputs / outputs',
-    execution: 'Execution',
-    ui: 'UI settings',
+    message: 'Message',
+    behavior: 'Behavior',
+    connections: 'Connections',
+    timing: 'Timing & mode',
     advanced: 'Advanced',
+    developer: 'Developer',
   },
 };
 
 /**
- * Persistent right-side entity inspector — sole editing surface for canvas nodes.
+ * Tab-scoped entity fields — rendered inside FlowInspector shell.
  */
 export default function EntityInspectorPanel({
+  activeTab: activeTabProp = 'content',
   graph,
   nodeId,
   block,
@@ -114,18 +141,22 @@ export default function EntityInspectorPanel({
   onValidationToast,
   graphRevision,
   lang: langProp,
+  flowName,
+  nodeCount = 0,
+  aiCopyVariants = null,
+  onApplyAiVariant,
 }) {
   const ctx = React.useContext(BuilderUiContext);
   const lang = langProp || ctx?.lang || 'ru';
-  const labels = SECTION_LABELS[lang === 'en' ? 'en' : 'ru'];
+  const sl = TAB_SECTION_LABELS[lang === 'en' ? 'en' : 'ru'];
   const blockTypes = ctx?.blockTypes;
+  const activeTab = normalizeInspectorTab(activeTabProp);
 
   const nodeType = block?.type || null;
   const {
     contract,
     draft,
     validation,
-    dirty,
     updateField,
     persistField,
   } = useInspectorDraft({
@@ -146,16 +177,6 @@ export default function EntityInspectorPanel({
     [schemaFields],
   );
 
-  const cardPreview = React.useMemo(() => {
-    if (!block || !nodeType) return null;
-    return getNodeCardContent(nodeType, block.props, block.meta, {
-      label: def?.label,
-      description: registryDef?.description,
-      category: registryDef?.category,
-      lang,
-    });
-  }, [block, nodeType, def, registryDef, lang]);
-
   const onFieldChange = React.useCallback((key, val) => {
     if (schemaKeys.has(key)) {
       updateField(key, val);
@@ -168,164 +189,193 @@ export default function EntityInspectorPanel({
     return null;
   }
 
-  const productCategory = resolveProductCategory(nodeType, registryDef?.category);
+  const emptySection = lang === 'en'
+    ? 'No fields here — check other tabs.'
+    : 'Здесь нет полей — смотрите другие вкладки.';
 
-  return (
-    <div className="entity-inspector">
-      <header className="entity-inspector__header">
-        <div className="entity-inspector__header-row">
-          <div className="entity-inspector__icon" aria-hidden>{def.icon}</div>
-          <div className="entity-inspector__head-text">
-            <div className="entity-inspector__title">{def.label}</div>
-            <div className="entity-inspector__meta">
-              {categoryDisplayLabel(productCategory, lang)}
-              {' · '}
-              <span style={{ fontFamily: 'var(--font-mono, monospace)' }}>{nodeType}</span>
-            </div>
-            {dirty && (
-              <span className="entity-inspector__badge entity-inspector__badge--dirty">
-                {lang === 'en' ? 'Unsaved draft' : 'Черновик'}
-              </span>
-            )}
-          </div>
-        </div>
-      </header>
+  if (activeTab === 'audience') {
+    return (
+      <div className="fi-entity entity-inspector">
+        <FlowInspectorAudiencePanel lang={lang} blockType={nodeType} />
+      </div>
+    );
+  }
 
-      <div className="entity-inspector__scroll">
-        <InspectorSection title={labels.basic} defaultOpen>
+  if (activeTab === 'analytics') {
+    return (
+      <div className="fi-entity entity-inspector">
+        <FlowInspectorAnalyticsPanel
+          lang={lang}
+          blockType={nodeType}
+          flowName={flowName}
+          nodeCount={nodeCount}
+        />
+      </div>
+    );
+  }
+
+  if (activeTab === 'content') {
+    return (
+      <div className="fi-entity entity-inspector">
+        <div className="entity-inspector__scroll">
           {contract?.description && (
-            <p className="entity-inspector__description">{contract.description}</p>
+            <p className="fi-description" style={{ padding: '12px 0 0' }}>{contract.description}</p>
           )}
-          <SchemaFields
-            fields={fieldsForSection(schemaFields, 'basic', nodeType)}
-            draft={draft}
-            updateField={updateField}
-            persistField={persistField}
-            validation={validation}
-          />
-          <div className="entity-inspector__props-embed">
-            <PropsPanel
-              block={block}
-              onChange={onFieldChange}
-              section="basic"
-              excludeKeys={schemaKeys}
-              embedded
+          <FlowInspectorSection title={sl.message} defaultOpen sticky>
+            <SchemaFields
+              fields={[
+                ...fieldsForSection(schemaFields, 'basic', nodeType),
+                ...fieldsForSection(schemaFields, 'ui', nodeType),
+              ]}
+              draft={draft}
+              updateField={updateField}
+              persistField={persistField}
+              validation={validation}
+              lang={lang}
             />
-          </div>
-        </InspectorSection>
+            <div className="entity-inspector__props-embed">
+              <PropsPanel
+                block={block}
+                onChange={onFieldChange}
+                onKeyboardDataChange={onKeyboardDataChange}
+                onAddAttachment={onAddAttachment}
+                onAttachmentChange={onAttachmentChange}
+                onAttachmentDelete={onAttachmentDelete}
+                graphRefIndex={graphRefIndex}
+                graphDocument={graphDocument}
+                onJumpToNode={onJumpToNode}
+                onCreateCallbackHandler={onCreateCallbackHandler}
+                projectId={projectId}
+                isProjectMode={isProjectMode}
+                hasActiveProSubscription={hasActiveProSubscription}
+                section="ui"
+                excludeKeys={schemaKeys}
+                embedded
+              />
+            </div>
+            <div className="entity-inspector__props-embed">
+              <PropsPanel
+                block={block}
+                onChange={onFieldChange}
+                section="basic"
+                excludeKeys={schemaKeys}
+                embedded
+              />
+            </div>
+          </FlowInspectorSection>
 
-        <InspectorSection title={labels.io} defaultOpen>
-          <div className="entity-inspector__ports">
-            <PortGroup title={lang === 'en' ? 'Inputs' : 'Входы'} ports={allowed?.inputs} />
-            <PortGroup title={lang === 'en' ? 'Outputs' : 'Выходы'} ports={allowed?.outputs} />
-          </div>
-          {allowed?.maxOutputs != null && (
-            <p className="entity-inspector__description" style={{ marginTop: 8 }}>
-              {lang === 'en' ? 'Max outgoing edges: ' : 'Макс. исходящих связей: '}
-              {allowed.maxOutputs}
-            </p>
-          )}
-        </InspectorSection>
-
-        <InspectorSection title={labels.execution} defaultOpen={false}>
-          <SchemaFields
-            fields={fieldsForSection(schemaFields, 'execution', nodeType)}
-            draft={draft}
-            updateField={updateField}
-            persistField={persistField}
-            validation={validation}
-          />
-          <div className="entity-inspector__props-embed">
-            <PropsPanel
-              block={block}
-              onChange={onFieldChange}
-              section="execution"
-              excludeKeys={schemaKeys}
-              embedded
-            />
-          </div>
-        </InspectorSection>
-
-        <InspectorSection title={labels.ui} defaultOpen>
-          {cardPreview && (
-            <div className="entity-inspector__field">
-              <span className="entity-inspector__field-label">
-                {lang === 'en' ? 'Canvas preview' : 'Превью на холсте'}
-              </span>
-              <div
-                className="entity-inspector__textarea"
-                style={{ minHeight: 48, whiteSpace: 'pre-wrap', background: 'var(--color-surface-muted)' }}
-              >
-                {cardPreview.previewBody}
+          {aiCopyVariants?.length > 0 && (
+            <div className="fi-ai-strip" style={{ margin: '0 14px 14px' }}>
+              <strong style={{ fontSize: 12 }}>✨ AI</strong>
+              <div className="fi-ai-strip__variants">
+                {aiCopyVariants.map((v, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    className="fi-ai-strip__variant"
+                    onClick={() => onApplyAiVariant?.(v)}
+                  >
+                    {v}
+                  </button>
+                ))}
               </div>
             </div>
           )}
-          <SchemaFields
-            fields={fieldsForSection(schemaFields, 'ui', nodeType)}
-            draft={draft}
-            updateField={updateField}
-            persistField={persistField}
-            validation={validation}
-          />
-          <div className="entity-inspector__props-embed">
-            <PropsPanel
-              block={block}
-              onChange={onFieldChange}
-              onKeyboardDataChange={onKeyboardDataChange}
-              onAddAttachment={onAddAttachment}
-              onAttachmentChange={onAttachmentChange}
-              onAttachmentDelete={onAttachmentDelete}
-              graphRefIndex={graphRefIndex}
-              graphDocument={graphDocument}
-              onJumpToNode={onJumpToNode}
-              onCreateCallbackHandler={onCreateCallbackHandler}
-              projectId={projectId}
-              isProjectMode={isProjectMode}
-              hasActiveProSubscription={hasActiveProSubscription}
-              section="ui"
-              excludeKeys={schemaKeys}
-              embedded
-            />
-          </div>
-        </InspectorSection>
+        </div>
+      </div>
+    );
+  }
 
-        <InspectorSection title={labels.advanced} defaultOpen={false}>
-          <SchemaFields
-            fields={fieldsForSection(schemaFields, 'advanced', nodeType)}
-            draft={draft}
-            updateField={updateField}
-            persistField={persistField}
-            validation={validation}
-          />
-          <div className="entity-inspector__props-embed">
-            <PropsPanel
-              block={block}
-              onChange={onFieldChange}
-              section="advanced"
-              excludeKeys={schemaKeys}
-              embedded
+  if (activeTab === 'logic') {
+    return (
+      <div className="fi-entity entity-inspector">
+        <div className="entity-inspector__scroll">
+          <FlowInspectorSection title={sl.connections} defaultOpen>
+            <FriendlyConnections allowed={allowed} lang={lang} />
+          </FlowInspectorSection>
+          <FlowInspectorSection title={sl.timing} defaultOpen>
+            <SchemaFields
+              fields={fieldsForSection(schemaFields, 'execution', nodeType)}
+              draft={draft}
+              updateField={updateField}
+              persistField={persistField}
+              validation={validation}
+              lang={lang}
+              emptyHint={emptySection}
             />
-          </div>
-        </InspectorSection>
+            <div className="entity-inspector__props-embed">
+              <PropsPanel
+                block={block}
+                onChange={onFieldChange}
+                section="execution"
+                excludeKeys={schemaKeys}
+                embedded
+              />
+            </div>
+          </FlowInspectorSection>
+          <FlowInspectorSection title={sl.behavior} defaultOpen={false}>
+            <SchemaFields
+              fields={fieldsForSection(schemaFields, 'io', nodeType)}
+              draft={draft}
+              updateField={updateField}
+              persistField={persistField}
+              validation={validation}
+              lang={lang}
+              emptyHint={emptySection}
+            />
+          </FlowInspectorSection>
+        </div>
+      </div>
+    );
+  }
 
-        {validation && (
-          <div style={{ padding: '0 12px 12px' }}>
-            <div className="entity-inspector__validation">⚠ {validation}</div>
-          </div>
+  if (activeTab === 'settings') {
+    return (
+      <div className="fi-entity entity-inspector">
+        <div className="entity-inspector__scroll">
+          <FlowInspectorSection title={sl.advanced} defaultOpen>
+            <SchemaFields
+              fields={fieldsForSection(schemaFields, 'advanced', nodeType)}
+              draft={draft}
+              updateField={updateField}
+              persistField={persistField}
+              validation={validation}
+              lang={lang}
+              emptyHint={emptySection}
+            />
+            <div className="entity-inspector__props-embed">
+              <PropsPanel
+                block={block}
+                onChange={onFieldChange}
+                section="advanced"
+                excludeKeys={schemaKeys}
+                embedded
+              />
+            </div>
+          </FlowInspectorSection>
+          <FlowInspectorSection title={sl.developer} defaultOpen={false}>
+            <div className="fi-dev">
+              <p className="fi-field__hint" style={{ marginBottom: 8 }}>
+                {lang === 'en' ? 'Internal block type' : 'Системный тип блока'}
+              </p>
+              <code className="fi-dev__type">{nodeType}</code>
+            </div>
+          </FlowInspectorSection>
+        </div>
+        {onDeleteNode && (
+          <footer className="fi-footer">
+            <button
+              type="button"
+              className="fi-footer__delete"
+              onClick={() => onDeleteNode(nodeId)}
+            >
+              {lang === 'en' ? 'Remove this step' : 'Удалить этот шаг'}
+            </button>
+          </footer>
         )}
       </div>
+    );
+  }
 
-      {onDeleteNode && (
-        <footer className="entity-inspector__footer">
-          <button
-            type="button"
-            className="entity-inspector__delete"
-            onClick={() => onDeleteNode(nodeId)}
-          >
-            {lang === 'en' ? 'Delete block' : 'Удалить блок'}
-          </button>
-        </footer>
-      )}
-    </div>
-  );
+  return null;
 }

@@ -33,6 +33,7 @@ import {
 import { loadPersistedCanvasBlob } from '../../constructor/graph_document/persist_bridge.js';
 import { hydrateGraphFromBlob } from '../hydration/graphHydration.js';
 import { clearGraph } from '../../constructor/graph_document/graph_ui_orchestrator.js';
+import { usePersistenceStore } from '../../stores/persistenceStore.js';
 
 /**
  * @param {object} graph — graph editor API from useGraphEditor()
@@ -118,8 +119,14 @@ export function useCanvasAutosave(graph, canvasStorageKey, opts) {
   useEffect(() => {
     if (isExampleLoadingRef.current) return;
     if (graphRevision === lastSavedRevisionRef.current) return;
-    saveCanvasForKey(canvasStorageKey, graph);
-    lastSavedRevisionRef.current = graphRevision;
+    usePersistenceStore.getState().beginSave();
+    try {
+      saveCanvasForKey(canvasStorageKey, graph);
+      lastSavedRevisionRef.current = graphRevision;
+      usePersistenceStore.getState().endSave(graphRevision);
+    } catch (err) {
+      usePersistenceStore.getState().setSaveError(err?.message || 'autosave failed');
+    }
   }, [canvasStorageKey, graphRevision, graph]);
 
   const isLoading = useCallback(() => isExampleLoadingRef.current, []);

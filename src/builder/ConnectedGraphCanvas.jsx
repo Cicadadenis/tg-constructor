@@ -15,6 +15,9 @@ export default function ConnectedGraphCanvas({
   onInsertNodeOnEdge,
   onRequestDeleteNodes,
   lang,
+  flowToolbarProps = null,
+  flowEditorChrome = true,
+  canvasUxRef = null,
 }) {
   const graph = useGraphApi();
   const projection = useCanvasProjection();
@@ -45,6 +48,9 @@ export default function ConnectedGraphCanvas({
       onInsertNodeOnEdge={onInsertNodeOnEdge}
       onRequestDeleteNodes={onRequestDeleteNodes}
       paletteDragEntry={draggingPaletteEntry}
+      flowToolbarProps={flowToolbarProps}
+      flowEditorChrome={flowEditorChrome}
+      canvasUxRef={canvasUxRef}
     />
   );
 }

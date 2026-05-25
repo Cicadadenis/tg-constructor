@@ -1,0 +1,56 @@
+.save-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-muted);
+  background: var(--color-surface-muted);
+  flex-shrink: 0;
+}
+
+.save-status__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+  opacity: 0.5;
+}
+
+.save-status--saving .save-status__dot {
+  background: var(--color-primary);
+  opacity: 1;
+  animation: save-status-pulse 1s ease-in-out infinite;
+}
+
+.save-status--idle .save-status__dot {
+  background: #22c55e;
+  opacity: 1;
+}
+
+.save-status--pending .save-status__dot {
+  background: #f59e0b;
+  opacity: 1;
+}
+
+.save-status--error {
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.save-status--error .save-status__dot {
+  background: #ef4444;
+  opacity: 1;
+}
+
+.save-status__time {
+  opacity: 0.65;
+  font-size: 10px;
+}
+
+@keyframes save-status-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.1); }
+}

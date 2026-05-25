@@ -89,7 +89,7 @@ export default function AiFlowStudio({
         const partial = normalizeAiPartialResponse(data);
         useAiFlowStore.getState().patch({
           error: partial.hasContext
-            ? 'Частичный сценарий — откройте диагностику в legacy flow или упростите запрос.'
+            ? 'Частичный сценарий — нажмите «Проверить» на холсте или упростите запрос.'
             : 'Partial IR без контекста',
         });
         return;

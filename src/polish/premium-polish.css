@@ -89,11 +89,11 @@
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(255, 255, 255, 0.5) 50%,
+    rgba(255, 255, 255, 0.35) 50%,
     transparent 100%
   );
   background-size: 200% 100%;
-  animation: mc-panel-shimmer 1.4s ease-in-out infinite;
+  animation: mc-panel-shimmer 1.6s ease-in-out infinite;
   border-radius: inherit;
   pointer-events: none;
 }

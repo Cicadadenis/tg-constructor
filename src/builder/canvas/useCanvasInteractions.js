@@ -16,6 +16,7 @@ import {
 } from '../../constructor/graph_document/operation_registry.js';
 import { addEdge as graphAddEdge } from '../../constructor/graph_document/graph_operation_client.js';
 import { findNearestCompatibleTarget } from './snapToHandles.js';
+import { computeSnapGuides } from '../../ux/CanvasSnapGuides.jsx';
 import { usePerformanceStore } from '../../performance/performanceStore.js';
 import {
   CANVAS_SNAP_GRID,
@@ -67,6 +68,9 @@ export function useCanvasInteractions({
 
   const [dropGhost, setDropGhost] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
+  const [snapGuides, setSnapGuides] = useState([]);
+  const [hoveredNodeId, setHoveredNodeId] = useState(null);
+  const [hoveredEdgeId, setHoveredEdgeId] = useState(null);
 
   const cancelInertia = useCallback(() => {
     if (inertiaRafRef.current != null) {
@@ -144,19 +148,36 @@ export function useCanvasInteractions({
   }, [draggingRef, cancelInertia]);
 
   const onNodeDrag = useCallback((_event, node) => {
-    setNodes((nds) =>
-      nds.map((n) => (n.id === node.id ? { ...n, position: node.position } : n)),
-    );
+    setNodes((nds) => {
+      const others = nds.filter((n) => n.id !== node.id).map((n) => ({
+        position: n.position,
+        width: n.width,
+        height: n.height,
+      }));
+      const guides = computeSnapGuides(
+        {
+          x: node.position.x,
+          y: node.position.y,
+          width: node.width ?? 220,
+          height: node.height ?? 100,
+        },
+        others,
+      );
+      setSnapGuides(guides);
+      return nds.map((n) => (n.id === node.id ? { ...n, position: node.position } : n));
+    });
   }, [setNodes]);
 
   const onNodeDragStop = useCallback((_event, node) => {
     if (draggingRef) draggingRef.current = false;
     usePerformanceStore.getState().patch({ isDragging: false });
+    setSnapGuides([]);
     moveNode(graph, node.id, { x: node.position.x, y: node.position.y });
   }, [graph, draggingRef]);
 
   const onSelectionDragStop = useCallback(() => {
     if (draggingRef) draggingRef.current = false;
+    setSnapGuides([]);
     const nodes = getNodes().filter((n) => n.selected);
     for (const n of nodes) {
       moveNode(graph, n.id, { x: n.position.x, y: n.position.y });
@@ -326,6 +347,33 @@ export function useCanvasInteractions({
     });
   }, []);
 
+  const onNodeMouseEnter = useCallback((_event, node) => {
+    setHoveredNodeId(node.id);
+    setNodes((nds) => nds.map((n) => ({
+      ...n,
+      className: [
+        n.className,
+        n.id === node.id ? 'is-hovered' : '',
+      ].filter(Boolean).join(' ').trim(),
+    })));
+  }, [setNodes]);
+
+  const onNodeMouseLeave = useCallback((_event, node) => {
+    setHoveredNodeId((id) => (id === node.id ? null : id));
+    setNodes((nds) => nds.map((n) => ({
+      ...n,
+      className: (n.className || '').replace(/\bis-hovered\b/g, '').trim(),
+    })));
+  }, [setNodes]);
+
+  const onEdgeMouseEnter = useCallback((_event, edge) => {
+    setHoveredEdgeId(edge.id);
+  }, []);
+
+  const onEdgeMouseLeave = useCallback(() => {
+    setHoveredEdgeId(null);
+  }, []);
+
   const groupSelectedNodes = useCallback(() => {
     const ids = getNodes().filter((n) => n.selected).map((n) => n.id);
     if (ids.length < 2) return;
@@ -375,6 +423,21 @@ export function useCanvasInteractions({
         if (selected.length !== 1) return;
         e.preventDefault();
         graphCanvasActions?.onDuplicateNode?.(selected[0].id);
+        return;
+      }
+
+      if (mod && e.key === 'k') {
+        e.preventDefault();
+        window.dispatchEvent(new Event('cicada:open-command-palette'));
+        return;
+      }
+
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !mod) {
+        const selected = getNodes().filter((n) => n.selected);
+        if (selected.length > 0) {
+          e.preventDefault();
+          onRequestDeleteNodes?.(selected.map((n) => n.id));
+        }
       }
     };
 
@@ -387,6 +450,7 @@ export function useCanvasInteractions({
     getNodes,
     graphCanvasActions,
     onSelectNode,
+    onRequestDeleteNodes,
   ]);
 
   useEffect(() => () => cancelInertia(), [cancelInertia]);
@@ -427,6 +491,10 @@ export function useCanvasInteractions({
     onNodeContextMenu,
     onPaneContextMenu,
     onEdgeContextMenu,
+    onNodeMouseEnter,
+    onNodeMouseLeave,
+    onEdgeMouseEnter,
+    onEdgeMouseLeave,
   };
 
   return {
@@ -437,5 +505,8 @@ export function useCanvasInteractions({
     closeContextMenu,
     fitToFlow,
     groupSelectedNodes,
+    snapGuides,
+    hoveredNodeId,
+    hoveredEdgeId,
   };
 }

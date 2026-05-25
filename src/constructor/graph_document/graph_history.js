@@ -201,3 +201,46 @@ export function exportOperationStream(history) {
     revision: e.revision,
   }));
 }
+
+/**
+ * Travel undo/redo stack to a target cursor (0 … stream.length).
+ * @param {object} history
+ * @param {number} targetCursor
+ */
+export function jumpToHistoryCursor(history, targetCursor) {
+  const max = history.stream?.length ?? 0;
+  const target = Math.max(0, Math.min(Number(targetCursor) || 0, max));
+  let h = history;
+  let guard = 0;
+  while (h.cursor > target && guard < max + 2) {
+    h = rollbackOperation(h);
+    if (h.lastError) return { ok: false, history: h, error: h.lastError };
+    guard += 1;
+  }
+  guard = 0;
+  while (h.cursor < target && guard < max + 2) {
+    h = redoOperation(h);
+    if (h.lastError) return { ok: false, history: h, error: h.lastError };
+    guard += 1;
+  }
+  return { ok: true, history: h };
+}
+
+/**
+ * @param {object} history
+ * @returns {Array<{ index: number, type: string, revision: number, isFuture: boolean, isCurrent: boolean }>}
+ */
+export function describeHistoryStream(history) {
+  const stream = history?.stream ?? [];
+  const cursor = Number(history?.cursor ?? 0);
+  return stream.map((entry, index) => {
+    const op = entry.operation?.type ?? entry.operation?.operation?.type ?? 'Change';
+    return {
+      index,
+      type: String(op),
+      revision: entry.revision,
+      isFuture: index >= cursor,
+      isCurrent: index === cursor - 1,
+    };
+  });
+}

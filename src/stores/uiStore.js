@@ -2,9 +2,9 @@ import { createImmerStore } from './createStore.js';
 import { createSelectors } from './createSelectors.js';
 
 const initial = {
-  appSection: 'automation',
+  appSection: 'flows',
   mobileZone: 'canvas',
-  inspectorTab: 'props',
+  inspectorTab: 'content',
   listSearch: '',
   listFilter: 'all',
   isMobileView: typeof window !== 'undefined'

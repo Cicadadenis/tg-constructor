@@ -14,8 +14,10 @@ export default function ChatSimulatorPanel({
   open,
   onClose,
   isMobileView = false,
+  variant = 'floating',
   panelPos = null,
   onPanelPosChange,
+  onUndock,
   generateCodegenSnapshot,
   getGraphDocument,
   graphPalette = [],
@@ -25,6 +27,8 @@ export default function ChatSimulatorPanel({
   onDebugSnapshot,
   botName = 'Test Bot',
   flowId = null,
+  inspectorEmbed = false,
+  lang = 'ru',
 }) {
   const panelRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -89,26 +93,42 @@ export default function ChatSimulatorPanel({
 
   if (!open) return null;
 
-  const posStyle = panelPos
-    ? { left: panelPos.left, top: panelPos.top, right: 'auto', bottom: 'auto' }
-    : isMobileView
-      ? { left: 8, right: 8, bottom: 72, top: '10vh' }
-      : { right: 20, bottom: 20 };
+  const isDocked = variant === 'docked';
+  const t = lang === 'en'
+    ? { title: 'Live chat', reset: 'Restart', realtime: 'live' }
+    : lang === 'uk'
+      ? { title: 'Живий чат', reset: 'Перезапуск', realtime: 'live' }
+      : { title: 'Живой чат', reset: 'Перезапуск', realtime: 'live' };
+  const posStyle = isDocked
+    ? undefined
+    : panelPos
+      ? { left: panelPos.left, top: panelPos.top, right: 'auto', bottom: 'auto' }
+      : isMobileView
+        ? { left: 8, right: 8, bottom: 72, top: '10vh' }
+        : { right: 20, bottom: 20 };
 
   const displayMessages = sim.liveMode !== false ? sim.messages : sim.replaySnapshot;
 
   return (
     <div
       ref={panelRef}
-      className={`chat-sim-panel ${isMobileView ? 'chat-sim-panel--mobile-host' : ''}`}
+      className={[
+        'chat-sim-panel',
+        isMobileView ? 'chat-sim-panel--mobile-host' : '',
+        isDocked ? 'chat-sim-panel--docked' : '',
+        inspectorEmbed ? 'chat-sim-panel--inspector-embed' : '',
+      ].filter(Boolean).join(' ')}
       style={posStyle}
-      role="dialog"
+      role={isDocked ? 'region' : 'dialog'}
       aria-label="Chat simulator"
     >
-      <header className="chat-sim-panel__head" onMouseDown={startDrag}>
+      <header
+        className="chat-sim-panel__head"
+        onMouseDown={isDocked ? undefined : startDrag}
+      >
         <div className="chat-sim-panel__title-wrap">
-          <h2 className="chat-sim-panel__title">Flow Simulator</h2>
-          <span className="chat-sim-panel__badge">realtime</span>
+          <h2 className="chat-sim-panel__title">{t.title}</h2>
+          <span className="chat-sim-panel__badge">{t.realtime}</span>
         </div>
         <div className="chat-sim-panel__toolbar">
           <div className="chat-sim-panel__view-toggle" role="group" aria-label="Preview size">
@@ -127,18 +147,32 @@ export default function ChatSimulatorPanel({
               Desktop
             </button>
           </div>
-          <button type="button" className="chat-sim-panel__btn" onClick={sim.resetSession}>
-            Reset
+          <button type="button" className="chat-sim-panel__btn" onClick={sim.resetSession} title={t.reset}>
+            ↻ {inspectorEmbed ? '' : t.reset}
           </button>
-          <button type="button" className="chat-sim-panel__btn chat-sim-panel__btn--close" onClick={onClose} aria-label="Close">
-            ✕
-          </button>
+          {isDocked && onUndock && !inspectorEmbed && (
+            <button
+              type="button"
+              className="chat-sim-panel__btn"
+              onClick={onUndock}
+              title="Открепить"
+            >
+              ⧉
+            </button>
+          )}
+          {onClose && (
+            <button type="button" className="chat-sim-panel__btn chat-sim-panel__btn--close" onClick={onClose} aria-label="Close">
+              ✕
+            </button>
+          )}
         </div>
       </header>
 
-      <p className="chat-sim-panel__hint">
-        Изолированная песочница · mock subscriber · live execution через preview worker
-      </p>
+      {!isDocked && !inspectorEmbed && (
+        <p className="chat-sim-panel__hint">
+          Тестовый чат · данные подписчика · предпросмотр автоматизации
+        </p>
+      )}
 
       {sim.error && (
         <div className="chat-sim-panel__error" role="alert">{sim.error}</div>
@@ -153,7 +187,7 @@ export default function ChatSimulatorPanel({
         messageCount={sim.messages.length}
       />
 
-      <div className="chat-sim-panel__body">
+      <div className={`chat-sim-panel__body${inspectorEmbed ? ' chat-sim-panel__body--stack' : ''}`}>
         <div className="chat-sim-panel__main">
           <MessengerPreview
             messages={displayMessages}

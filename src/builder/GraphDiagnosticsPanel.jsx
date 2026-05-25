@@ -81,7 +81,7 @@ export function GraphDiagnosticsPanel({
   const labels = lang === 'en'
     ? {
       title: 'Scenario diagnostics',
-      strict: 'Strict mode',
+      strict: 'Thorough check',
       close: 'Close',
       empty: 'No issues',
       telemetry: 'Telemetry',
@@ -90,7 +90,7 @@ export function GraphDiagnosticsPanel({
     }
     : {
       title: 'Диагностика сценария',
-      strict: 'Строгий режим',
+      strict: 'Детальная проверка',
       close: 'Закрыть',
       empty: 'Проблем не найдено',
       telemetry: 'Телеметрия',

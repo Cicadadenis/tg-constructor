@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useGraphStore } from '../stores/graphStore.js';
-import { captureHistoryOnMutation } from '../stores/graphSubscriptions.js';
+import { captureHistoryOnMutation, subscribePersistenceDirty } from '../stores/graphSubscriptions.js';
 
 /**
  * Bootstraps graph store + time-travel capture. Mount once inside App.
@@ -15,8 +15,12 @@ export function StoreProvider({ children, graphSeed }) {
   }, [initialized, graphSeed]);
 
   useEffect(() => {
-    const unsub = captureHistoryOnMutation();
-    return unsub;
+    const unsubHistory = captureHistoryOnMutation();
+    const unsubDirty = subscribePersistenceDirty();
+    return () => {
+      unsubHistory();
+      unsubDirty();
+    };
   }, []);
 
   return children;

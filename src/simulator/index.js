@@ -6,3 +6,4 @@ export { previewOutboundToEntries } from './previewMessages.js';
 export { playOutboundEntries } from './simulatorPlayback.js';
 export { createSimulatorEventBus, SimulatorEventTypes } from './simulatorEventBus.js';
 export { createConversationSnapshot, restoreFromSnapshot } from './conversationSnapshots.js';
+export { runMockFlowStep } from './mockExecutionEngine.js';

@@ -79,6 +79,11 @@ export function useEditorStoreBindings() {
     usePreviewStore.getState().setPreviewPanelPos(pos);
   }, []);
 
+  const simulatorDocked = usePreviewStore((s) => s.simulatorDocked);
+  const setSimulatorDocked = useCallback((docked) => {
+    usePreviewStore.getState().setSimulatorDocked(docked);
+  }, []);
+
   const analyticsPanelOpen = useAnalyticsStore((s) => s.panelOpen);
   const setAnalyticsPanelOpen = useCallback((open) => {
     useAnalyticsStore.getState().setPanelOpen(open);
@@ -160,6 +165,8 @@ export function useEditorStoreBindings() {
     setPreviewPanelOpen,
     previewPanelPos,
     setPreviewPanelPos,
+    simulatorDocked,
+    setSimulatorDocked,
     analyticsPanelOpen,
     setAnalyticsPanelOpen,
     analyticsPanelPos,

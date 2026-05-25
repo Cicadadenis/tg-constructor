@@ -29,7 +29,7 @@ const TYPE_LABEL_EN = Object.freeze({
  */
 export function blockTypeLabel(blockType, lang = 'ru') {
   const t = String(blockType || '').trim();
-  if (!t) return lang === 'en' ? 'block' : 'блок';
+  if (!t) return lang === 'en' ? 'step' : 'шаг';
   const catalog = getBuilderBlockTypes(lang);
   const row = catalog.find((b) => b.type === t);
   if (row?.label) return row.label;
@@ -97,7 +97,7 @@ const CATALOG = Object.freeze({
   }),
   BUTTON_NO_ACTION: def('warning', 'BUTTON_NO_ACTION', {
     title: { ru: 'У кнопки «{callbackLabel}» нет действия при нажатии', en: 'Button «{callbackLabel}» has no action' },
-    cause: { ru: 'Кнопка не связана с обработчиком в графе.', en: 'Button is not linked to a handler in the graph.' },
+    cause: { ru: 'Кнопка не связана с обработчиком в сценарии.', en: 'Button is not linked to a handler in the flow.' },
     fix: { ru: 'Создайте обработчик из панели свойств кнопки.', en: 'Create a handler from the button properties panel.' },
     actions: ['jump', 'repair_callbacks'],
   }),
@@ -165,8 +165,8 @@ const CATALOG = Object.freeze({
   }),
   hydration_orphan_edges: def('error', 'hydration_orphan_edges', {
     title: { ru: 'Остались битые связи', en: 'Stale broken connections' },
-    cause: { ru: 'В схеме сохранились связи без блоков.', en: 'Saved graph has edges without nodes.' },
-    fix: { ru: 'Нажмите «Удалить битые связи» или «Сбросить graph».', en: 'Use Remove broken edges or Reset graph.' },
+    cause: { ru: 'В сценарии сохранились связи без шагов.', en: 'Saved flow has connections without steps.' },
+    fix: { ru: 'Нажмите «Удалить битые связи» или «Сбросить сценарий».', en: 'Use Remove broken connections or Reset flow.' },
     actions: ['remove_edge', 'reset_graph'],
   }),
   duplicate_edge: def('error', 'duplicate_edge', {
@@ -267,14 +267,14 @@ const CATALOG = Object.freeze({
     fix: { ru: 'Проверьте: Старт → Ответ → кнопки; все ветки условий заполнены.', en: 'Check: Start → Reply → buttons; fill all condition branches.' },
   }),
   GRAPH_IR_VALIDATION: def('error', 'GRAPH_IR_VALIDATION', {
-    title: { ru: 'Схема не экспортируется', en: 'Graph cannot export' },
+    title: { ru: 'Сценарий нельзя сохранить', en: 'Flow cannot be saved' },
     cause: { ru: 'Внутренняя структура сценария невалидна.', en: 'Internal scenario structure is invalid.' },
     fix: { ru: 'Исправьте связи и точки входа (см. подсветку на холсте).', en: 'Fix links and entry points (see canvas highlights).' },
   }),
   GRAPH_COMPILE_GATE: def('error', 'GRAPH_COMPILE_GATE', {
     title: { ru: 'Схема не готова к запуску', en: 'Schema not ready to run' },
     cause: { ru: 'Есть блокирующие ошибки на холсте.', en: 'Blocking errors remain on the canvas.' },
-    fix: { ru: 'Откройте диагностику и исправьте пункты с красной меткой.', en: 'Open diagnostics and fix red items.' },
+    fix: { ru: 'Откройте проверку сценария и исправьте пункты с красной меткой.', en: 'Open flow review and fix red items.' },
   }),
   GRAPH_VALIDATION: def('error', 'GRAPH_VALIDATION', {
     title: { ru: 'Ошибка проверки схемы', en: 'Schema validation failed' },
@@ -284,7 +284,7 @@ const CATALOG = Object.freeze({
   schema_mismatch: def('error', 'schema_mismatch', {
     title: { ru: 'Устаревший формат проекта', en: 'Outdated project format' },
     cause: { ru: 'Файл или автосохранение повреждено.', en: 'File or autosave is corrupted.' },
-    fix: { ru: 'Сбросьте graph state или загрузите пример заново.', en: 'Reset graph state or reload an example.' },
+    fix: { ru: 'Сбросьте сценарий или загрузите пример заново.', en: 'Reset your flow or reload an example.' },
     actions: ['reset_graph'],
   }),
   registry_semantic: def('error', 'registry_semantic', {
@@ -301,7 +301,7 @@ const CATALOG = Object.freeze({
   runtime_dispatch_failed: def('error', 'runtime_dispatch_failed', {
     title: { ru: 'Не удалось применить изменение', en: 'Could not apply change' },
     cause: { ru: 'Редактор отклонил операцию.', en: 'The editor rejected the operation.' },
-    fix: { ru: 'Обновите страницу. Если повторится — сбросьте graph.', en: 'Refresh the page. If it persists, reset graph.' },
+    fix: { ru: 'Обновите страницу. Если повторится — сбросьте сценарий.', en: 'Refresh the page. If it persists, reset your flow.' },
   }),
   revision_conflict: def('warning', 'revision_conflict', {
     title: { ru: 'Конфликт версии схемы', en: 'Schema version conflict' },
@@ -311,7 +311,7 @@ const CATALOG = Object.freeze({
   UNKNOWN: def('error', 'UNKNOWN', {
     title: { ru: 'Нужно поправить схему', en: 'Schema needs fixes' },
     cause: { ru: 'Обнаружена проблема в связях или блоках.', en: 'A problem was found in links or blocks.' },
-    fix: { ru: 'Цепочка: Старт → Ответ → кнопки. Откройте диагностику.', en: 'Chain: Start → Reply → buttons. Open diagnostics.' },
+    fix: { ru: 'Цепочка: Старт → Ответ → кнопки. Нажмите «Проверить».', en: 'Chain: Start → Reply → buttons. Press «Check».' },
   }),
 });
 
@@ -324,8 +324,10 @@ export function sanitizeRawErrorText(text) {
   s = s.replace(/^(GRAPH_|IR_|VALIDATION_|CODEGEN_)[A-Z0-9_]+\s*:?\s*/i, '');
   s = s.replace(/\bedge_[a-zA-Z0-9_-]+:\s*/g, '');
   s = s.replace(/\bm_[a-zA-Z0-9_-]+:\s*/g, '');
-  s = s.replace(/\bNode\s+([a-zA-Z0-9_-]+)\s+\(/g, 'Блок «$1» (');
-  s = s.replace(/\bnode\s+([a-zA-Z0-9_-]+)\b/gi, 'блок');
+  s = s.replace(/\bNode\s+([a-zA-Z0-9_-]+)\s+\(/g, 'Шаг «$1» (');
+  s = s.replace(/\bnode\s+([a-zA-Z0-9_-]+)\b/gi, 'шаг');
+  s = s.replace(/\bgraph\b/gi, 'сценарий');
+  s = s.replace(/\bedge\b/gi, 'связь');
   return s.trim();
 }
 
@@ -579,16 +581,16 @@ export function groupGraphErrorsForDisplay(items, options = {}) {
     return [{
       code: 'corrupt_graph_shell',
       severity: 'error',
-      title: lang === 'en' ? 'Many blocks are disconnected' : 'Много несвязанных блоков',
+      title: lang === 'en' ? 'Many steps are disconnected' : 'Много несвязанных шагов',
       cause: lang === 'en'
-        ? 'The graph has no Start/Command entry or valid links between blocks.'
-        : 'В схеме нет «Старт»/«Команда» или рабочих связей между блоками.',
+        ? 'The flow has no Start/Command entry or valid links between steps.'
+        : 'В сценарии нет «Старт»/«Команда» или рабочих связей между шагами.',
       fix: lang === 'en'
-        ? 'Reset the graph, pick an example, or connect: Start → Reply → buttons.'
-        : 'Сбросьте graph, выберите пример или соберите цепочку: Старт → Ответ → кнопки.',
+        ? 'Reset the flow, pick an example, or connect: Start → Reply → buttons.'
+        : 'Сбросьте сценарий, выберите пример или соберите цепочку: Старт → Ответ → кнопки.',
       hint: lang === 'en'
-        ? 'Reset the graph, pick an example, or connect: Start → Reply → buttons.'
-        : 'Сбросьте graph, выберите пример или соберите цепочку: Старт → Ответ → кнопки.',
+        ? 'Reset the flow, pick an example, or connect: Start → Reply → buttons.'
+        : 'Сбросьте сценарий, выберите пример или соберите цепочку: Старт → Ответ → кнопки.',
       count,
       nodeIds: structuralOrphans.flatMap((e) => (e.nodeId ? [e.nodeId] : [])).slice(0, 24),
       edgeIds: [],

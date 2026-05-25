@@ -1,0 +1,196 @@
+/**
+ * Flow Editor — ManyChat-style infinite canvas workspace.
+ */
+
+.fe-workspace {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.fe-workspace__stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--fe-canvas-bg, #eef1f6);
+}
+
+.fe-canvas-host {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Host inside React Flow */
+.graph-flow-host.flow-editor-canvas {
+  width: 100%;
+  height: 100%;
+  background: var(--fe-canvas-bg, #eef1f6);
+}
+
+.graph-flow-host.flow-editor-canvas .react-flow {
+  background: transparent !important;
+}
+
+.graph-flow-host.flow-editor-canvas .react-flow__background {
+  opacity: 0.55;
+}
+
+/* Edge motion */
+.flow-editor-canvas .flow-bezier-edge--execution path.react-flow__edge-path,
+.flow-editor-canvas .flow-add-step-edge--execution path.react-flow__edge-path {
+  stroke: #2563eb !important;
+  stroke-width: 2px !important;
+}
+
+.flow-editor-canvas.fe-edges-animated .flow-bezier-edge--flow path.react-flow__edge-path {
+  stroke-dasharray: 6 4;
+  animation: fe-edge-flow 1.2s linear infinite;
+}
+
+@keyframes fe-edge-flow {
+  to { stroke-dashoffset: -20; }
+}
+
+/* Handles */
+.graph-flow-host.flow-editor-canvas .react-flow__handle {
+  width: 10px;
+  height: 10px;
+  border: 2px solid #fff;
+  background: #64748b;
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+
+.graph-flow-host.flow-editor-canvas .react-flow__handle:hover {
+  transform: scale(1.2);
+  background: #2563eb;
+}
+
+.graph-flow-host.flow-editor-canvas .react-flow__handle.connecting {
+  background: #2563eb;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.2);
+}
+
+/* Selection */
+.graph-flow-host.flow-editor-canvas .react-flow__node.selected .visual-node-card__surface {
+  box-shadow: var(--shadow-md), 0 0 0 2px var(--color-primary-border);
+}
+
+/* Toolbar */
+.fe-toolbar-panel {
+  margin: 0 !important;
+  pointer-events: none;
+}
+
+.fe-toolbar-panel > * {
+  pointer-events: auto;
+}
+
+.fe-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: var(--radius-lg, 12px);
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(12px);
+  transition: var(--motion-transition-hover);
+}
+
+.fe-toolbar__group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.fe-toolbar__group--layout {
+  gap: 4px;
+}
+
+.fe-toolbar__btn {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: #475569;
+  font-size: 15px;
+  cursor: pointer;
+  transition: var(--motion-transition-hover);
+}
+
+.fe-toolbar__btn:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.fe-toolbar__btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.fe-toolbar__btn--active {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.fe-toolbar__zoom {
+  min-width: 44px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #64748b;
+}
+
+.fe-toolbar__sep {
+  width: 1px;
+  height: 22px;
+  background: rgba(15, 23, 42, 0.1);
+  margin: 0 4px;
+}
+
+.fe-toolbar__select {
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  font-size: 11px;
+  font-family: inherit;
+  background: #fff;
+  color: #334155;
+}
+
+/* Minimap visibility */
+.graph-flow-host.flow-editor-canvas.fe-minimap-hidden .canvas-minimap {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.graph-flow-host.flow-editor-canvas.fe-grid-hidden .react-flow__background {
+  opacity: 0 !important;
+}
+
+/* Hide legacy zoom dock when flow toolbar active */
+.graph-flow-host.flow-editor-canvas .canvas-zoom-controls {
+  display: none;
+}
+
+.fe-inspector-hint {
+  font-size: 11px;
+  color: #94a3b8;
+  padding: 8px;
+}

@@ -19,6 +19,8 @@ export default function CanvasContextMenu({
   onFitFlow,
   onGroupSelection,
   onRemoveEdge,
+  onOpenCommandPalette,
+  onAddMessageAtPane,
 }) {
   const open = Boolean(menu);
   const anchorRef = useRef(null);
@@ -38,6 +40,8 @@ export default function CanvasContextMenu({
         fit: 'Fit to flow',
         group: 'Group selection',
         removeEdge: 'Remove connection',
+        palette: 'Command palette',
+        addMessage: 'Add message',
         selectAll: 'Select all',
       }
     : {
@@ -48,6 +52,8 @@ export default function CanvasContextMenu({
         fit: 'Вместить сценарий',
         group: 'Сгруппировать',
         removeEdge: 'Удалить связь',
+        palette: 'Палитра команд',
+        addMessage: 'Сообщение',
         selectAll: 'Выделить всё',
       };
 
@@ -144,6 +150,29 @@ export default function CanvasContextMenu({
             )}
             {menu?.type === 'pane' && (
               <>
+                {onOpenCommandPalette && (
+                  <DropdownMenu.Item
+                    className="mc-floating-menu__item"
+                    onSelect={() => {
+                      onOpenCommandPalette();
+                      onClose();
+                    }}
+                  >
+                    ⌘ {t.palette}
+                  </DropdownMenu.Item>
+                )}
+                {onAddMessageAtPane && (
+                  <DropdownMenu.Item
+                    className="mc-floating-menu__item"
+                    onSelect={() => {
+                      onAddMessageAtPane();
+                      onClose();
+                    }}
+                  >
+                    + {t.addMessage}
+                  </DropdownMenu.Item>
+                )}
+                <DropdownMenu.Separator className="mc-floating-menu__separator" />
                 {onFitFlow && (
                   <DropdownMenu.Item
                     className="mc-floating-menu__item"

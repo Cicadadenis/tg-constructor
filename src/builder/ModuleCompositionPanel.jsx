@@ -33,7 +33,7 @@ export function ModuleCompositionPanel({
       fixes: 'Авто-исправления',
       conflicts: 'Конфликты',
       suite: 'Собрать admin suite',
-      graph: 'Graph-модуль',
+      graph: 'Готовый модуль',
       legacy: 'Legacy DSL',
     },
     en: {
@@ -42,7 +42,7 @@ export function ModuleCompositionPanel({
       fixes: 'Auto-fixes',
       conflicts: 'Conflicts',
       suite: 'Compose admin suite',
-      graph: 'Graph module',
+      graph: 'Ready-made module',
       legacy: 'Legacy DSL',
     },
     uk: {
@@ -51,7 +51,7 @@ export function ModuleCompositionPanel({
       fixes: 'Авто-виправлення',
       conflicts: 'Конфлікти',
       suite: 'Зібрати admin suite',
-      graph: 'Graph-модуль',
+      graph: 'Готовый модуль',
       legacy: 'Legacy DSL',
     },
   };

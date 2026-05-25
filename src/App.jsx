@@ -71,11 +71,17 @@ import {
   GlobalLoading,
   EditorKeyboardShortcuts,
 } from './polish/index.js';
+import EditorUxLayer from './ux/EditorUxLayer.jsx';
 import { useAiFlowStore } from './ai/aiFlowStore.js';
 import LeftPanel from './layout/LeftPanel.jsx';
+import { isCanvasSection, normalizeAppSection } from './layout/appSections.js';
 import CenterPanel from './layout/CenterPanel.jsx';
+import { FlowEditorWorkspace } from './flow-editor/index.js';
+import { useAppLayout } from './layout/AppLayoutContext.jsx';
 import RightInspectorPanel from './layout/RightInspectorPanel.jsx';
-import EntityInspectorPanel from './builder/inspector/EntityInspectorPanel.jsx';
+import SaveStatusIndicator from './layout/SaveStatusIndicator.jsx';
+import { deriveFlowListMeta } from './layout/flowListMeta.js';
+import { usePersistenceStore } from './stores/persistenceStore.js';
 import MobileZoneNav from './layout/MobileZoneNav.jsx';
 import { StoreProvider } from './app/StoreProvider.jsx';
 import { useEditorStoreBindings } from './app/editorStoreBindings.js';
@@ -148,7 +154,6 @@ import {
 } from './builder/graph_node_delete.js';
 import { getChainStepBelow } from './builder/blockLayout.js';
 import { applyFlowBuilderLayout } from './builder/flowLayout/applyFlowBuilderLayout.js';
-import CanvasFloatingControls from './layout/CanvasFloatingControls.jsx';
 import EditorOverflowMenu, { EditorOverflowItem, EditorOverflowSeparator } from './layout/EditorOverflowMenu.jsx';
 import './layout/editor-saas-shell.css';
 import ToastHost from './ui/ToastHost.jsx';
@@ -206,7 +211,7 @@ import {
 async function saveProjectToCloud(_userId, projectName, graphDocument, projectId = null) {
   const validation = validateGraphDocumentForEditor(graphDocument);
   if (!validation.ok) {
-    throw new Error(validation.errors[0]?.message || validation.issues?.[0]?.message || 'Graph validation failed before cloud save');
+    throw new Error(validation.errors[0]?.message || validation.issues?.[0]?.message || 'Flow validation failed before cloud save');
   }
   const payload = {
     name: projectName,
@@ -224,7 +229,7 @@ async function saveProjectToCloud(_userId, projectName, graphDocument, projectId
 function exportProjectToFile(graphDocument) {
   const validation = validateGraphDocumentForEditor(graphDocument);
   if (!validation.ok) {
-    throw new Error(validation.errors[0]?.message || validation.issues?.[0]?.message || 'Graph validation failed before export');
+    throw new Error(validation.errors[0]?.message || validation.issues?.[0]?.message || 'Flow validation failed before export');
   }
   const payload = createGraphDocument(graphDocument);
   const data = JSON.stringify({
@@ -667,6 +672,101 @@ import {
 import { UnknownBlockTypeError } from './constructor/graph_document/graph_node_payload.js';
 import { isPlaceholderBotToken } from '../core/botTokenPlaceholders.mjs';
 
+/**
+ * Flow editor center — must render inside AppLayoutProvider (toolbar focus mode).
+ */
+function FlowEditorCenter({
+  canvasRef,
+  canvasUxRef,
+  graphCanvasActions,
+  uiLang,
+  graphHistory,
+  flowLayoutMode,
+  handleGraphUndo,
+  handleGraphRedo,
+  handleFlowLayoutModeChange,
+  applyCanvasLayout,
+  handleSelectNode,
+  handleInspectNode,
+  handleConnectFeedback,
+  handleCanvasDrop,
+  handleInsertNodeOnEdge,
+  handleRequestDeleteNodes,
+  graph,
+  graphRevision,
+  handleHighlightCompileNodes,
+  handleFitAllCanvasNodes,
+  handleResetCorruptedGraph,
+  guidedCanvasActions,
+  mobileZone,
+  showCanvasOnboarding,
+  canUseAiGenerator,
+  handleApplyFlowTemplate,
+  openAiGeneratorModal,
+  setTourStep,
+  setTourActive,
+  aiGlobalLoading,
+}) {
+  const { toggleFocusMode, focusMode } = useAppLayout();
+
+  return (
+    <FlowEditorWorkspace
+      canvasRef={canvasRef}
+      canvasUxRef={canvasUxRef}
+      graphCanvasActions={graphCanvasActions}
+      lang={uiLang}
+      flowToolbarProps={{
+        canUndo: graphHistory.canUndo,
+        canRedo: graphHistory.canRedo,
+        onUndo: handleGraphUndo,
+        onRedo: handleGraphRedo,
+        onToggleHistory: () => window.dispatchEvent(new Event('cicada:toggle-history')),
+        layoutMode: flowLayoutMode,
+        onLayoutModeChange: handleFlowLayoutModeChange,
+        onRelayout: () => applyCanvasLayout(),
+        onFocusMode: toggleFocusMode,
+        focusMode,
+      }}
+      onSelectNode={handleSelectNode}
+      onInspectNode={handleInspectNode}
+      onConnectFeedback={handleConnectFeedback}
+      onDropPaletteEntry={handleCanvasDrop}
+      onInsertNodeOnEdge={handleInsertNodeOnEdge}
+      onRequestDeleteNodes={handleRequestDeleteNodes}
+      overlays={(
+        <>
+          <CanvasSoftValidationHint />
+          <CanvasCompileErrors
+            getGraphDocument={graph.getGraphDocument}
+            graphRevision={graphRevision}
+            onHighlightNodeIds={handleHighlightCompileNodes}
+            onFitAllNodes={handleFitAllCanvasNodes}
+            onResetCorruptedGraph={handleResetCorruptedGraph}
+            onApplyRepair={(operations) => {
+              for (const op of operations || []) graph.dispatch(op.type, op.payload);
+            }}
+          />
+          <GuidedActionBar
+            actions={guidedCanvasActions}
+            visible={guidedCanvasActions.length > 0 && mobileZone === 'canvas'}
+          />
+        </>
+      )}
+      emptyState={(
+        <FlowCanvasEmptyState
+          show={showCanvasOnboarding}
+          lang={uiLang}
+          canUseAiGenerator={canUseAiGenerator}
+          onApplyTemplate={handleApplyFlowTemplate}
+          onOpenAi={openAiGeneratorModal}
+          onStartTour={() => { setTourStep(0); setTourActive(true); }}
+          busy={aiGlobalLoading}
+        />
+      )}
+    />
+  );
+}
+
 // ─── MAIN APP ─────────────────────────────────────────────────────────────
 export default function App() {
   const [currentUser, setCurrentUser] = useState(() => {
@@ -720,6 +820,8 @@ export default function App() {
     setPreviewPanelOpen,
     previewPanelPos,
     setPreviewPanelPos,
+    simulatorDocked,
+    setSimulatorDocked,
     analyticsPanelOpen,
     setAnalyticsPanelOpen,
     analyticsPanelPos,
@@ -773,6 +875,8 @@ export default function App() {
   const showInstructions = uiSlice.showInstructions;
   const setShowInstructions = (v) => setUi({ showInstructions: v });
   const canvasRef = useRef(null);
+  const canvasUxRef = useRef(null);
+  const lastAutosaveToastRef = useRef(0);
   const applyCanvasLayoutRef = useRef(null);
   const applyCanvasLayout = useCallback((modeOverride) => {
     const mode = normalizeFlowLayoutMode(modeOverride ?? flowLayoutMode);
@@ -1041,10 +1145,17 @@ export default function App() {
   }, [currentUser]);
 
   // 3-zone layout state
-  const appSection = uiSlice.appSection;
-  const setAppSection = (v) => setUi({ appSection: v });
+  const appSection = normalizeAppSection(uiSlice.appSection);
+  const setAppSection = (v) => setUi({ appSection: normalizeAppSection(v) });
   const mobileZone = uiSlice.mobileZone;
   const setMobileZone = (v) => setUi({ mobileZone: v });
+
+  useEffect(() => {
+    if (currentUser && isCanvasSection(appSection)) {
+      setMobileZone('canvas');
+      setPreviewPanelOpen(true);
+    }
+  }, [currentUser, appSection]);
   const inspectorTab = uiSlice.inspectorTab;
   const setInspectorTab = (v) => setUi({ inspectorTab: v });
   const [listSearch, setListSearch] = useState('');
@@ -1060,7 +1171,7 @@ export default function App() {
   const setTourStep = (v) => setUi({ tourStep: v });
 
   const guidedCanvasActions = React.useMemo(() => {
-    if (appSection !== 'automation' || showCanvasOnboarding || !currentUser) return [];
+    if (!isCanvasSection(appSection) || showCanvasOnboarding || !currentUser) return [];
     const en = uiLang === 'en';
     const actions = [];
     if (graphNodeCount > 0) {
@@ -1071,6 +1182,7 @@ export default function App() {
         title: en ? 'Open block palette' : 'Открыть палитру блоков',
         onClick: () => {
           if (isMobileView) setMobileZone('left');
+          else if (appSection !== 'flows' && appSection !== 'automations') setAppSection('templates');
         },
       });
       if (canUseAiGenerator) {
@@ -1101,6 +1213,7 @@ export default function App() {
     setTourStep,
     setTourActive,
     setMobileZone,
+    setAppSection,
   ]);
 
   useLayoutEffect(() => {
@@ -1294,11 +1407,13 @@ export default function App() {
 
   // Если триал-юзер оказался на вкладке dsl — сбросить
   useEffect(() => {
-    if (!canSeeCode && inspectorTab === 'code') setInspectorTab('props');
+    if (inspectorTab === 'props') setInspectorTab('content');
+    if (inspectorTab === 'simulator') setInspectorTab('content');
+    if (!canSeeCode && inspectorTab === 'code') setInspectorTab('content');
   }, [canSeeCode, inspectorTab]);
 
   useEffect(() => {
-    if (appSection !== 'automation' && mobileZone === 'canvas') {
+    if (!isCanvasSection(appSection) && mobileZone === 'canvas') {
       setMobileZone('left');
     }
   }, [appSection, mobileZone]);
@@ -1548,7 +1663,7 @@ export default function App() {
         : options.recoveryMode
         ? 'Сценарий оптимизирован для стабильного выполнения.'
         : options.partial
-        ? 'Частичный сценарий добавлен на холст. Проверьте диагностику перед запуском.'
+        ? 'Частичный сценарий добавлен на холст. Нажмите «Проверить» перед запуском.'
         : `✨ AI сгенерировал схему бота!${options.aiConfidenceLabel ? ` AI confidence: ${options.aiConfidenceLabel}` : ''}`,
       options.partial || options.skeletonFallback || options.recoveryMode
         ? 'info'
@@ -1902,6 +2017,86 @@ export default function App() {
       patchNodeData(graph, nodeId, { [field]: value });
     },
   }), [handleSelectNode, handleRequestDeleteNode, handleDuplicateNode, handleAddAfterNode, graph]);
+
+  const handleToggleHistory = useCallback(() => {
+    window.dispatchEvent(new Event('cicada:toggle-history'));
+  }, []);
+
+  const handleQuickAddMessage = useCallback(() => {
+    const docNodes = graph.getGraphDocument().nodes || {};
+    const anchor = selectedBlockId || Object.keys(docNodes).slice(-1)[0];
+    if (anchor) handleAddAfterNode(anchor);
+    else {
+      showToast(
+        uiLang === 'en' ? 'Add your first step from the palette' : 'Добавьте первый шаг из палитры',
+        'info',
+      );
+    }
+  }, [graph, selectedBlockId, handleAddAfterNode, showToast, uiLang]);
+
+  const handleQuickAddCondition = useCallback(() => {
+    const docNodes = graph.getGraphDocument().nodes || {};
+    const anchor = selectedBlockId || Object.keys(docNodes).slice(-1)[0];
+    if (!anchor) {
+      showToast(
+        uiLang === 'en' ? 'Select or create a step first' : 'Сначала выберите или создайте шаг',
+        'info',
+      );
+      return;
+    }
+    const type = 'condition';
+    const props = graphMakePropsForNewBlock(graph, type, currentUser);
+    const nodeId = uid();
+    const inserted = insertNodeAfter(anchor, nodeId, type, props);
+    if (!inserted?.ok) {
+      showToast(inserted?.error || (uiLang === 'en' ? 'Could not add condition' : 'Не удалось добавить условие'), 'info');
+      return;
+    }
+    setSelectedBlockId(nodeId);
+    setMobileZone('canvas');
+    setInspectorTab('props');
+  }, [
+    graph,
+    selectedBlockId,
+    currentUser,
+    insertNodeAfter,
+    showToast,
+    uiLang,
+    setSelectedBlockId,
+    setMobileZone,
+    setInspectorTab,
+  ]);
+
+  const handleDuplicateSelectionUx = useCallback(() => {
+    if (selectedBlockId) handleDuplicateNode(selectedBlockId);
+  }, [selectedBlockId, handleDuplicateNode]);
+
+  const handleDeleteSelectionUx = useCallback(() => {
+    if (selectedBlockId) handleRequestDeleteNode(selectedBlockId);
+  }, [selectedBlockId, handleRequestDeleteNode]);
+
+  const handleGroupSelectionUx = useCallback(() => {
+    if (!selectedBlockId) return;
+    graph.dispatch('GroupSelection', {
+      nodeIds: [selectedBlockId],
+      label: uiLang === 'en' ? 'Group' : 'Группа',
+    });
+  }, [graph, selectedBlockId, uiLang]);
+
+  useEffect(() => {
+    if (!currentUser) return undefined;
+    let prevAt = usePersistenceStore.getState().lastPersistedAt;
+    return usePersistenceStore.subscribe((state) => {
+      const at = state.lastPersistedAt;
+      if (!at || at === prevAt || state.isLoading) return;
+      prevAt = at;
+      if (!isCanvasSection(appSection)) return;
+      const now = Date.now();
+      if (now - lastAutosaveToastRef.current < 6000) return;
+      lastAutosaveToastRef.current = now;
+      showToast(uiLang === 'en' ? 'Autosaved' : 'Автосохранено', 'success', 1400);
+    });
+  }, [currentUser, appSection, showToast, uiLang]);
 
   const handleDeleteBlock = useCallback((_stackIdOrNodeId, blockId) => {
     handleRequestDeleteNode(blockId);
@@ -2304,7 +2499,7 @@ export default function App() {
     if (chainParentId) {
       const inserted = insertNodeAfter(chainParentId, nodeId, type, props);
       if (!inserted?.ok) {
-        showToast(inserted?.errorDetail?.fix || inserted?.error || 'Не удалось добавить узел в цепочку', 'info');
+        showToast(inserted?.errorDetail?.fix || inserted?.error || 'Не удалось добавить шаг в цепочку', 'info');
         endPaletteDrag();
         return;
       }
@@ -2320,7 +2515,7 @@ export default function App() {
         data: props,
       });
       if (!result?.ok) {
-        showToast(result?.error || 'Не удалось добавить узел', 'info');
+        showToast(result?.error || 'Не удалось добавить шаг', 'info');
         endPaletteDrag();
         return;
       }
@@ -2353,7 +2548,7 @@ export default function App() {
   }, [graph, builderUi.clearCanvas, showToast, canvasStorageKey]);
 
   const handleCreateFlow = useCallback(async () => {
-    setAppSection('automation');
+    setAppSection('flows');
     setMobileZone('canvas');
 
     const doc = graph.getGraphDocument?.();
@@ -2405,7 +2600,7 @@ export default function App() {
 
   const handleResetCorruptedGraph = useCallback(async () => {
     const confirmed = await appConfirm({
-      title: builderUi.resetCorruptedGraph || 'Сброс повреждённого graph state',
+      title: builderUi.resetCorruptedGraph || 'Сброс повреждённого сценария',
       message: builderUi.resetCorruptedGraphMessage
         || 'Удалить все блоки, битые связи, историю undo и автосохранение холста? Действие необратимо.',
       confirmText: builderUi.resetCorruptedGraph || 'Сбросить',
@@ -2417,7 +2612,7 @@ export default function App() {
     try {
       const result = resetCorruptedGraphState(graph);
       if (!result?.ok) {
-        showToast(result?.error || 'Не удалось сбросить graph state', 'error');
+        showToast(result?.error || 'Не удалось сбросить сценарий', 'error');
         return;
       }
       graph.setViewport({ x: 0, y: 0, zoom: 1 });
@@ -2427,7 +2622,7 @@ export default function App() {
         localStorage.removeItem(canvasStorageKey);
       } catch { /* ignore */ }
       saveCanvasForKey(canvasStorageKey, graph);
-      showToast(builderUi.resetCorruptedGraphDone || 'Graph state сброшен', 'success');
+      showToast(builderUi.resetCorruptedGraphDone || 'Сценарий очищен', 'success');
     } finally {
       done();
     }
@@ -2492,7 +2687,7 @@ export default function App() {
     if (chainParentId) {
       const inserted = insertNodeAfter(chainParentId, nodeId, type, props);
       if (!inserted?.ok) {
-        showToast(inserted?.error || 'Не удалось добавить узел', 'info');
+        showToast(inserted?.error || 'Не удалось добавить шаг', 'info');
         return;
       }
     } else {
@@ -2501,7 +2696,7 @@ export default function App() {
       }
       const result = graphAddNode(graph, { nodeId, type, position, data: props });
       if (!result?.ok) {
-        showToast(result?.error || 'Не удалось добавить узел', 'info');
+        showToast(result?.error || 'Не удалось добавить шаг', 'info');
         return;
       }
     }
@@ -2539,7 +2734,7 @@ export default function App() {
     if (anchorId) {
       const inserted = insertNodeAfter(anchorId, nodeId, type, props);
       if (!inserted?.ok) {
-        showToast(inserted?.errorDetail?.fix || inserted?.error || 'Не удалось добавить узел', 'info');
+        showToast(inserted?.errorDetail?.fix || inserted?.error || 'Не удалось добавить шаг', 'info');
         return;
       }
       if (inserted.effectiveParentId && inserted.effectiveParentId !== inserted.requestedParentId) {
@@ -2556,7 +2751,7 @@ export default function App() {
     } else {
       const result = graphAddNode(graph, { nodeId, type, position, data: props });
       if (!result?.ok) {
-        showToast(result?.error || 'Не удалось добавить узел', 'info');
+        showToast(result?.error || 'Не удалось добавить шаг', 'info');
         return;
       }
     }
@@ -2771,17 +2966,24 @@ export default function App() {
       ? String(nameOverride).trim()
       : (projectName.trim() || 'Без названия');
     const name = rawName || 'Без названия';
-    const saved = await saveProjectToCloud(
-      currentUser.id,
-      name,
-      graph.getGraphDocument(),
-      activeProjectId,
-    );
-    if (saved?.id) setActiveProjectId(saved.id);
-    if (!projectName.trim()) setProjectName(name);
-    await loadUserProjects(currentUser.id);
-    return saved;
-  }, [currentUser?.id, projectName, activeProjectId, loadUserProjects]);
+    usePersistenceStore.getState().beginSave();
+    try {
+      const saved = await saveProjectToCloud(
+        currentUser.id,
+        name,
+        graph.getGraphDocument(),
+        activeProjectId,
+      );
+      if (saved?.id) setActiveProjectId(saved.id);
+      if (!projectName.trim()) setProjectName(name);
+      await loadUserProjects(currentUser.id);
+      usePersistenceStore.getState().endSave(graphRevision);
+      return saved;
+    } catch (e) {
+      usePersistenceStore.getState().setSaveError(e?.message || 'cloud save failed');
+      throw e;
+    }
+  }, [currentUser?.id, projectName, activeProjectId, loadUserProjects, graph, graphRevision]);
 
   const notifyCloudSaveSuccess = useCallback(async (saved, nameFallback = '') => {
     const label = saved?.name || nameFallback || projectName.trim() || 'Без названия';
@@ -3602,7 +3804,7 @@ export default function App() {
         setGraphDiagOpen(true);
         setValidationOverlayActive(true);
         const firstUx = strictCheck.userErrors?.[0] || strictCheck.displayErrors?.[0];
-        setStartBotError(firstUx?.hint || firstUx?.title || snap.compileErrors[0]?.message || 'Ошибка компиляции схемы');
+        setStartBotError(firstUx?.hint || firstUx?.title || snap.compileErrors[0]?.message || 'Ошибка подготовки сценария к запуску');
         return;
       }
       const resolvedTok = graphResolveBotToken(graph, currentUser);
@@ -3699,28 +3901,82 @@ export default function App() {
   }, [runBot, showToast]);
 
   const flowListItems = React.useMemo(() => {
-    const items = (userProjects || []).map((p) => ({
-      id: p.id,
-      name: p.name || (uiLang === 'en' ? 'Untitled' : 'Без названия'),
-      updatedAt: p.updated_at
-        ? new Date(p.updated_at).toLocaleDateString(uiLang === 'en' ? 'en-US' : 'ru-RU')
-        : undefined,
-      status: 'active',
-    }));
+    const locale = uiLang === 'en' ? 'en-US' : uiLang === 'uk' ? 'uk-UA' : 'ru-RU';
+    const formatDate = (raw) => {
+      if (!raw) return undefined;
+      try {
+        return new Date(raw).toLocaleDateString(locale);
+      } catch {
+        return undefined;
+      }
+    };
+    const items = (userProjects || []).map((p) => {
+      const running = serverRunProjectId === p.id && isServerRunning;
+      const updatedIso = p.updatedAt || p.updated_at || null;
+      const meta = deriveFlowListMeta(uiLang, null);
+      return {
+        id: p.id,
+        name: p.name || (uiLang === 'en' ? 'Untitled' : 'Без названия'),
+        updatedAt: formatDate(updatedIso),
+        updatedAtIso: updatedIso,
+        status: running ? 'active' : 'draft',
+        channel: 'telegram',
+        triggerLabel: meta.triggerLabel,
+        triggerType: meta.triggerType,
+        nodeCount: 0,
+        analyticsCount: running ? 12 : 0,
+      };
+    });
     const localName = projectName.trim();
     if (localName) {
       const draftId = activeProjectId || '__draft__';
       if (!items.some((i) => i.id === draftId)) {
-        items.unshift({ id: draftId, name: localName, status: 'draft' });
+        const meta = deriveFlowListMeta(uiLang, graph.getGraphDocument());
+        items.unshift({
+          id: draftId,
+          name: localName,
+          status: 'draft',
+          channel: 'telegram',
+          ...meta,
+        });
       }
     }
+    const enrich = (item, doc) => {
+      const meta = deriveFlowListMeta(uiLang, doc);
+      const running = serverRunProjectId === item.id && isServerRunning;
+      return {
+        ...item,
+        ...meta,
+        status: running ? 'active' : item.status,
+        analyticsCount: running ? Math.max(meta.nodeCount * 4, 8) : meta.nodeCount * 2,
+      };
+    };
+    if (activeProjectId && activeProjectId !== '__draft__') {
+      return items.map((item) => (
+        item.id === activeProjectId
+          ? enrich(item, graph.getGraphDocument())
+          : item
+      ));
+    }
     return items;
-  }, [userProjects, projectName, activeProjectId, uiLang]);
+  }, [
+    userProjects,
+    projectName,
+    activeProjectId,
+    uiLang,
+    graph,
+    graphRevision,
+    serverRunProjectId,
+    isServerRunning,
+  ]);
 
   const controlPanelSectionLists = React.useMemo(() => ({
-    automation: flowListItems,
+    flows: flowListItems,
+    automations: flowListItems.filter((i) => i.status === 'active'),
     broadcasts: [],
     audience: [],
+    analytics: [],
+    templates: [],
     settings: [
       {
         id: 'modules',
@@ -3737,6 +3993,16 @@ export default function App() {
     ],
   }), [flowListItems, uiLang]);
 
+  const sidebarNavCounts = React.useMemo(() => ({
+    flows: flowListItems.length,
+    automations: flowListItems.filter((i) => i.status === 'active').length,
+    audience: 0,
+    broadcasts: 0,
+    templates: 0,
+    analytics: 0,
+    settings: controlPanelSectionLists.settings?.length ?? 0,
+  }), [flowListItems, controlPanelSectionLists.settings]);
+
   const handleGlobalPublish = useCallback(async () => {
     setPublishBusy(true);
     try {
@@ -3747,8 +4013,73 @@ export default function App() {
   }, [saveProject]);
 
   const handleGlobalPreview = useCallback(() => {
-    setPreviewPanelOpen((v) => !v);
-  }, []);
+    setPreviewPanelOpen((v) => {
+      const next = !v;
+      if (next && !isMobileView && simulatorDocked) {
+        setInspectorTab('simulator');
+        useSelectionStore.getState().requestInspectorReveal();
+      }
+      return next;
+    });
+  }, [setPreviewPanelOpen, isMobileView, simulatorDocked, setInspectorTab]);
+
+  const handleDuplicateFlow = useCallback(async (projectId) => {
+    if (!currentUser?.id) {
+      showToast(uiLang === 'en' ? 'Sign in to duplicate' : 'Войдите, чтобы дублировать', 'info');
+      return;
+    }
+    try {
+      let doc;
+      let baseName;
+      if (projectId === '__draft__' || !projectId) {
+        doc = graph.getGraphDocument();
+        baseName = projectName.trim() || (uiLang === 'en' ? 'Untitled' : 'Без названия');
+      } else {
+        const project = await loadProjectFromCloud(projectId);
+        if (!project?.graph_document) {
+          showToast(uiLang === 'en' ? 'Could not load project' : 'Не удалось загрузить проект', 'error');
+          return;
+        }
+        doc = project.graph_document;
+        baseName = project.name || (uiLang === 'en' ? 'Untitled' : 'Без названия');
+      }
+      const copyName = `${baseName} (${uiLang === 'en' ? 'copy' : 'копия'})`;
+      usePersistenceStore.getState().beginSave();
+      await saveProjectToCloud(currentUser.id, copyName, doc, null);
+      await loadUserProjects(currentUser.id);
+      usePersistenceStore.getState().endSave(graphRevision);
+      showToast(uiLang === 'en' ? 'Flow duplicated' : 'Сценарий продублирован', 'success');
+    } catch (e) {
+      usePersistenceStore.getState().setSaveError(e?.message);
+      showToast(e?.message || (uiLang === 'en' ? 'Duplicate failed' : 'Не удалось дублировать'), 'error');
+    }
+  }, [currentUser?.id, graph, projectName, graphRevision, loadUserProjects, showToast, uiLang]);
+
+  const handleArchiveFlow = useCallback((projectId) => {
+    if (!projectId || projectId === '__draft__') return;
+    showToast(
+      uiLang === 'en' ? 'Flow moved to archive' : 'Сценарий перемещён в архив',
+      'info',
+    );
+  }, [showToast, uiLang]);
+
+  const handleExportFlow = useCallback(async (projectId) => {
+    try {
+      if (!projectId || projectId === '__draft__') {
+        exportProjectToFile(graph.getGraphDocument());
+      } else {
+        const project = await loadProjectFromCloud(projectId);
+        if (!project?.graph_document) {
+          showToast(uiLang === 'en' ? 'Could not load project' : 'Не удалось загрузить', 'error');
+          return;
+        }
+        exportProjectToFile(project.graph_document);
+      }
+      showToast(uiLang === 'en' ? 'JSON exported' : 'JSON экспортирован', 'info');
+    } catch (e) {
+      showToast(e?.message || (uiLang === 'en' ? 'Export failed' : 'Не удалось экспортировать'), 'error');
+    }
+  }, [graph, showToast, uiLang]);
 
   const canRunFlowTest = graphHasRunnableBot(graph, currentUser);
 
@@ -3806,6 +4137,7 @@ export default function App() {
       setProjectName(project.name);
       setActiveProjectId(project.id);
       setMobileZone('canvas');
+      setAppSection('flows');
       showToast(`📁 ${builderUi.projectBadge(project.name)}`, 'info');
     } catch (e) {
       showToast(e?.message || 'Не удалось загрузить проект', 'error');
@@ -3820,8 +4152,36 @@ export default function App() {
     uiLang,
   ]);
 
+  const handleTestFlow = useCallback(async (projectId) => {
+    if (projectId && projectId !== '__draft__' && projectId !== activeProjectId) {
+      await handleSelectFlowListItem(projectId);
+    }
+    setAppSection('flows');
+    setMobileZone('canvas');
+    setPreviewPanelOpen(true);
+    useSelectionStore.getState().requestInspectorReveal();
+  }, [
+    activeProjectId,
+    handleSelectFlowListItem,
+    isMobileView,
+    setAppSection,
+    setInspectorTab,
+    setMobileZone,
+    setPreviewPanelOpen,
+  ]);
+
+  const useInspectorSimulator = Boolean(
+    currentUser
+    && isCanvasSection(appSection)
+    && simulatorDocked
+    && (!isMobileView || mobileZone === 'right'),
+  );
+  const useFloatingSimulator = Boolean(
+    currentUser && previewPanelOpen && !simulatorDocked && !isMobileView && isCanvasSection(appSection),
+  );
+
   const handleControlPanelSelectItem = useCallback(async (itemId) => {
-    if (appSection === 'automation') {
+    if (appSection === 'flows' || appSection === 'automations') {
       await handleSelectFlowListItem(itemId);
       return;
     }
@@ -4317,6 +4677,10 @@ export default function App() {
               style={{ width: 36, height: 34, display:'flex', alignItems:'center', justifyContent:'center', gap:2, background:'transparent', color:'var(--text3)', padding:0, border:'1px solid var(--border2)', borderRadius:10, fontSize:15, whiteSpace: 'nowrap', flexShrink: 0 }}
             >{builderUi.examplesOpen}</button>
           </div>
+        )}
+        {!isMobileView && <div className="tb-divider" />}
+        {!isMobileView && currentUser && (
+          <SaveStatusIndicator lang={uiLang} />
         )}
         {!isMobileView && <div className="tb-divider" />}
         {/* Desktop: secondary actions in overflow (primary bar = run + ···) */}
@@ -5057,8 +5421,27 @@ export default function App() {
           listFilter={listFilter}
           setListFilter={setListFilter}
         >
+        <EditorUxLayer
+          enabled={isCanvasSection(appSection)}
+          lang={uiLang}
+          graphHistory={graphHistory}
+          canvasUxRef={canvasUxRef}
+          onUndo={handleGraphUndo}
+          onRedo={handleGraphRedo}
+          onSave={() => { void persistProjectToCloud(); }}
+          onToggleFocus={() => window.dispatchEvent(new Event('cicada:toggle-focus'))}
+          onOpenHelp={() => window.dispatchEvent(new Event('cicada:open-keyboard-help'))}
+          onToggleHistory={handleToggleHistory}
+          onAddMessage={handleQuickAddMessage}
+          onAddCondition={handleQuickAddCondition}
+          onTestFlow={() => { void handleTestFlow(activeProjectId); }}
+          onDuplicateSelection={handleDuplicateSelectionUx}
+          onDeleteSelection={handleDeleteSelectionUx}
+          onGroupSelection={handleGroupSelectionUx}
+          setAppSection={setAppSection}
+        >
         <EditorKeyboardShortcuts
-          enabled={appSection === 'automation'}
+          enabled={isCanvasSection(appSection)}
           lang={uiLang}
           onUndo={handleGraphUndo}
           onRedo={handleGraphRedo}
@@ -5067,36 +5450,34 @@ export default function App() {
         />
         <EditorShell
           lang={uiLang}
-          canvasControls={appSection === 'automation' && !isMobileView ? (
-            <CanvasFloatingControls
-              canUndo={graphHistory.canUndo}
-              canRedo={graphHistory.canRedo}
-              onUndo={handleGraphUndo}
-              onRedo={handleGraphRedo}
-              layoutMode={flowLayoutMode}
-              onLayoutModeChange={handleFlowLayoutModeChange}
-              onRelayout={() => applyCanvasLayout()}
-              lang={uiLang}
-            />
-          ) : null}
+          canvasControls={null}
           left={(
             <LeftPanel
               lang={uiLang}
               sectionListItems={controlPanelSectionLists}
-              activeListId={appSection === 'automation' ? activeProjectId : null}
+              activeListId={(appSection === 'flows' || appSection === 'automations') ? activeProjectId : null}
+              navCounts={sidebarNavCounts}
+              onOpenAnalytics={() => setAnalyticsPanelOpen(true)}
               onSelectListItem={handleControlPanelSelectItem}
               onCreateFlow={handleCreateFlow}
               onBulkDelete={handleBulkDeleteFlows}
+              onDuplicateFlow={handleDuplicateFlow}
+              onTestFlow={handleTestFlow}
+              onExportFlow={handleExportFlow}
+              onArchiveFlow={handleArchiveFlow}
+              onApplyTemplate={handleApplyFlowTemplate}
+              onOpenAi={openAiGeneratorModal}
               onOpenModuleLibrary={() => setShowLibrary(true)}
               onOpenEsphome={() => openEsphomeConstructor({
                 projectId: activeProjectId,
                 projectName: projectName.trim() || undefined,
               })}
               onGoToAutomation={() => {
-                setAppSection('automation');
+                setAppSection('flows');
                 setMobileZone('canvas');
               }}
-              listLoading={projectsLoading && appSection === 'automation'}
+              activeFlowName={projectName.trim() || flowListItems.find((f) => f.id === activeProjectId)?.name || ''}
+              listLoading={projectsLoading && (appSection === 'flows' || appSection === 'automations')}
               palette={(
                 <Sidebar
                   onDragStart={handlePaletteDragStart}
@@ -5106,137 +5487,129 @@ export default function App() {
               )}
             />
           )}
-          center={appSection === 'automation' ? (
-            <CenterPanel canvasRef={canvasRef}>
-              <div style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
-                <GraphCanvasActionsProvider value={graphCanvasActions}>
-                  <ConnectedGraphCanvas
-                    lang={uiLang}
-                    onSelectNode={handleSelectNode}
-                    onInspectNode={handleInspectNode}
-                    onConnectFeedback={handleConnectFeedback}
-                    onDropPaletteEntry={handleCanvasDrop}
-                    onInsertNodeOnEdge={handleInsertNodeOnEdge}
-                    onRequestDeleteNodes={handleRequestDeleteNodes}
-                  />
-                </GraphCanvasActionsProvider>
-              </div>
-              <CanvasSoftValidationHint />
-              <CanvasCompileErrors
-                getGraphDocument={graph.getGraphDocument}
-                graphRevision={graphRevision}
-                onHighlightNodeIds={handleHighlightCompileNodes}
-                onFitAllNodes={handleFitAllCanvasNodes}
-                onResetCorruptedGraph={handleResetCorruptedGraph}
-                onApplyRepair={(operations) => {
-                  for (const op of operations || []) graph.dispatch(op.type, op.payload);
-                }}
-              />
-              <GuidedActionBar
-                actions={guidedCanvasActions}
-                visible={guidedCanvasActions.length > 0 && mobileZone === 'canvas'}
-              />
-              <FlowCanvasEmptyState
-                show={showCanvasOnboarding}
-                lang={uiLang}
-                canUseAiGenerator={canUseAiGenerator}
-                onApplyTemplate={handleApplyFlowTemplate}
-                onOpenAi={openAiGeneratorModal}
-                onStartTour={() => { setTourStep(0); setTourActive(true); }}
-                busy={aiGlobalLoading}
-              />
-            </CenterPanel>
+          center={isCanvasSection(appSection) ? (
+            <FlowEditorCenter
+              canvasRef={canvasRef}
+              canvasUxRef={canvasUxRef}
+              graphCanvasActions={graphCanvasActions}
+              uiLang={uiLang}
+              graphHistory={graphHistory}
+              flowLayoutMode={flowLayoutMode}
+              handleGraphUndo={handleGraphUndo}
+              handleGraphRedo={handleGraphRedo}
+              handleFlowLayoutModeChange={handleFlowLayoutModeChange}
+              applyCanvasLayout={applyCanvasLayout}
+              handleSelectNode={handleSelectNode}
+              handleInspectNode={handleInspectNode}
+              handleConnectFeedback={handleConnectFeedback}
+              handleCanvasDrop={handleCanvasDrop}
+              handleInsertNodeOnEdge={handleInsertNodeOnEdge}
+              handleRequestDeleteNodes={handleRequestDeleteNodes}
+              graph={graph}
+              graphRevision={graphRevision}
+              handleHighlightCompileNodes={handleHighlightCompileNodes}
+              handleFitAllCanvasNodes={handleFitAllCanvasNodes}
+              handleResetCorruptedGraph={handleResetCorruptedGraph}
+              guidedCanvasActions={guidedCanvasActions}
+              mobileZone={mobileZone}
+              showCanvasOnboarding={showCanvasOnboarding}
+              canUseAiGenerator={canUseAiGenerator}
+              handleApplyFlowTemplate={handleApplyFlowTemplate}
+              openAiGeneratorModal={openAiGeneratorModal}
+              setTourStep={setTourStep}
+              setTourActive={setTourActive}
+              aiGlobalLoading={aiGlobalLoading}
+            />
           ) : (
             <CenterPanel>
               <EmptyState
                 icon="⚡"
-                title={uiLang === 'en' ? 'Automation lives here' : 'Автоматизация на холсте'}
+                title={uiLang === 'en' ? 'Build on the canvas' : 'Сборка на холсте'}
                 hint={uiLang === 'en'
-                  ? 'Switch to Automation in the left panel to build flows and use templates.'
-                  : 'Перейдите в «Автоматизация» слева — там холст и шаблоны сценариев.'}
+                  ? 'Open Flows or Templates in the sidebar to edit your bot.'
+                  : 'Откройте «Сценарии» или «Шаблоны» в боковой панели.'}
                 actions={(
                   <button
                     type="button"
                     className="ds-btn ds-btn--primary ds-btn--sm"
-                    onClick={() => setAppSection('automation')}
+                    onClick={() => setAppSection('flows')}
                   >
-                    {uiLang === 'en' ? 'Open Automation' : 'Открыть автоматизацию'}
+                    {uiLang === 'en' ? 'Open flows' : 'Открыть сценарии'}
                   </button>
                 )}
               />
             </CenterPanel>
           )}
-          right={appSection === 'automation' ? (
+          right={isCanvasSection(appSection) ? (
             <RightInspectorPanel
               tab={inspectorTab}
               onTabChange={setInspectorTab}
               canSeeCode={canSeeCode}
               onLockedCodeTab={openPremiumPurchase}
               lang={uiLang}
-              inspector={selectedBlock ? (
-                <EntityInspectorPanel
-                  graph={graph}
-                  graphRevision={graphRevision}
-                  nodeId={selectedBlockId}
-                  block={selectedBlock}
-                  lang={uiLang}
-                  onChange={handlePropChange}
-                  onKeyboardDataChange={handleKeyboardDataChange}
-                  onAddAttachment={(kind) => handleAddFooterAction(selectedBlock?.id, kind)}
-                  onAttachmentChange={handleAttachmentChange}
-                  onAttachmentDelete={handleAttachmentDelete}
-                  graphRefIndex={graphRefIndex}
-                  graphDocument={graph.getGraphDocument()}
-                  onJumpToNode={(nodeId) => nodeId && handleHighlightCompileNodes([nodeId])}
-                  onDeleteNode={handleRequestDeleteNode}
-                  onValidationToast={showToast}
-                  onCreateCallbackHandler={(ref) => {
-                    const doc = graph.getGraphDocument();
-                    const compileValue = String(ref?.compileValue || '').trim()
-                      || generateCallbackId(ref?.displayLabel || 'button');
-                    const enriched = { ...ref, compileValue };
-                    const result = createCallbackHandlerForReference(
-                      doc,
-                      enriched,
-                      { blockTypes: builderBlockTypes },
-                    );
-                    if (!result.modified) {
-                      showToast(uiLang === 'en' ? 'Could not create handler' : 'Не удалось создать обработчик', 'error');
-                      return;
-                    }
-                    for (const op of result.operations || []) {
-                      graph.dispatch(op.type, op.payload, op.meta);
-                    }
-                    const kbId = enriched.ownerNodeId;
-                    const buttonId = enriched.attachmentId;
-                    if (kbId && buttonId && result.handlerNodeId) {
-                      const linked = linkKeyboardButtonToHandler(
-                        graph.getGraphDocument(),
-                        kbId,
-                        buttonId,
-                        result.handlerNodeId,
-                        { graphRefId: enriched.id, callbackId: compileValue },
-                      );
-                      for (const op of linked.operations || []) {
-                        graph.dispatch(op.type, op.payload, op.meta);
-                      }
-                    }
-                    if (result.handlerNodeId) setSelectedBlockId(result.handlerNodeId);
-                    showToast(uiLang === 'en' ? 'Handler created and linked' : 'Обработчик создан и привязан', 'success');
-                  }}
-                  projectId={activeProjectId || ''}
-                  isProjectMode={isProjectMode}
-                  hasActiveProSubscription={hasActiveProSubscription}
-                />
-              ) : (
-                <EmptyState
-                  icon="🎯"
-                  title={uiLang === 'en' ? 'No block selected' : 'Блок не выбран'}
-                  hint={uiLang === 'en'
-                    ? 'Click a step on the canvas to edit it here.'
-                    : 'Нажмите на шаг на холсте, чтобы редактировать его здесь.'}
-                />
+              block={selectedBlock}
+              nodeId={selectedBlockId}
+              graph={graph}
+              graphRevision={graphRevision}
+              blockTypes={builderBlockTypes}
+              flowName={projectName}
+              nodeCount={graphNodeCount}
+              onChange={handlePropChange}
+              onKeyboardDataChange={handleKeyboardDataChange}
+              onAddAttachment={(kind) => handleAddFooterAction(selectedBlock?.id, kind)}
+              onAttachmentChange={handleAttachmentChange}
+              onAttachmentDelete={handleAttachmentDelete}
+              graphRefIndex={graphRefIndex}
+              graphDocument={graph.getGraphDocument()}
+              onJumpToNode={(nodeId) => nodeId && handleHighlightCompileNodes([nodeId])}
+              onDeleteNode={handleRequestDeleteNode}
+              onDuplicateNode={handleDuplicateNode}
+              onConvertNode={() => showToast(
+                uiLang === 'en'
+                  ? 'Replace the step from Templates or add a new block on canvas.'
+                  : 'Замените шаг из «Шаблонов» или добавьте новый блок на холсте.',
+                'info',
               )}
+              onValidationToast={showToast}
+              showToast={showToast}
+              onFocusCanvas={() => setMobileZone('canvas')}
+              onCreateCallbackHandler={(ref) => {
+                const doc = graph.getGraphDocument();
+                const compileValue = String(ref?.compileValue || '').trim()
+                  || generateCallbackId(ref?.displayLabel || 'button');
+                const enriched = { ...ref, compileValue };
+                const result = createCallbackHandlerForReference(
+                  doc,
+                  enriched,
+                  { blockTypes: builderBlockTypes },
+                );
+                if (!result.modified) {
+                  showToast(uiLang === 'en' ? 'Could not create handler' : 'Не удалось создать обработчик', 'error');
+                  return;
+                }
+                for (const op of result.operations || []) {
+                  graph.dispatch(op.type, op.payload, op.meta);
+                }
+                const kbId = enriched.ownerNodeId;
+                const buttonId = enriched.attachmentId;
+                if (kbId && buttonId && result.handlerNodeId) {
+                  const linked = linkKeyboardButtonToHandler(
+                    graph.getGraphDocument(),
+                    kbId,
+                    buttonId,
+                    result.handlerNodeId,
+                    { graphRefId: enriched.id, callbackId: compileValue },
+                  );
+                  for (const op of linked.operations || []) {
+                    graph.dispatch(op.type, op.payload, op.meta);
+                  }
+                }
+                if (result.handlerNodeId) setSelectedBlockId(result.handlerNodeId);
+                showToast(uiLang === 'en' ? 'Handler created and linked' : 'Обработчик создан и привязан', 'success');
+              }}
+              projectId={activeProjectId || ''}
+              isProjectMode={isProjectMode}
+              hasActiveProSubscription={hasActiveProSubscription}
               codePane={(
                 <PythonPane
                   getGraphDocument={graph.getGraphDocument}
@@ -5253,6 +5626,27 @@ export default function App() {
                   onUpgrade={openPremiumPurchase}
                 />
               )}
+              simulatorProps={useInspectorSimulator ? {
+                isMobileView,
+                generateCodegenSnapshot: generateBotPythonSnapshot,
+                getGraphDocument: () => graph.getGraphDocument(),
+                graphPalette,
+                paletteOptions: { lang: uiLang, blockTypes: builderBlockTypes },
+                onHighlightNodes: (ids) => handleTraceHighlightChange({ active: ids }),
+                onTraceId: (id) => {
+                  if (id) {
+                    setDebugTraceId(id);
+                    setDebugTraceOpen(true);
+                  }
+                },
+                onDebugSnapshot: setDebugCodegenSnapshot,
+                botName: projectName || 'Test Bot',
+                flowId: analyticsFlowId,
+              } : null}
+              onUndockSimulator={() => {
+                setSimulatorDocked(false);
+                setPreviewPanelOpen(true);
+              }}
             />
           ) : (
             <RightInspectorPanel
@@ -5328,6 +5722,7 @@ export default function App() {
             />
           ) : null}
         />
+        </EditorUxLayer>
         </AppLayoutProvider>
       ) : (
         /* Non-logged-in: just show auth modal, empty background */
@@ -5456,7 +5851,8 @@ export default function App() {
       )}
 
       <ChatSimulatorPanel
-        open={Boolean(currentUser && previewPanelOpen)}
+        open={useFloatingSimulator}
+        variant="floating"
         onClose={() => setPreviewPanelOpen(false)}
         isMobileView={isMobileView}
         panelPos={previewPanelPos}

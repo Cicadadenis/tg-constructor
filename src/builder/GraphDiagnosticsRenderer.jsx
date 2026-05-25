@@ -7,16 +7,16 @@ const ACTION_LABELS = {
     remove_edge: 'Удалить битую связь',
     repair_callbacks: 'Создать обработчики',
     auto_repair: 'Исправить',
-    reset_graph: 'Сбросить graph',
-    show_all_nodes: 'Показать все блоки',
+    reset_graph: 'Сбросить сценарий',
+    show_all_nodes: 'Показать все шаги',
   },
   en: {
     jump: 'Go to issue',
     remove_edge: 'Remove broken link',
     repair_callbacks: 'Create handlers',
     auto_repair: 'Fix',
-    reset_graph: 'Reset graph',
-    show_all_nodes: 'Show all blocks',
+    reset_graph: 'Reset flow',
+    show_all_nodes: 'Show all steps',
   },
 };
 

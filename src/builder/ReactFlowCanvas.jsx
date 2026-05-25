@@ -12,7 +12,11 @@
  *  - onNodeDoubleClick opens the schema-driven inspector
  */
 
-import { memo, Profiler, useCallback, useEffect, useMemo, useRef } from 'react';
+import { memo, Profiler, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
+import CanvasSnapGuides from '../ux/CanvasSnapGuides.jsx';
+import HistoryTimeline from '../ux/HistoryTimeline.jsx';
+import { useGraphStore } from '../stores/graphStore.js';
 import { useGraphCanvasActions } from './graphCanvasActionsContext.jsx';
 import { useCanvasInteractions } from './canvas/useCanvasInteractions.js';
 import { useBatchedProjectionSync } from '../performance/useBatchedProjectionSync.js';
@@ -26,6 +30,7 @@ import CanvasEnhancedMinimap from './canvas/CanvasEnhancedMinimap.jsx';
 import {
   ReactFlow,
   Background,
+  Panel,
   useNodesState,
   useEdgesState,
   ReactFlowProvider,
@@ -33,15 +38,16 @@ import {
   useStore,
   BackgroundVariant,
 } from '@xyflow/react';
+import FlowToolbar from '../flow-editor/FlowToolbar.jsx';
+import { useCanvasStateStore } from '../flow-editor/stores/canvasStateStore.js';
+import { nodeTypes as NODE_TYPES } from '../flow-editor/registry/nodeRegistry.js';
+import { edgeTypes as EDGE_TYPES, edgeDefaults as EDGE_DEFAULTS } from '../flow-editor/registry/edgeRenderer.js';
 import '@xyflow/react/dist/style.css';
 import './graph_canvas.css';
 import './flowEdge/flow-add-step.css';
 import './canvas/canvas-chrome.css';
 import './canvas/canvas-interaction.css';
 import './visualNodes/visual-node-card.css';
-import CicadaNode from '../CicadaNode.jsx';
-import FlowAddStepEdge from './flowEdge/FlowAddStepEdge.jsx';
-import FlowBezierEdge from './flowEdge/FlowBezierEdge.jsx';
 import CanvasZoomControls from './canvas/CanvasZoomControls.jsx';
 import { buildCanvasEdgePresentation, resolveExecutionPathEdgeIds } from './canvas/canvasEdgeStyles.js';
 import { FlowEdgePickerHost, useFlowEdgePicker } from './flowEdge/FlowEdgePickerHost.jsx';
@@ -62,17 +68,6 @@ import { normalizeConnectionError } from './graph_error_messages.js';
 import { computeViewportForNodes } from '../constructor/graph_document/graph_viewport.js';
 
 
-const NODE_TYPES = Object.freeze({ cicada: CicadaNode });
-const EDGE_TYPES = Object.freeze({
-  flowAdd: FlowAddStepEdge,
-  flowBezier: FlowBezierEdge,
-});
-
-const EDGE_DEFAULTS = Object.freeze({
-  type: 'flowBezier',
-  style: { stroke: 'var(--color-border-strong)', strokeWidth: 1.5 },
-  animated: false,
-});
 
 function applyEdgeDefaults(edges, document, highlight = {}) {
   const repairedIds = new Set(highlight.repairedEdgeIds || []);
@@ -132,17 +127,24 @@ function applyEdgeDefaults(edges, document, highlight = {}) {
   });
 }
 
-function enrichEdgesWithPicker(edges, picker) {
-  if (!picker?.openPicker) return edges;
-  return edges.map((edge) => ({
-    ...edge,
-    data: {
-      ...edge.data,
-      onOpenPicker: picker.openPicker,
-      pickerOpen: picker.activeEdgeId === edge.id,
-      lang: picker.lang,
-    },
-  }));
+function enrichEdgesWithPicker(edges, picker, hoveredEdgeId = null) {
+  return edges.map((edge) => {
+    const withPicker = picker?.openPicker
+      ? {
+        ...edge,
+        data: {
+          ...edge.data,
+          onOpenPicker: picker.openPicker,
+          pickerOpen: picker.activeEdgeId === edge.id,
+          lang: picker.lang,
+        },
+      }
+      : edge;
+    if (!hoveredEdgeId) return withPicker;
+    const hoverClass = withPicker.id === hoveredEdgeId ? 'is-hovered' : '';
+    const className = [withPicker.className, hoverClass].filter(Boolean).join(' ').trim();
+    return className === withPicker.className ? withPicker : { ...withPicker, className };
+  });
 }
 
 /**
@@ -172,12 +174,20 @@ function GraphFlowInner({
   onDropPaletteEntry,
   onRequestDeleteNodes,
   paletteDragEntry = null,
+  flowToolbarProps = null,
+  flowEditorChrome = true,
+  canvasUxRef = null,
 }) {
   const graphCanvasActions = useGraphCanvasActions();
   const edgePicker = useFlowEdgePicker();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const { setViewport, screenToFlowPosition, setCenter, getViewport } = useReactFlow();
+  const { setViewport, screenToFlowPosition, setCenter, getViewport, zoomIn, zoomOut } = useReactFlow();
+  const showMinimap = useCanvasStateStore((s) => s.showMinimap);
+  const showGrid = useCanvasStateStore((s) => s.showGrid);
+  const edgeAnimations = useCanvasStateStore((s) => s.edgeAnimations);
+  const setViewportActions = useCanvasStateStore((s) => s.setViewportActions);
+  const setZoomPercent = useCanvasStateStore((s) => s.setZoomPercent);
   const canvasFocusRequest = useSelectionStore((s) => s.canvasFocusRequest);
   const rfVpX = useStore((s) => s.transform[0]);
   const rfVpY = useStore((s) => s.transform[1]);
@@ -242,28 +252,24 @@ function GraphFlowInner({
     (edgeList, doc, highlight) => applyEdgeDefaults(edgeList, doc, highlight),
     [],
   );
-  const enrichEdgesFn = useCallback(
-    (edgeList, picker) => enrichEdgesWithPicker(edgeList, picker),
-    [],
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const graphRevision = projection?.metadata?.revision ?? 0;
+  const graphHistory = useGraphStore(useShallow((s) => ({
+    canUndo: s.canUndo,
+    canRedo: s.canRedo,
+    cursor: s.historyCursor,
+  })));
+
+  const historyEntries = useMemo(
+    () => graph.getHistoryEntries?.() ?? [],
+    [graph, graphRevision],
   );
 
-  useBatchedProjectionSync({
-    projection,
-    graph,
-    selectedBlockId,
-    repairHighlightNodeIds,
-    repairHighlightEdgeIds,
-    highlightKind,
-    edgePicker,
-    setNodes,
-    setEdges,
-    draggingRef,
-    lastRevRef,
-    viewport: rfViewport,
-    canvasSize,
-    applyEdgeDefaultsFn,
-    enrichEdgesFn,
-  });
+  useEffect(() => {
+    const toggle = () => setHistoryOpen((v) => !v);
+    window.addEventListener('cicada:toggle-history', toggle);
+    return () => window.removeEventListener('cicada:toggle-history', toggle);
+  }, []);
 
   useEffect(() => {
     const nodeCount = projection?.nodes?.length ?? 0;
@@ -432,6 +438,8 @@ function GraphFlowInner({
     closeContextMenu,
     fitToFlow,
     groupSelectedNodes,
+    snapGuides,
+    hoveredEdgeId,
   } = useCanvasInteractions({
     graph,
     setNodes,
@@ -445,6 +453,86 @@ function GraphFlowInner({
     lastViewportRef,
     persistViewport,
   });
+
+  const enrichEdgesFn = useCallback(
+    (edgeList, picker) => enrichEdgesWithPicker(edgeList, picker, hoveredEdgeId),
+    [hoveredEdgeId],
+  );
+
+  useBatchedProjectionSync({
+    projection,
+    graph,
+    selectedBlockId,
+    repairHighlightNodeIds,
+    repairHighlightEdgeIds,
+    highlightKind,
+    edgePicker,
+    setNodes,
+    setEdges,
+    draggingRef,
+    lastRevRef,
+    viewport: rfViewport,
+    canvasSize,
+    applyEdgeDefaultsFn,
+    enrichEdgesFn,
+  });
+
+  useEffect(() => {
+    if (!canvasUxRef) return undefined;
+    canvasUxRef.current = {
+      fit: fitToFlow,
+      toggleHistory: () => setHistoryOpen((v) => !v),
+    };
+    return () => {
+      if (canvasUxRef.current) canvasUxRef.current = null;
+    };
+  }, [canvasUxRef, fitToFlow]);
+
+  const flashRevRef = useRef(null);
+  useEffect(() => {
+    const host = flowHostRef.current;
+    if (!host) return undefined;
+    const prev = flashRevRef.current;
+    if (prev != null && prev !== graphRevision) {
+      host.classList.add('graph-flow-host--flash');
+      const t = window.setTimeout(() => host.classList.remove('graph-flow-host--flash'), 450);
+      flashRevRef.current = graphRevision;
+      return () => window.clearTimeout(t);
+    }
+    flashRevRef.current = graphRevision;
+    return undefined;
+  }, [graphRevision]);
+
+  const handleJumpHistory = useCallback((targetCursor) => {
+    graph.jumpToHistoryCursor?.(targetCursor);
+  }, [graph]);
+
+  const openCommandPalette = useCallback(() => {
+    window.dispatchEvent(new Event('cicada:open-command-palette'));
+  }, []);
+
+  const handleAddMessageAtPane = useCallback(() => {
+    const docNodes = graph.getGraphDocument().nodes || {};
+    const anchor = selectedBlockId
+      || nodes.find((n) => n.selected)?.id
+      || Object.keys(docNodes).slice(-1)[0];
+    if (anchor) graphCanvasActions?.onAddAfterNode?.(anchor);
+  }, [graph, selectedBlockId, nodes, graphCanvasActions]);
+
+  useEffect(() => {
+    setViewportActions({
+      fit: () => fitToFlow(),
+      zoomIn: () => zoomIn({ duration: 180 }),
+      zoomOut: () => zoomOut({ duration: 180 }),
+      reset: () => fitToFlow(),
+    });
+    return () => setViewportActions(null);
+  }, [fitToFlow, zoomIn, zoomOut, setViewportActions]);
+
+  useEffect(() => {
+    const pct = Math.round((rfVpZoom || 1) * 100);
+    setZoomPercent(pct);
+  }, [rfVpZoom, setZoomPercent]);
 
   // Live drag preview: forbid invalid connections at the React Flow level.
   const isValidConnection = useCallback(
@@ -645,10 +733,20 @@ function GraphFlowInner({
   const onlyRenderVisible = nodeCount > 48;
   const defaultEdgeOptions = useMemo(() => ({ ...EDGE_DEFAULTS }), []);
 
+  const hostClass = [
+    'graph-flow-host',
+    'graph-flow-host--premium',
+    flowEditorChrome ? 'flow-editor-canvas' : '',
+    flowEditorChrome && !showMinimap ? 'fe-minimap-hidden' : '',
+    flowEditorChrome && !showGrid ? 'fe-grid-hidden' : '',
+    flowEditorChrome && edgeAnimations ? 'fe-edges-animated' : '',
+    selectedBlockId ? 'graph-flow-host--has-selection' : '',
+  ].filter(Boolean).join(' ');
+
   return (
     <div
       ref={flowHostRef}
-      className="graph-flow-host graph-flow-host--premium"
+      className={hostClass}
       onDragOver={onDragOverCanvas}
       onDragLeave={onDragLeaveCanvas}
       onDrop={onDrop}
@@ -693,20 +791,42 @@ function GraphFlowInner({
       onDragLeave={onDragLeaveCanvas}
       onDrop={onDrop}
     >
-      <Background
-        variant={BackgroundVariant.Dots}
-        gap={32}
-        size={1}
-        color="var(--color-canvas-dot)"
-        style={{ opacity: 0.8 }}
-      />
-      <CanvasZoomControls lang={lang} onFitFlow={fitToFlow} />
-      <CanvasEnhancedMinimap lang={lang} />
+      {showGrid && (
+        <Background
+          variant={BackgroundVariant.Dots}
+          gap={28}
+          size={1}
+          color="var(--color-canvas-dot, #cbd5e1)"
+          style={{ opacity: 0.65 }}
+        />
+      )}
+      {!flowEditorChrome && (
+        <CanvasZoomControls lang={lang} onFitFlow={fitToFlow} />
+      )}
+      {showMinimap && <CanvasEnhancedMinimap lang={lang} />}
+      {flowEditorChrome && flowToolbarProps && (
+        <Panel position="bottom-center" className="fe-toolbar-panel">
+          <FlowToolbar lang={lang} {...flowToolbarProps} />
+        </Panel>
+      )}
       <CanvasPerformanceOverlay />
+      <CanvasSnapGuides guides={snapGuides} />
       <CanvasDropGhost
         position={dropGhost}
         label={paletteGhostLabel}
         icon={paletteGhostIcon}
+      />
+      <HistoryTimeline
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        entries={historyEntries}
+        cursor={graphHistory.cursor}
+        canUndo={graphHistory.canUndo}
+        canRedo={graphHistory.canRedo}
+        onUndo={flowToolbarProps?.onUndo}
+        onRedo={flowToolbarProps?.onRedo}
+        onJumpTo={handleJumpHistory}
+        lang={lang}
       />
       <CanvasContextMenu
         menu={contextMenu}
@@ -715,6 +835,8 @@ function GraphFlowInner({
         onFitFlow={fitToFlow}
         onGroupSelection={groupSelectedNodes}
         onRemoveEdge={removeEdgeById}
+        onOpenCommandPalette={openCommandPalette}
+        onAddMessageAtPane={handleAddMessageAtPane}
         actions={{
           onInspect: (nodeId) => {
             if (!nodeId) return;

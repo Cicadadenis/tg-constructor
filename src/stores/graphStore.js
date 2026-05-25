@@ -147,6 +147,15 @@ export const useGraphStore = create(
 
     getHistoryState: () => readHistory(getEditor()),
 
+    getHistoryEntries: () => getEditor().getHistoryEntries(),
+
+    jumpToHistoryCursor: (target) => {
+      const editor = getEditor();
+      const result = editor.jumpToHistoryCursor(target);
+      if (result.ok) get()._bump();
+      return result;
+    },
+
     getGraphApi: () => {
       const store = get();
       return {
@@ -161,6 +170,8 @@ export const useGraphStore = create(
         canUndo: () => readHistory(getEditor()).canUndo,
         canRedo: () => readHistory(getEditor()).canRedo,
         getHistoryState: () => readHistory(getEditor()),
+        getHistoryEntries: () => getEditor().getHistoryEntries(),
+        jumpToHistoryCursor: (target) => store.jumpToHistoryCursor(target),
         get historyRevision() {
           return readHistory(getEditor()).cursor;
         },

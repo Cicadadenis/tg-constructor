@@ -29,7 +29,7 @@ export function AppLayoutProvider({
   listFilter: controlledListFilter,
   setListFilter: controlledSetListFilter,
 }) {
-  const [sectionState, setSectionState] = useState('automation');
+  const [sectionState, setSectionState] = useState('flows');
   const [mobileZoneState, setMobileZoneState] = useState('canvas');
   const [listSearchState, setListSearchState] = useState('');
   const [listFilterState, setListFilterState] = useState('all');
@@ -38,6 +38,14 @@ export function AppLayoutProvider({
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
+  const [sidebarCompact, setSidebarCompact] = useState(() => {
+    try {
+      return localStorage.getItem('cicada_sidebar_compact') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [sidebarPinned, setSidebarPinned] = useState(true);
 
   const section = controlledSection ?? sectionState;
   const setSection = controlledSetSection ?? setSectionState;
@@ -103,6 +111,10 @@ export function AppLayoutProvider({
       toggleInspector,
       toggleInspectorCollapsed,
       toggleFocusMode,
+      sidebarCompact,
+      setSidebarCompact,
+      sidebarPinned,
+      setSidebarPinned,
     }),
     [
       section,
@@ -126,6 +138,8 @@ export function AppLayoutProvider({
       toggleInspector,
       toggleInspectorCollapsed,
       toggleFocusMode,
+      sidebarCompact,
+      sidebarPinned,
     ],
   );
 

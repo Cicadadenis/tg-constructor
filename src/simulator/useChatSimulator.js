@@ -30,6 +30,7 @@ import {
 } from '../../core/analytics/runtimeBridge.js';
 import { trackEvent, trackSessionStart } from '../analytics/client.js';
 import { AnalyticsEventTypes } from '../../core/analytics/analyticsEventTypes.js';
+import { runMockFlowStep } from './mockExecutionEngine.js';
 
 const PREVIEW_SESSION_STORAGE_KEY = 'cicada_preview_session_id';
 
@@ -72,7 +73,7 @@ export function useChatSimulator({
   const [typing, setTyping] = useState(false);
   const [testMode, setTestMode] = useState(true);
   const [viewMode, setViewMode] = useState('mobile');
-  const [debugOpen, setDebugOpen] = useState(true);
+  const [debugOpen, setDebugOpen] = useState(false);
   const [subscriberSnapshot, setSubscriberSnapshot] = useState(null);
   const [variables, setVariables] = useState({});
   const [executionPath, setExecutionPath] = useState([]);
@@ -86,6 +87,7 @@ export function useChatSimulator({
 
   const subscriberCtxRef = useRef(null);
   const lastInboundRef = useRef(null);
+  const autoStartRef = useRef(false);
 
   const initSubscriber = useCallback(async () => {
     const { context, variables: vars } = await ensureMockSubscriber();
@@ -139,8 +141,7 @@ export function useChatSimulator({
         const snap = generateCodegenSnapshot();
         onDebugSnapshot?.(snap);
 
-        const { runDebugExecution } = await import('../constructor/previewBridge.js');
-        const out = await runDebugExecution({
+        const out = await runMockFlowStep({
           graphIR: snap.graph,
           generatedPython: snap.generatedPython,
           compileWarnings: snap.compileWarnings,
@@ -347,6 +348,7 @@ export function useChatSimulator({
 
   const resetSession = useCallback(() => {
     playbackAbortRef.current?.abort();
+    autoStartRef.current = false;
     resetPreviewSessionStorage();
     setMessages([]);
     setDraft('');
@@ -361,6 +363,7 @@ export function useChatSimulator({
     resetMockSubscriber();
     initSubscriber();
     busRef.current.emit(SimulatorEventTypes.RESET);
+    runPreviewStepRef.current?.({ event: { kind: 'text', text: '/start' }, userLabel: '/start' });
   }, [initSubscriber]);
 
   const replayToSnapshot = useCallback((snapshotIndex) => {
@@ -444,6 +447,21 @@ export function useChatSimulator({
     },
     [busy, runPreviewStep],
   );
+
+  const runPreviewStepRef = useRef(runPreviewStep);
+  runPreviewStepRef.current = runPreviewStep;
+
+  /** Auto-start flow once per session (isolated sandbox). */
+  useEffect(() => {
+    if (autoStartRef.current) return;
+    autoStartRef.current = true;
+    const t = setTimeout(() => {
+      runPreviewStepRef.current({ event: { kind: 'text', text: '/start' }, userLabel: '/start' }).catch(() => {
+        autoStartRef.current = false;
+      });
+    }, 600);
+    return () => clearTimeout(t);
+  }, []);
 
   const bus = busRef.current;
 

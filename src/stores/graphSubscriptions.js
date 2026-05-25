@@ -41,7 +41,10 @@ export function captureHistoryOnMutation() {
 export function subscribePersistenceDirty() {
   return subscribeGraphRevision((revision) => {
     const p = usePersistenceStore.getState();
-    if (p.isLoading) return;
+    if (p.isLoading || p.isSaving) return;
     if (revision === p.lastSavedRevision) return;
+    usePersistenceStore.setState((s) => {
+      s.pendingCloudSave = true;
+    });
   });
 }

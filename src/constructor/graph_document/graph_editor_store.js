@@ -6,7 +6,9 @@ import { createGraphDocument } from './graph_document.js';
 import {
   applyOperation as applyToHistory,
   createGraphHistory,
+  describeHistoryStream,
   exportOperationStream,
+  jumpToHistoryCursor,
   redoOperation,
   rollbackOperation,
 } from './graph_history.js';
@@ -74,6 +76,20 @@ export class GraphEditorStore {
       canRedo: this.canRedo(),
       cursor: Number(this._history?.cursor ?? 0),
       length: this._history?.stream?.length ?? 0,
+    };
+  }
+
+  getHistoryEntries() {
+    return describeHistoryStream(this._history);
+  }
+
+  jumpToHistoryCursor(targetCursor) {
+    const result = jumpToHistoryCursor(this._history, targetCursor);
+    this._history = result.history;
+    return {
+      ok: result.ok,
+      document: this._history.document,
+      error: result.error,
     };
   }
 

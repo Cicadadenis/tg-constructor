@@ -12,6 +12,7 @@ export function useEditorKeyboard({
   onToggleFocus,
   onClosePanels,
   onOpenHelp,
+  onOpenCommandPalette,
 }) {
   const handler = useCallback((e) => {
     if (!enabled) return;
@@ -40,6 +41,18 @@ export function useEditorKeyboard({
       return;
     }
 
+    if (mod && e.key === 'k') {
+      e.preventDefault();
+      onOpenCommandPalette?.();
+      return;
+    }
+
+    if (mod && e.key === 'h' && !e.shiftKey) {
+      e.preventDefault();
+      window.dispatchEvent(new Event('cicada:toggle-history'));
+      return;
+    }
+
     if (mod && e.key === 'z' && !e.shiftKey) {
       e.preventDefault();
       onUndo?.();
@@ -56,7 +69,7 @@ export function useEditorKeyboard({
       e.preventDefault();
       onSave?.();
     }
-  }, [enabled, onUndo, onRedo, onSave, onToggleFocus, onClosePanels, onOpenHelp]);
+  }, [enabled, onUndo, onRedo, onSave, onToggleFocus, onClosePanels, onOpenHelp, onOpenCommandPalette]);
 
   useEffect(() => {
     window.addEventListener('keydown', handler);

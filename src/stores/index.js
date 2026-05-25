@@ -11,5 +11,9 @@ export { useCollaborationStore, collaborationSelectors } from './collaborationSt
 export { useAnalyticsStore, analyticsSelectors } from './analyticsStore.js';
 export { usePersistenceStore, persistenceSelectors } from './persistenceStore.js';
 
-export { subscribeGraphRevision, captureHistoryOnMutation } from './graphSubscriptions.js';
+export {
+  subscribeGraphRevision,
+  captureHistoryOnMutation,
+  subscribePersistenceDirty,
+} from './graphSubscriptions.js';
 export { useGraphRevision, useCanvasProjection, useGraphApi } from './hooks/useGraphSelectors.js';

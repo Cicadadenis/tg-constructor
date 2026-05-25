@@ -66,16 +66,16 @@ export default function SimulatorDebugPanel({
   onLiveModeChange,
 }) {
   const tabs = [
-    { id: 'path', label: 'Path' },
-    { id: 'vars', label: 'Vars' },
-    { id: 'sub', label: 'Subscriber' },
-    { id: 'replay', label: 'Replay' },
+    { id: 'path', label: 'Путь' },
+    { id: 'vars', label: 'Данные' },
+    { id: 'sub', label: 'Подписчик' },
+    { id: 'replay', label: 'Повтор' },
   ];
 
   return (
     <aside className={`chat-sim__debug ${open ? 'chat-sim__debug--open' : ''}`}>
       <div className="chat-sim__debug-head">
-        <span className="chat-sim__debug-title">Runtime</span>
+        <span className="chat-sim__debug-title">Данные подписчика</span>
         <button type="button" className="chat-sim__debug-toggle" onClick={onToggle}>
           {open ? '◂' : '▸'}
         </button>
@@ -101,7 +101,7 @@ export default function SimulatorDebugPanel({
               checked={testMode}
               onChange={(e) => onTestModeChange?.(e.target.checked)}
             />
-            Test mode (typing + delays)
+            Тестовый режим (печатает… и паузы)
           </label>
           <label className="chat-sim__test-mode">
             <input
@@ -109,11 +109,11 @@ export default function SimulatorDebugPanel({
               checked={liveMode !== false}
               onChange={(e) => onLiveModeChange?.(e.target.checked)}
             />
-            Live updates
+            Обновления в реальном времени
           </label>
           {lastBranchPort && (
             <div className={`chat-sim__debug-branch chat-sim__debug-branch--${lastBranchPort}`}>
-              Branch: {lastBranchPort}
+              Ветка: {lastBranchPort}
             </div>
           )}
 
@@ -121,12 +121,12 @@ export default function SimulatorDebugPanel({
             {tab === 'path' && (
               <>
                 <div className="chat-sim__active-node">
-                  <span className="chat-sim__sub-label">Active node</span>
+                  <span className="chat-sim__sub-label">Текущий шаг</span>
                   <code>{activeNodeId || '—'}</code>
                 </div>
                 {lastTraceId && (
                   <div className="chat-sim__trace-id">
-                    trace: <code>{lastTraceId.slice(0, 12)}…</code>
+                    сессия: <code>{lastTraceId.slice(0, 12)}…</code>
                   </div>
                 )}
                 <ol className="chat-sim__path-list">
