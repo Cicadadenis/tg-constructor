@@ -1,28 +1,14 @@
 import React, { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import {
+  MC_SPRING,
+  inspectorPanelVariants,
+  railPanelVariants,
+} from '../motion/index.js';
 import { useAppLayout } from './AppLayoutContext.jsx';
 import { useSelectionStore } from '../stores/selectionStore.js';
 import './editor-shell.css';
 import './editor-saas-shell.css';
-
-const panelSpring = {
-  type: 'spring',
-  stiffness: 420,
-  damping: 36,
-  mass: 0.8,
-};
-
-const railVariants = {
-  hidden: { opacity: 0, x: -24, scale: 0.98 },
-  visible: { opacity: 1, x: 0, scale: 1 },
-  exit: { opacity: 0, x: -16, scale: 0.98 },
-};
-
-const inspectorVariants = {
-  hidden: { opacity: 0, x: 24, scale: 0.98 },
-  visible: { opacity: 1, x: 0, scale: 1 },
-  exit: { opacity: 0, x: 16, scale: 0.98 },
-};
 
 /**
  * ManyChat-style workspace: full-bleed canvas + floating panels.
@@ -100,12 +86,12 @@ export default function EditorShell({
             <motion.aside
               key="left-rail"
               className="mc-floating-rail"
-              variants={railVariants}
+              variants={railPanelVariants}
               initial="hidden"
               animate="visible"
               exit="exit"
-              transition={panelSpring}
-              aria-label={lang === 'en' ? 'Blocks and flows' : 'Блоки и сценарии'}
+              transition={MC_SPRING.panel}
+              aria-label={lang === 'en' ? 'Elements and flows' : lang === 'uk' ? 'Елементи та сценарії' : 'Элементы и сценарии'}
             >
               {left}
             </motion.aside>
@@ -120,11 +106,11 @@ export default function EditorShell({
                 'mc-floating-inspector',
                 inspectorCollapsed ? 'mc-floating-inspector--collapsed' : '',
               ].filter(Boolean).join(' ')}
-              variants={inspectorVariants}
+              variants={inspectorPanelVariants}
               initial="hidden"
               animate="visible"
               exit="exit"
-              transition={panelSpring}
+              transition={MC_SPRING.panel}
               aria-label={lang === 'en' ? 'Inspector' : 'Инспектор'}
             >
               {right}

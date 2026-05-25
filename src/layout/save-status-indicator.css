@@ -7,8 +7,33 @@
   font-size: 11px;
   font-weight: var(--font-weight-medium);
   color: var(--color-text-muted);
-  background: var(--color-surface-muted);
+  background: transparent;
+  border: 1px solid transparent;
   flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.save-status--saving {
+  color: var(--color-primary);
+  background: var(--color-primary-muted);
+  border-color: var(--color-primary-border);
+}
+
+.save-status--pending {
+  color: #b45309;
+  background: var(--color-warning-muted);
+  border-color: #fde68a;
+}
+
+.save-status--draft {
+  color: #92400e;
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.save-status--draft .save-status__dot {
+  background: #f59e0b;
+  opacity: 1;
 }
 
 .save-status__dot {
@@ -25,8 +50,12 @@
   animation: save-status-pulse 1s ease-in-out infinite;
 }
 
+.save-status--idle {
+  color: var(--color-text-secondary);
+}
+
 .save-status--idle .save-status__dot {
-  background: #22c55e;
+  background: var(--color-success);
   opacity: 1;
 }
 

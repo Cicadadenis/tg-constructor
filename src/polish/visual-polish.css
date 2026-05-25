@@ -260,24 +260,19 @@
   background: var(--vp-surface-sunken);
 }
 
-/* ——— Canvas nodes ——— */
-.editor-shell--saas .visual-node-card__surface {
+/* ——— Canvas nodes (ManyChat-style vn-card) ——— */
+.editor-shell--saas .vn-card__surface {
   border: 1px solid var(--vp-border);
-  border-radius: var(--vp-radius-lg);
+  border-radius: 20px;
   box-shadow: var(--vp-shadow-xs);
 }
 
-.editor-shell--saas .visual-node-card__header {
-  background: var(--vp-surface-sunken);
-  border-bottom: 1px solid var(--vp-border);
-}
-
-.editor-shell--saas .visual-node-card:hover .visual-node-card__surface,
-.editor-shell--saas .visual-node-card.selected .visual-node-card__surface {
+.editor-shell--saas .vn-card:hover .vn-card__surface,
+.editor-shell--saas .vn-card--selected .vn-card__surface {
   box-shadow: var(--vp-shadow-sm), 0 0 0 2px var(--vp-accent-muted);
 }
 
-.editor-shell--saas .visual-node-card.selected .visual-node-card__surface {
+.editor-shell--saas .vn-card--selected .vn-card__surface {
   box-shadow: var(--vp-shadow-md), 0 0 0 2px var(--vp-accent-border);
 }
 

@@ -12,7 +12,6 @@ import { CAPABILITY_ACTIONS } from "../../capabilities/capabilityIds.js";
 import { getPayload } from "../../runtime/executionContext.js";
 import { setStateEffect, freezeEffects } from "../../runtime/execution/executionEffects.mjs";
 import { SubscriberStateManager } from "../services/subscriberStateManager.js";
-import { evaluateDynamicCondition } from "../segmentation/dynamicConditionEvaluator.js";
 import { getBoundSubscriberContext } from "./subscriberContextBinding.js";
 
 let extensionsRegistered = false;
@@ -46,21 +45,23 @@ export function registerSubscriberCapabilityExtensions(
 
   registerCapabilityExecutor(CAPABILITY_ACTIONS.BRANCH, async (ctx: ExecutionContext) => {
     const payload = getPayload(ctx) ?? {};
-    const expression = String(
+    let filterOrExpression: import("../entities/types.js").SegmentFilter | string = String(
       payload.expression ?? payload.cond ?? "",
     ).trim();
 
+    if (!filterOrExpression && payload.segmentId) {
+      filterOrExpression = `segment:${String(payload.segmentId).trim()}`;
+    }
+    if (!filterOrExpression && payload.filter && typeof payload.filter === "object") {
+      filterOrExpression = payload.filter as import("../entities/types.js").SegmentFilter;
+    }
+
     const subCtx = getBoundSubscriberContext(ctx) ?? manager.getBoundContext(ctx);
-    if (!subCtx || !expression) {
+    if (!subCtx || (typeof filterOrExpression === "string" && !filterOrExpression)) {
       return branchResult({ ok: true });
     }
 
-    const evts = await manager.events.list(subCtx.subscriber.id, 50);
-    const pass = evaluateDynamicCondition(expression, {
-      subscriber: subCtx.subscriber,
-      events: evts,
-      flowVariables: ctx.vars,
-    });
+    const pass = await manager.evaluateCondition(ctx, filterOrExpression);
 
     const port = pass ? "true" : "false";
     return branchResult({

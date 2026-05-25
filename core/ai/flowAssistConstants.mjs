@@ -4,6 +4,7 @@ export const AI_FLOW_PROMPT_MAX_CHARS = 2000;
 export const AI_FLOW_ASSIST_ACTIONS = Object.freeze([
   'plan',
   'generate',
+  'build_stacks',
   'suggest_nodes',
   'autocomplete',
   'optimize',

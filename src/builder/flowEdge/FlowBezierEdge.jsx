@@ -50,7 +50,10 @@ function FlowBezierEdge({
         path={edgePath}
         markerEnd={markerEnd}
         className="flow-bezier-edge__path"
-        style={style}
+        style={{
+          ...style,
+          transition: 'stroke 0.18s ease, stroke-width 0.18s ease',
+        }}
       />
     </g>
   );

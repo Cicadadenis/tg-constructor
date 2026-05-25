@@ -4,17 +4,14 @@ import OverviewDashboard from './dashboards/OverviewDashboard.jsx';
 import FunnelDashboard from './dashboards/FunnelDashboard.jsx';
 import FlowAnalyticsDashboard from './dashboards/FlowAnalyticsDashboard.jsx';
 import NodeAnalyticsDashboard from './dashboards/NodeAnalyticsDashboard.jsx';
+import PerformanceDashboard from './dashboards/PerformanceDashboard.jsx';
 import ObservabilityDashboard from './dashboards/ObservabilityDashboard.jsx';
+import RealtimeKpiStrip from './components/RealtimeKpiStrip.jsx';
+import { getAnalyticsLabels } from './analyticsLabels.js';
 import { defaultEngineClient } from '../constructor/engineClient.js';
 import './analytics-hub.css';
 
-const TABS = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'funnel', label: 'Funnel' },
-  { id: 'flow', label: 'Flow' },
-  { id: 'nodes', label: 'Nodes' },
-  { id: 'observe', label: 'Observability' },
-];
+const TAB_IDS = ['overview', 'performance', 'funnel', 'flow', 'nodes', 'observe'];
 
 /**
  * ManyChat-style analytics hub — SaaS dashboards + realtime metrics.
@@ -30,9 +27,11 @@ export default function AnalyticsHub({
   panelPos = null,
   onPanelPosChange,
   isMobileView = false,
+  lang = 'ru',
 }) {
   const [tab, setTab] = useState('overview');
-  const { snapshot, reset } = useAnalytics({ flowId, nodeIds, realtime: open });
+  const labels = React.useMemo(() => getAnalyticsLabels(lang), [lang]);
+  const { snapshot, reset, streamConnected } = useAnalytics({ flowId, nodeIds, realtime: open });
 
   const nodeLabel = useCallback((nodeId) => {
     if (!nodeId || !getGraphDocument) return nodeId || '—';
@@ -98,38 +97,51 @@ export default function AnalyticsHub({
     >
       <header className="analytics-hub__head" onMouseDown={startDrag}>
         <div>
-          <h2 className="analytics-hub__title">Analytics</h2>
-          <span className="analytics-hub__live">● live</span>
+          <h2 className="analytics-hub__title">{labels.title}</h2>
         </div>
         <div className="analytics-hub__actions">
-          <button type="button" className="analytics-btn" onClick={reset}>Reset</button>
+          <button type="button" className="analytics-btn" onClick={reset}>{labels.reset}</button>
           <button type="button" className="analytics-btn analytics-btn--ghost" onClick={onClose} aria-label="Close">✕</button>
         </div>
       </header>
 
+      <RealtimeKpiStrip
+        snapshot={snapshot}
+        streamConnected={streamConnected}
+        labels={labels.kpi}
+      />
+
       <nav className="analytics-hub__tabs" role="tablist">
-        {TABS.map((t) => (
+        {TAB_IDS.map((id) => (
           <button
-            key={t.id}
+            key={id}
             type="button"
             role="tab"
-            aria-selected={tab === t.id}
-            className={`analytics-hub__tab ${tab === t.id ? 'is-active' : ''}`}
-            onClick={() => setTab(t.id)}
+            aria-selected={tab === id}
+            className={`analytics-hub__tab ${tab === id ? 'is-active' : ''}`}
+            onClick={() => setTab(id)}
           >
-            {t.label}
+            {labels.tabs[id]}
           </button>
         ))}
       </nav>
 
       <div className="analytics-hub__body">
-        {tab === 'overview' && <OverviewDashboard snapshot={snapshot} />}
-        {tab === 'funnel' && <FunnelDashboard snapshot={snapshot} nodeLabel={nodeLabel} />}
-        {tab === 'flow' && <FlowAnalyticsDashboard snapshot={snapshot} nodeLabel={nodeLabel} />}
+        {tab === 'overview' && <OverviewDashboard snapshot={snapshot} labels={labels} />}
+        {tab === 'performance' && (
+          <PerformanceDashboard snapshot={snapshot} labels={labels.performance} />
+        )}
+        {tab === 'funnel' && (
+          <FunnelDashboard snapshot={snapshot} nodeLabel={nodeLabel} labels={labels} />
+        )}
+        {tab === 'flow' && (
+          <FlowAnalyticsDashboard snapshot={snapshot} nodeLabel={nodeLabel} labels={labels} />
+        )}
         {tab === 'nodes' && (
           <NodeAnalyticsDashboard
             snapshot={snapshot}
             nodeLabel={nodeLabel}
+            lang={lang}
             onNodeClick={(id) => onHighlightNodes?.([id])}
           />
         )}
@@ -138,6 +150,7 @@ export default function AnalyticsHub({
             snapshot={snapshot}
             traceId={lastTraceId}
             nodeLabel={nodeLabel}
+            labels={labels}
             onFetchTrace={(id) => defaultEngineClient.fetchTrace(id)}
             onHighlightNodes={onHighlightNodes}
           />

@@ -4,6 +4,8 @@ import CommandPalette from './CommandPalette.jsx';
 import { buildCommandPaletteCommands } from './buildCommandPaletteCommands.js';
 import './ux-interactions.css';
 
+const EditorUxContext = React.createContext(null);
+
 /**
  * Global editor UX — command palette + shared interaction wiring.
  */
@@ -83,8 +85,6 @@ export default function EditorUxLayer({
     </EditorUxContext.Provider>
   );
 }
-
-const EditorUxContext = React.createContext(null);
 
 export function useEditorUx() {
   return React.useContext(EditorUxContext);

@@ -19,6 +19,8 @@ import {
   resetMockSubscriber,
   addMockTag,
   removeMockTag,
+  switchMockSubscriber,
+  SUBSCRIBER_PRESETS,
 } from './subscriberSandbox.js';
 import {
   createConversationSnapshot,
@@ -60,6 +62,7 @@ export function useChatSimulator({
   onTraceId,
   onDebugSnapshot,
   flowId = null,
+  graphRevision = 0,
 }) {
   const busRef = useRef(null);
   if (!busRef.current) busRef.current = createSimulatorEventBus();
@@ -73,7 +76,9 @@ export function useChatSimulator({
   const [typing, setTyping] = useState(false);
   const [testMode, setTestMode] = useState(true);
   const [viewMode, setViewMode] = useState('mobile');
-  const [debugOpen, setDebugOpen] = useState(false);
+  const [debugOpen, setDebugOpen] = useState(true);
+  const [activePresetId, setActivePresetId] = useState('new_user');
+  const [drawerTab, setDrawerTab] = useState('path');
   const [subscriberSnapshot, setSubscriberSnapshot] = useState(null);
   const [variables, setVariables] = useState({});
   const [executionPath, setExecutionPath] = useState([]);
@@ -346,7 +351,7 @@ export function useChatSimulator({
     [busy, runPreviewStep, graphPalette, paletteOptions],
   );
 
-  const resetSession = useCallback(() => {
+  const resetSession = useCallback((opts = {}) => {
     playbackAbortRef.current?.abort();
     autoStartRef.current = false;
     resetPreviewSessionStorage();
@@ -360,11 +365,18 @@ export function useChatSimulator({
     setSnapshots([]);
     setLastBranchPort(null);
     lastInboundRef.current = null;
-    resetMockSubscriber();
+    if (opts.presetId) setActivePresetId(opts.presetId);
+    resetMockSubscriber(opts.presetId || activePresetId);
     initSubscriber();
     busRef.current.emit(SimulatorEventTypes.RESET);
     runPreviewStepRef.current?.({ event: { kind: 'text', text: '/start' }, userLabel: '/start' });
-  }, [initSubscriber]);
+  }, [initSubscriber, activePresetId]);
+
+  const switchSubscriber = useCallback(async (presetId) => {
+    if (!presetId || busy) return;
+    setActivePresetId(presetId);
+    resetSession({ presetId });
+  }, [busy, resetSession]);
 
   const replayToSnapshot = useCallback((snapshotIndex) => {
     const idx = Math.max(0, Math.min(snapshotIndex, snapshots.length - 1));
@@ -459,9 +471,20 @@ export function useChatSimulator({
       runPreviewStepRef.current({ event: { kind: 'text', text: '/start' }, userLabel: '/start' }).catch(() => {
         autoStartRef.current = false;
       });
-    }, 600);
+    }, 400);
     return () => clearTimeout(t);
   }, []);
+
+  const lastGraphRevRef = useRef(0);
+  useEffect(() => {
+    if (!graphRevision || graphRevision === lastGraphRevRef.current) return;
+    lastGraphRevRef.current = graphRevision;
+    if (messages.length === 0) return;
+    runPreviewStepRef.current?.(lastInboundRef.current || {
+      event: { kind: 'text', text: '/start' },
+      userLabel: '/start',
+    }).catch(() => {});
+  }, [graphRevision, messages.length]);
 
   const bus = busRef.current;
 
@@ -504,5 +527,13 @@ export function useChatSimulator({
     repeatLastStep,
     probeCondition,
     replayToSnapshot,
+    switchSubscriber,
+    activePresetId,
+    subscriberPresets: SUBSCRIBER_PRESETS,
+    drawerTab,
+    setDrawerTab,
+    focusNodeOnCanvas: (nodeId) => {
+      if (nodeId) onHighlightNodes?.([nodeId]);
+    },
   };
 }

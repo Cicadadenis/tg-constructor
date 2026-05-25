@@ -266,6 +266,157 @@
   transition: width 0.3s ease;
 }
 
+/* Conversational layout */
+.ai-studio--chat {
+  width: min(520px, 100%);
+  max-height: min(88dvh, 680px);
+}
+
+.ai-studio__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 18px 10px;
+}
+
+.ai-studio__chip {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(99, 102, 241, 0.12);
+  color: #e0e7ff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.ai-studio__chip:hover:not(:disabled) {
+  background: rgba(99, 102, 241, 0.22);
+}
+
+.ai-studio__chip.is-active {
+  background: rgba(99, 102, 241, 0.35);
+}
+
+.ai-studio__chat {
+  flex: 1;
+  min-height: 200px;
+  max-height: 340px;
+  overflow-y: auto;
+  padding: 12px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ai-studio__welcome {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.4);
+  text-align: center;
+  padding: 24px 12px;
+}
+
+.ai-studio__bubble {
+  max-width: 92%;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ai-studio__bubble--user {
+  align-self: flex-end;
+  background: linear-gradient(135deg, #4f46e5, #6366f1);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+
+.ai-studio__bubble--assistant {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.88);
+  border-bottom-left-radius: 4px;
+}
+
+.ai-studio__bubble-text {
+  margin: 0;
+  font-family: inherit;
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ai-studio__seq-mini {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.ai-studio__seq-mini code {
+  color: #c4b5fd;
+  margin-right: 6px;
+}
+
+.ai-studio__typing {
+  display: inline-block;
+  width: 48px;
+  height: 8px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  background-size: 200% 100%;
+  animation: ai-typing 1.2s ease infinite;
+  border-radius: 4px;
+}
+
+@keyframes ai-typing {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+.ai-studio__composer {
+  flex-shrink: 0;
+  padding: 12px 16px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.ai-studio__composer-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.25);
+  color: #f4f4f5;
+  font-size: 14px;
+  padding: 10px 12px;
+  resize: none;
+  font-family: inherit;
+}
+
+.ai-studio__composer-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ai-studio__templates-inline {
+  padding: 0 16px 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.ai-studio__template-grid--compact {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.ai-studio__templates-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-right: 8px;
+}
+
 .ai-copilot__open {
   display: block;
   width: 100%;
@@ -286,11 +437,16 @@
 
 /* Copilot panel */
 .ai-copilot {
-  margin-top: 12px;
+  margin: 0 0 12px;
   padding: 12px;
   border-radius: 14px;
-  background: linear-gradient(160deg, rgba(99, 102, 241, 0.08) 0%, rgba(15, 23, 42, 0.6) 100%);
-  border: 1px solid rgba(139, 92, 246, 0.22);
+  background: var(--color-surface-muted, #f8fafc);
+  border: 1px solid var(--color-border, rgba(15, 23, 42, 0.08));
+}
+
+.editor-shell--saas .fi-shell .ai-copilot {
+  background: linear-gradient(160deg, #f5f3ff 0%, #fafafa 100%);
+  border-color: rgba(99, 102, 241, 0.2);
 }
 
 .ai-copilot__head {
@@ -323,11 +479,16 @@
   gap: 2px;
   padding: 8px 4px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.2);
-  color: rgba(255, 255, 255, 0.75);
+  border: 1px solid var(--color-border, rgba(15, 23, 42, 0.08));
+  background: var(--color-surface, #fff);
+  color: var(--color-text-secondary, #4b5563);
   font-size: 10px;
   cursor: pointer;
+}
+
+.ai-copilot__action:hover:not(:disabled) {
+  border-color: rgba(99, 102, 241, 0.35);
+  color: #4f46e5;
 }
 
 .ai-copilot__action.is-loading {

@@ -10,6 +10,7 @@ import {
 
 const AUTO_FIX_CODES = new Set(REPAIR_ACTION_REGISTRY.flatMap((a) => a.codes));
 import { subscribeGraphTelemetry } from '../constructor/graph_document/graph_telemetry.js';
+import { getProductUiLabels, productTerms } from '../copy/productCopy.js';
 import { formatDiagnosticsForUser, groupGraphErrorsForDisplay } from './graph_error_messages.js';
 import GraphDiagnosticsRenderer from './GraphDiagnosticsRenderer.jsx';
 import GraphCorruptionPanel from './GraphCorruptionPanel.jsx';
@@ -78,25 +79,37 @@ export function GraphDiagnosticsPanel({
     });
   }, [userErrors, capabilities, validation?.lastRepairResult]);
 
+  const p = getProductUiLabels(lang);
+  const t = productTerms(lang);
   const labels = lang === 'en'
     ? {
-      title: 'Scenario diagnostics',
-      strict: 'Thorough check',
+      title: p.flowHealthTitle,
+      strict: t.thoroughCheck,
       close: 'Close',
       empty: 'No issues',
-      telemetry: 'Telemetry',
+      telemetry: p.activityLogTitle,
       autoFix: 'Fix automatically',
       fixing: 'Repairing…',
     }
-    : {
-      title: 'Диагностика сценария',
-      strict: 'Детальная проверка',
-      close: 'Закрыть',
-      empty: 'Проблем не найдено',
-      telemetry: 'Телеметрия',
-      autoFix: 'Исправить автоматически',
-      fixing: 'Исправление…',
-    };
+    : lang === 'uk'
+      ? {
+        title: p.flowHealthTitle,
+        strict: t.thoroughCheck,
+        close: 'Закрити',
+        empty: 'Проблем не знайдено',
+        telemetry: p.activityLogTitle,
+        autoFix: 'Виправити автоматично',
+        fixing: 'Виправлення…',
+      }
+      : {
+        title: p.flowHealthTitle,
+        strict: t.thoroughCheck,
+        close: 'Закрыть',
+        empty: 'Проблем не найдено',
+        telemetry: p.activityLogTitle,
+        autoFix: 'Исправить автоматически',
+        fixing: 'Исправление…',
+      };
 
   const hasIssues = !pipeline?.ok || enrichedErrors.length > 0;
   const canAutoFix = capabilities.autoFixable.length > 0 && hasIssues;

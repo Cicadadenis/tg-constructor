@@ -2,14 +2,15 @@
  * Visual node card dimensions — larger, content-first (ManyChat-style).
  */
 
-export const VISUAL_NODE_CARD_WIDTH = 300;
-const HEADER_H = 52;
-const META_H = 40;
-const BODY_LINE_H = 22;
-const BODY_PAD = 24;
-const BODY_MIN = 64;
-const HIT_PAD_X = 14;
-const HIT_PAD_Y = 12;
+/** ManyChat-style card width — content-first, marketer-readable */
+export const VISUAL_NODE_CARD_WIDTH = 328;
+const HEADER_H = 56;
+const META_H = 44;
+const BODY_LINE_H = 24;
+const BODY_PAD = 28;
+const BODY_MIN = 88;
+const HIT_PAD_X = 16;
+const HIT_PAD_Y = 14;
 
 /**
  * @param {number} bodyLineCount

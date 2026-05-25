@@ -220,7 +220,7 @@
 
 .analytics-bars__fill {
   height: 100%;
-  background: linear-gradient(90deg, #38bdf8, #6366f1);
+  background: #6366f1;
   border-radius: 3px;
   transition: width 0.3s ease;
 }
@@ -248,7 +248,7 @@
 
 .analytics-funnel__bar {
   height: 100%;
-  background: linear-gradient(90deg, #4ade80, #22c55e);
+  background: #22c55e;
   border-radius: 4px;
   min-width: 4px;
   transition: width 0.35s ease;

@@ -101,6 +101,14 @@ export const blockCapabilitiesByType = Object.freeze({
 
   set_global: cap(FLOW, { actions: ['set_global'] }),
 
+  add_tag: cap(FLOW, { actions: ['subscriber_tag'] }),
+  remove_tag: cap(FLOW, { actions: ['subscriber_tag'] }),
+  set_subscriber_field: cap(FLOW, { actions: ['subscriber_field'] }),
+  set_subscriber_variable: cap(FLOW, { actions: ['subscriber_variable'] }),
+  track_subscriber_event: cap(FLOW, { actions: ['subscriber_track_event'] }),
+  audience_condition: cap(BRANCH, { actions: ['branch'] }),
+  segment_gate: cap(BRANCH, { actions: ['branch'] }),
+
   'fsm.state': cap(FLOW, { actions: ['fsm_state'] }),
   'fsm.input': cap(FLOW, { actions: ['fsm_input'], async: true }),
   'fsm.transition': cap(FLOW, { actions: ['fsm_transition'] }),

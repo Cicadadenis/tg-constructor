@@ -49,6 +49,12 @@ export const CAPABILITY_ACTIONS = Object.freeze({
   DECLARE_BOT: 'declare_bot',
   DECLARE_COMMANDS: 'declare_commands',
   DECLARE_GLOBAL: 'declare_global',
+
+  /** Subscriber product layer (opt-in executors) */
+  SUBSCRIBER_TAG: 'subscriber_tag',
+  SUBSCRIBER_FIELD: 'subscriber_field',
+  SUBSCRIBER_VARIABLE: 'subscriber_variable',
+  SUBSCRIBER_TRACK_EVENT: 'subscriber_track_event',
 });
 
 export const CAPABILITY_TRIGGERS = Object.freeze({

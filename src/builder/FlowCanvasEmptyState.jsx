@@ -1,17 +1,11 @@
 import React, { useMemo } from 'react';
+import { motion } from 'framer-motion';
+import { MC_SPRING, fadeUp, staggerContainer, staggerItem, interactiveMotion } from '../motion/index.js';
 import { getEmptyCanvasCopy, getFlowStarterTemplates } from './flowTemplates.js';
 import './flow-canvas-empty.css';
 
 /**
  * Empty flow canvas — starter templates with one-click instantiation.
- * @param {object} props
- * @param {boolean} props.show
- * @param {string} [props.lang]
- * @param {boolean} [props.canUseAiGenerator]
- * @param {(templateId: string) => void} props.onApplyTemplate
- * @param {() => void} [props.onOpenAi]
- * @param {() => void} [props.onStartTour]
- * @param {boolean} [props.busy]
  */
 export default function FlowCanvasEmptyState({
   show = false,
@@ -28,14 +22,26 @@ export default function FlowCanvasEmptyState({
   if (!show) return null;
 
   return (
-    <div className="flow-canvas-empty" data-testid="flow-canvas-empty-state">
+    <motion.div
+      className="flow-canvas-empty"
+      data-testid="flow-canvas-empty-state"
+      initial={fadeUp.initial}
+      animate={fadeUp.animate}
+      transition={MC_SPRING.gentle}
+    >
       <div className="flow-canvas-empty__card editor-empty-card">
         <h2 className="flow-canvas-empty__title">{copy.title}</h2>
         <p className="flow-canvas-empty__subtitle">{copy.subtitle}</p>
 
-        <div className="flow-canvas-empty__grid" role="list">
+        <motion.div
+          className="flow-canvas-empty__grid"
+          role="list"
+          variants={staggerContainer}
+          initial="hidden"
+          animate="show"
+        >
           {templates.map((tpl) => (
-            <button
+            <motion.button
               key={tpl.id}
               type="button"
               className="flow-canvas-empty__template"
@@ -43,6 +49,8 @@ export default function FlowCanvasEmptyState({
               disabled={busy}
               data-template-id={tpl.id}
               onClick={() => onApplyTemplate?.(tpl.id)}
+              variants={staggerItem}
+              {...interactiveMotion}
             >
               <div className="flow-canvas-empty__template-head">
                 <span className="flow-canvas-empty__template-icon" aria-hidden>{tpl.icon}</span>
@@ -50,9 +58,9 @@ export default function FlowCanvasEmptyState({
               </div>
               <p className="flow-canvas-empty__template-desc">{tpl.description}</p>
               <span className="flow-canvas-empty__template-cta">{copy.useTemplate} →</span>
-            </button>
+            </motion.button>
           ))}
-        </div>
+        </motion.div>
 
         <div className="flow-canvas-empty__footer">
           {onOpenAi && (
@@ -77,6 +85,6 @@ export default function FlowCanvasEmptyState({
           )}
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

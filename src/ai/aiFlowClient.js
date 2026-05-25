@@ -34,6 +34,11 @@ export async function prepareFlowGeneration(prompt) {
   return callAiAssist({ action: 'generate', prompt });
 }
 
+/** Deterministic stacks from niche plan (nodes + edges via stack order). */
+export async function buildStacksFromPromptAssist(prompt) {
+  return callAiAssist({ action: 'build_stacks', prompt });
+}
+
 export async function suggestNodes(document, nodeId) {
   return callAiAssist({ action: 'suggest_nodes', document, nodeId });
 }

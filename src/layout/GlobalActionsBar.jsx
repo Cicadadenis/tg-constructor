@@ -73,12 +73,17 @@ export default function GlobalActionsBar({
       </button>
       <button
         type="button"
-        className="global-actions__btn global-actions__btn--secondary"
+        className={`global-actions__btn global-actions__btn--secondary${publishBusy ? ' global-actions__btn--loading' : ''}`}
         onClick={onPublish}
         disabled={publishBusy}
+        aria-busy={publishBusy}
       >
-        <span className="global-actions__icon" aria-hidden>↑</span>
-        {publishBusy ? '…' : t.publish}
+        {publishBusy ? (
+          <span className="global-actions__spinner" aria-hidden />
+        ) : (
+          <span className="global-actions__icon" aria-hidden>↑</span>
+        )}
+        {publishBusy ? (lang === 'en' ? 'Publishing…' : lang === 'uk' ? 'Публікуємо…' : 'Публикуем…') : t.publish}
       </button>
       <button
         type="button"

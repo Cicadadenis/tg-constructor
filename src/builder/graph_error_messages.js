@@ -5,6 +5,7 @@
 
 import { getBuilderBlockTypes } from '../constructor/block_catalog.js';
 import { graphResolveNodeType } from '../app/graph/graphHelpers.js';
+import { softenProductError } from '../copy/productCopy.js';
 
 const TYPE_LABEL_RU = Object.freeze({
   message: 'Ответ', reply: 'Ответ', inline: 'Inline-кнопки', buttons: 'Кнопки',
@@ -535,7 +536,7 @@ export function normalizeGraphError(raw, options = {}) {
 
   const locale = (key) => tpl(entry[key]?.[lang] || entry[key]?.ru || '', labels);
 
-  return {
+  return softenProductError({
     code: entry.code,
     severity: raw.severity || entry.severity || 'error',
     title: locale('title'),
@@ -548,7 +549,7 @@ export function normalizeGraphError(raw, options = {}) {
     _edgeId: raw.edgeId || null,
     actions: [...(entry.actions || ['jump'])],
     _internal: import.meta.env?.DEV ? { rawMessage, rawCode: raw.code } : undefined,
-  };
+  }, lang);
 }
 
 /**

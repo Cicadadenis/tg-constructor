@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import BarChart from '../components/BarChart.jsx';
 
-export default function FlowAnalyticsDashboard({ snapshot, nodeLabel }) {
+export default function FlowAnalyticsDashboard({ snapshot, nodeLabel, labels = {} }) {
   const dropOffs = useMemo(() => {
     const stats = snapshot?.nodeStats || {};
     return Object.entries(stats)
@@ -18,13 +18,13 @@ export default function FlowAnalyticsDashboard({ snapshot, nodeLabel }) {
   return (
     <div className="analytics-dash">
       <section className="analytics-panel">
-        <h3 className="analytics-panel__title">Drop-off by node (%)</h3>
+        <h3 className="analytics-panel__title">{labels.dropOff || 'Drop-off by step (%)'}</h3>
         <BarChart items={dropOffs} />
       </section>
       <section className="analytics-panel">
-        <h3 className="analytics-panel__title">User paths</h3>
+        <h3 className="analytics-panel__title">{labels.userPaths || 'User paths'}</h3>
         {paths.length === 0 ? (
-          <p className="analytics-empty">Пути пользователей появятся после сессий в симуляторе</p>
+          <p className="analytics-empty">{labels.pathsEmpty || 'Paths appear after simulator sessions'}</p>
         ) : (
           <ol className="analytics-path-list">
             {paths.map((p) => (

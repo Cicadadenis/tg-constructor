@@ -13,8 +13,8 @@
   background: linear-gradient(
     90deg,
     var(--color-surface-muted) 0%,
-    #e8eaee 45%,
-    var(--color-surface-muted) 90%
+    #f0f1f3 50%,
+    var(--color-surface-muted) 100%
   );
   background-size: 200% 100%;
   animation: ds-skeleton-shimmer 1.2s var(--motion-ease-in-out) infinite;

@@ -1,0 +1,148 @@
+/**
+ * Premium motion layer — complements Framer Motion + CSS tokens.
+ * Reference: ManyChat, Linear, Raycast, Figma.
+ */
+
+@import '../../design-system/motion/transitions.css';
+
+/* Shimmer skeleton */
+@keyframes mc-skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.editor-shell--saas .ds-skeleton,
+.mc-motion-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--vp-surface-sunken, #f1f5f9) 0%,
+    var(--color-surface-raised, #f8fafc) 45%,
+    var(--vp-surface-sunken, #f1f5f9) 90%
+  );
+  background-size: 200% 100%;
+  animation: mc-skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+[data-reduced-motion='true'] .ds-skeleton,
+[data-reduced-motion='true'] .mc-motion-skeleton {
+  animation: none;
+  opacity: 0.6;
+}
+
+/* Animated flow edges */
+.flow-editor-canvas.fe-edges-animated .flow-bezier-edge--flow .flow-bezier-edge__path,
+.graph-flow-host--premium .flow-bezier-edge--flow .flow-bezier-edge__path {
+  stroke-dasharray: 7 5;
+  animation: mc-edge-flow 1.4s linear infinite;
+}
+
+.flow-editor-canvas .flow-bezier-edge--hover .flow-bezier-edge__path,
+.graph-flow-host--premium .flow-bezier-edge--hover .flow-bezier-edge__path {
+  stroke-width: 2.5px !important;
+  filter: drop-shadow(0 0 6px rgba(37, 99, 235, 0.35));
+  transition: stroke-width 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    filter 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.flow-editor-canvas .flow-bezier-edge--execution .flow-bezier-edge__path,
+.graph-flow-host--premium .flow-bezier-edge--execution .flow-bezier-edge__path {
+  stroke-dasharray: 8 6;
+  animation: mc-edge-flow 0.9s linear infinite;
+}
+
+@keyframes mc-edge-flow {
+  to { stroke-dashoffset: -24; }
+}
+
+[data-reduced-motion='true'] .fe-edges-animated .flow-bezier-edge__path,
+[data-reduced-motion='true'] .flow-bezier-edge--execution .flow-bezier-edge__path {
+  animation: none;
+}
+
+/* Port pulse (nodes) */
+@keyframes mc-port-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.55; }
+  50% { transform: scale(1.12); opacity: 0.9; }
+}
+
+.vn-port--visible .vn-port__ring {
+  animation: mc-port-pulse 2s ease-in-out infinite;
+}
+
+[data-reduced-motion='true'] .vn-port__ring {
+  animation: none;
+}
+
+/* Floating controls / toolbar micro-lift */
+.cf-floating-controls__btn,
+.vn-toolbar__btn,
+.fe-toolbar__btn,
+.mc-panel-toggle {
+  transition: transform 0.14s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.14s ease,
+    box-shadow 0.14s ease,
+    color 0.14s ease;
+}
+
+.cf-floating-controls__btn:hover,
+.vn-toolbar__btn:hover,
+.fe-toolbar__btn:hover,
+.mc-panel-toggle:hover {
+  transform: translateY(-1px);
+}
+
+.cf-floating-controls__btn:active,
+.vn-toolbar__btn:active,
+.fe-toolbar__btn:active,
+.mc-panel-toggle:active {
+  transform: scale(0.96);
+}
+
+/* Sidebar width transition (compact rail) */
+.mc-sidebar {
+  transition: width 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-reduced-motion='true'] .mc-sidebar {
+  transition: none;
+}
+
+/* Inspector collapse */
+.mc-floating-inspector {
+  transition: width 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.2s ease;
+}
+
+.mc-floating-inspector--collapsed {
+  width: 48px !important;
+  min-width: 48px !important;
+}
+
+/* Command palette list item slide */
+.ux-palette__item {
+  transition: background-color 0.12s ease, transform 0.12s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ux-palette__item--active {
+  transform: translateX(2px);
+}
+
+/* History timeline entry */
+.ux-history__item-btn {
+  transition: background-color 0.12s ease, padding-left 0.14s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ux-history__item--current .ux-history__item-btn {
+  padding-left: 14px;
+}
+
+/* Flash feedback on canvas */
+@keyframes mc-canvas-flash {
+  0% { box-shadow: inset 0 0 0 0 rgba(99, 102, 241, 0); }
+  40% { box-shadow: inset 0 0 0 2px rgba(99, 102, 241, 0.25); }
+  100% { box-shadow: inset 0 0 0 0 rgba(99, 102, 241, 0); }
+}
+
+.graph-flow-host--flash {
+  animation: mc-canvas-flash 0.45s ease-out;
+}

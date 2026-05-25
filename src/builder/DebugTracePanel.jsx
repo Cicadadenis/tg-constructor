@@ -4,6 +4,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { defaultEngineClient } from '../constructor/engineClient.js';
+import { getProductUiLabels } from '../copy/productCopy.js';
 import {
   buildTimeline,
   highlightNodesFromTrace,
@@ -17,7 +18,9 @@ export function DebugTracePanel({
   compileWarnings = [],
   onClose,
   onHighlightChange,
+  lang = 'ru',
 }) {
+  const p = getProductUiLabels(lang);
   const [events, setEvents] = useState([]);
   const [replayIndex, setReplayIndex] = useState(0);
   const [showTranspile, setShowTranspile] = useState(true);
@@ -88,7 +91,7 @@ export function DebugTracePanel({
 
   return (
     <motionlessTraceBox>
-      <motionlessTraceHeader onClose={onClose} />
+      <motionlessTraceHeader title={p.conversationTrace} onClose={onClose} />
       <input
         type="range"
         min={0}
@@ -102,10 +105,14 @@ export function DebugTracePanel({
           <motionlessTimelineRow key={row.seq} row={row} />
         ))}
       </div>
-      <motionlessTraceFooter count={events.length} active={highlights.active} />
+      <motionlessTraceFooter
+        countLabel={typeof p.eventsCount === 'function' ? p.eventsCount(events.length) : `${events.length}`}
+        activeLabel={typeof p.activeSteps === 'function' ? p.activeSteps(highlights.active) : highlights.active.join(', ')}
+      />
 
       {import.meta.env?.DEV && (
         <motionlessTranspileSection
+          title={p.technicalDetails}
           show={showTranspile}
           onToggle={() => setShowTranspile((v) => !v)}
           transpileTrace={transpileTrace}
@@ -148,11 +155,11 @@ function motionlessTraceContainer({ children }) {
   );
 }
 
-function motionlessTraceHeader({ onClose }) {
+function motionlessTraceHeader({ title, onClose }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontWeight: 700 }}>
-      <span>Conversation trace (read-only)</span>
-      <button type="button" onClick={onClose}>✕</button>
+      <span>{title}</span>
+      <button type="button" onClick={onClose} aria-label="Close">✕</button>
     </div>
   );
 }
@@ -160,21 +167,21 @@ function motionlessTraceHeader({ onClose }) {
 function motionlessTimelineRow({ row }) {
   return (
     <div style={{ padding: '2px 0', opacity: 0.9 }}>
-      <code>{row.kind}</code>
-      {import.meta.env?.DEV && row.nodeId ? <span> @ {row.nodeId}</span> : null}
+      <span>{row.kind}</span>
     </div>
   );
 }
 
-function motionlessTraceFooter({ count, active }) {
+function motionlessTraceFooter({ countLabel, activeLabel }) {
   return (
     <div style={{ marginTop: 8, opacity: 0.55 }}>
-      {count} events · active: {active.join(', ') || '—'}
+      {countLabel}
+      {activeLabel && activeLabel !== '—' ? ` · ${activeLabel}` : ''}
     </div>
   );
 }
 
-function motionlessTranspileSection({ show, onToggle, transpileTrace, compileWarnings }) {
+function motionlessTranspileSection({ title, show, onToggle, transpileTrace, compileWarnings }) {
   return (
     <div style={{ marginTop: 10, borderTop: '1px solid rgba(99,102,241,0.25)', paddingTop: 8 }}>
       <button
@@ -191,7 +198,7 @@ function motionlessTranspileSection({ show, onToggle, transpileTrace, compileWar
           marginBottom: 6,
         }}
       >
-        {show ? '▼' : '▶'} Transpile trace ({transpileTrace.length})
+        {show ? '▼' : '▶'} {title} ({transpileTrace.length})
       </button>
       {show && (
         <div style={{ maxHeight: 160, overflow: 'auto', fontSize: 10 }}>
@@ -209,9 +216,7 @@ function motionlessTranspileSection({ show, onToggle, transpileTrace, compileWar
               }}
             >
               <div style={{ opacity: 0.75 }}>
-                <code>{row.blockType}</code>
-                {row.nodeId ? <span> · {row.nodeId}</span> : null}
-                <span> · {row.compiler}</span>
+                <span>{row.blockType}</span>
               </div>
               <pre style={{ margin: '4px 0 0', whiteSpace: 'pre-wrap', opacity: 0.85 }}>
                 {(row.generatedLines || []).join('\n')}

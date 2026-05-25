@@ -273,13 +273,13 @@
 }
 
 /* Node hover intelligence */
-.graph-flow-host--premium .react-flow__node.is-hovered .visual-node-card__surface {
+.graph-flow-host--premium .react-flow__node.is-hovered .vn-card__surface {
   border-color: var(--color-primary-border);
   box-shadow: var(--shadow-sm);
 }
 
-.graph-flow-host--premium .react-flow__node.is-hovered .visual-node-card__quick-actions,
-.graph-flow-host--premium .react-flow__node.selected .visual-node-card__quick-actions {
+.graph-flow-host--premium .react-flow__node.is-hovered .vn-toolbar,
+.graph-flow-host--premium .react-flow__node.selected .vn-toolbar {
   opacity: 1;
   pointer-events: auto;
 }

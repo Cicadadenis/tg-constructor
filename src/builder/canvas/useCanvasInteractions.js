@@ -432,6 +432,33 @@ export function useCanvasInteractions({
         return;
       }
 
+      const navKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+      if (navKeys.includes(e.key) && !mod) {
+        const all = getNodes();
+        if (!all.length) return;
+        const selected = all.filter((n) => n.selected);
+        const currentId = selected.length === 1 ? selected[0].id : null;
+        const sorted = [...all].sort((a, b) => {
+          const dy = (a.position?.y ?? 0) - (b.position?.y ?? 0);
+          if (Math.abs(dy) > 24) return dy;
+          return (a.position?.x ?? 0) - (b.position?.x ?? 0);
+        });
+        const idx = currentId ? sorted.findIndex((n) => n.id === currentId) : -1;
+        let nextIdx = 0;
+        if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+          nextIdx = idx < 0 ? 0 : Math.min(idx + 1, sorted.length - 1);
+        } else {
+          nextIdx = idx < 0 ? sorted.length - 1 : Math.max(idx - 1, 0);
+        }
+        const next = sorted[nextIdx];
+        if (next) {
+          e.preventDefault();
+          applyLocalSelection([next.id]);
+          onSelectNode?.(next.id);
+        }
+        return;
+      }
+
       if ((e.key === 'Delete' || e.key === 'Backspace') && !mod) {
         const selected = getNodes().filter((n) => n.selected);
         if (selected.length > 0) {

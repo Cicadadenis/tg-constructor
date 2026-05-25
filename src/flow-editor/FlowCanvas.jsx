@@ -15,6 +15,8 @@ export default function FlowCanvas({
   onRequestDeleteNodes,
   flowToolbarProps = null,
   canvasUxRef = null,
+  canvasQuickAdd = null,
+  showTemplateEmptyOverlay = false,
 }) {
   return (
     <div className="fe-canvas-host" data-tour="flow-editor-canvas">
@@ -29,6 +31,8 @@ export default function FlowCanvas({
         onRequestDeleteNodes={onRequestDeleteNodes}
         flowToolbarProps={flowToolbarProps}
         flowEditorChrome
+        canvasQuickAdd={canvasQuickAdd}
+        showTemplateEmptyOverlay={showTemplateEmptyOverlay}
       />
     </div>
   );

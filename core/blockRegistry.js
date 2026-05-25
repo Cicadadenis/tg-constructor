@@ -420,6 +420,58 @@ export const mediaBlocks = Object.freeze([
 
 export const telegramBlocks = Object.freeze([]);
 
+/** Subscriber-centric blocks (ManyChat-style CRM actions). */
+export const subscriberBlocks = Object.freeze([
+  block('add_tag', 'data', 'Add a tag to the current subscriber.', {
+    constraints: withDefaults(
+      withFlow(palette('Добавить тег', '🏷', '#2563eb', 'Аудитория', false, true), { maxOutputs: 1 }),
+      { tag: 'vip' },
+    ),
+  }),
+  block('remove_tag', 'data', 'Remove a tag from the current subscriber.', {
+    constraints: withDefaults(
+      withFlow(palette('Снять тег', '✕', '#64748b', 'Аудитория', false, true), { maxOutputs: 1 }),
+      { tag: 'vip' },
+    ),
+  }),
+  block('set_subscriber_field', 'data', 'Update a subscriber custom field.', {
+    constraints: withDefaults(
+      withFlow(palette('Поле подписчика', '📝', '#0ea5e9', 'Аудитория', false, true), { maxOutputs: 1 }),
+      { field: 'plan', value: 'pro' },
+    ),
+  }),
+  block('set_subscriber_variable', 'data', 'Set a session-scoped subscriber variable.', {
+    constraints: withDefaults(
+      withFlow(palette('Переменная сессии', '𝑥', '#8b5cf6', 'Аудитория', false, true), { maxOutputs: 1 }),
+      { key: 'step', value: '1' },
+    ),
+  }),
+  block('track_subscriber_event', 'data', 'Track a subscriber domain event.', {
+    constraints: withDefaults(
+      withFlow(palette('Событие', '⚡', '#f59e0b', 'Аудитория', false, true), { maxOutputs: 1 }),
+      { eventType: 'subscriber.custom', payload: {} },
+    ),
+  }),
+  block('audience_condition', 'logic', 'Branch on audience filter / expression.', {
+    constraints: withDefaults(
+      withFlow(palette('Фильтр аудитории', '◎', '#2563eb', 'Аудитория', false, true), {
+        maxOutputs: 2,
+        outputLabels: ['true', 'false'],
+      }),
+      { expression: 'tag:vip' },
+    ),
+  }),
+  block('segment_gate', 'logic', 'Branch when subscriber is in a saved segment.', {
+    constraints: withDefaults(
+      withFlow(palette('Сегмент', '▣', '#6366f1', 'Аудитория', false, true), {
+        maxOutputs: 2,
+        outputLabels: ['true', 'false'],
+      }),
+      { segmentId: '', expression: '' },
+    ),
+  }),
+]);
+
 export const dataBlocks = Object.freeze([
   block('set_global', 'data', 'Update a module-level global variable.', {
     constraints: palette('Обновить глобальную', '🌍', '#10b981', 'Данные', false, true),
@@ -478,6 +530,7 @@ export const blockDefinitionGroups = Object.freeze({
   actionBlocks,
   mediaBlocks,
   telegramBlocks,
+  subscriberBlocks,
   dataBlocks,
   settingsBlocks,
 });
@@ -490,6 +543,7 @@ export const blockDefinitions = Object.freeze([
   ...actionBlocks,
   ...mediaBlocks,
   ...telegramBlocks,
+  ...subscriberBlocks,
   ...dataBlocks,
 ]);
 
@@ -510,11 +564,15 @@ const FLOW_CHILDREN = Object.freeze([
   'get', 'save', 'loop', 'log', 'photo', 'photo_var', 'video', 'audio', 'document',
   'document_var', 'send_file', 'sticker', 'contact', 'location', 'poll', 'stop', 'goto',
   'set_global',
+  'add_tag', 'remove_tag', 'set_subscriber_field', 'set_subscriber_variable',
+  'track_subscriber_event', 'audience_condition', 'segment_gate',
 ]);
 
 const FLOW_NO_MEDIA = Object.freeze([
   'message', 'typing', 'delay', 'condition', 'condition_not', 'ask', 'remember', 'get',
   'save', 'loop', 'log', 'stop', 'goto', 'set_global',
+  'add_tag', 'remove_tag', 'set_subscriber_field', 'set_subscriber_variable',
+  'track_subscriber_event', 'audience_condition', 'segment_gate',
 ]);
 
 const TEXT_ATTACHMENTS = Object.freeze(['buttons', 'inline', 'inline_keyboard', 'reply_keyboard']);

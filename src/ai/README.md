@@ -1,41 +1,48 @@
 # AI-first Flow Generation
 
-ManyChat / Notion AI-style flow studio for Cicada Constructor.
+Conversational ManyChat / Notion AI-style flow studio.
 
 ## Features
 
-| # | Feature | API action |
-|---|---------|------------|
-| 1 | Natural language → Flow | `plan` + `/api/ai-generate` |
-| 2 | AI node suggestions | `suggest_nodes` |
-| 3 | AI auto-complete | `autocomplete` |
-| 4 | Optimization hints | `optimize` |
-| 5 | Flow repair | `repair` |
-| 6 | AI copywriting | `copywriting` (rules + optional LLM) |
-| 7 | Branch suggestions | `branches` |
+| # | Feature | Where |
+|---|---------|--------|
+| 1 | **Prompt → Flow** | `AiFlowStudio` — chat + `/api/ai-generate` + fallback `build_stacks` |
+| 2 | **AI node suggestions** | `AiCopilotPanel` → `suggest_nodes` |
+| 3 | **AI copywriting** | Copilot + inspector header → `copywriting` |
+| 4 | **AI optimization** | Copilot → `optimize` |
+| 5 | **AI auto-repair** | Copilot → `repair` + `graph_auto_repair` |
+| 6 | **Onboarding generation** | Prompt chips + `flowPlanToStacks` preset |
+
+## Generated artifacts
+
+- **nodes** — start, message, buttons, ask, condition, delay, …
+- **connections** — auto-chained in stack order via `compileAppendStacks`
+- **conditions** — `condition` blocks with `cond` props
+- **delays** — `delay` with `seconds`
+- **messages** — niche-specific copy (salon, onboarding, …)
 
 ## UI
 
-- **AiFlowStudio** — full-screen modal: templates, NL prompt (до 2000 символов), structured plan preview, generate
-- **AiCopilotPanel** — inspector rail when a node is selected
+- **AiFlowStudio** — conversational modal, quick chips, templates drawer
+- **AiCopilotPanel** — inspector rail when a step is selected
 
-## Prompt templates
+## API
 
-`promptTemplates.js` — «Автоворонка для салона», «Onboarding flow», поддержка, магазин, и др.
+- `POST /api/ai/assist` — plan, generate, build_stacks, suggest_nodes, optimize, repair, copywriting, branches
+- `POST /api/ai-generate` — full LLM pipeline
 
-## Backend
+## Core
 
-- `POST /api/ai/assist` — all copilot actions
-- `POST /api/ai-generate` — full stack generation (existing pipeline)
-- `core/ai/flowIntentExtensions.mjs` — niche detection + prompt expansion
-- `core/ai/flowAssistEngine.mjs` — deterministic assist
-- `services/aiGraphPipeline.mjs` — validation pipeline
+- `core/ai/flowIntentExtensions.mjs` — niche + plan
+- `core/ai/flowPlanToStacks.mjs` — deterministic stacks
+- `core/ai/flowAssistEngine.mjs` — copilot rules
 
-## Example
+## Examples
 
 ```
+Сделай onboarding flow
+→ onboarding preset → visual stack on canvas
+
 Сделай автоворонку для салона
-→ niche: salon_funnel
-→ sequence: start → message → buttons → ask → condition → …
-→ expanded prompt → semantic pipeline → visual nodes on canvas
+→ salon_funnel → message, buttons, ask, condition, delay
 ```

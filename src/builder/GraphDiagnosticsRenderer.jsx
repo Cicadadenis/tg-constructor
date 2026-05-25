@@ -18,6 +18,14 @@ const ACTION_LABELS = {
     reset_graph: 'Reset flow',
     show_all_nodes: 'Show all steps',
   },
+  uk: {
+    jump: 'Перейти до проблеми',
+    remove_edge: 'Видалити битий звʼязок',
+    repair_callbacks: 'Створити обробники',
+    auto_repair: 'Виправити',
+    reset_graph: 'Скинути сценарій',
+    show_all_nodes: 'Показати всі кроки',
+  },
 };
 
 /**
@@ -31,7 +39,7 @@ export function GraphErrorCard({
   compact = false,
   capabilities = null,
 }) {
-  const labels = ACTION_LABELS[lang] || ACTION_LABELS.ru;
+  const labels = ACTION_LABELS[lang] || ACTION_LABELS.en || ACTION_LABELS.ru;
   const nodeIds = error.nodeIds?.length ? error.nodeIds : (error.nodeId ? [error.nodeId] : []);
   const edgeIds = error.edgeIds?.length
     ? error.edgeIds

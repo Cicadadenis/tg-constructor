@@ -7,6 +7,7 @@ import {
   resetAnalytics,
   connectAnalyticsStream,
 } from './client.js';
+import { useAnalyticsStore } from '../stores/analyticsStore.js';
 
 /**
  * @param {object} [opts]
@@ -18,6 +19,7 @@ import {
 export function useAnalytics({ flowId = null, botId = null, nodeIds = [], realtime = true } = {}) {
   const snapOpts = botId ? { botId } : {};
   const [snapshot, setSnapshot] = useState(() => getSnapshot(flowId, snapOpts));
+  const [streamConnected, setStreamConnected] = useState(false);
 
   useEffect(() => {
     if (flowId && nodeIds?.length) {
@@ -34,7 +36,12 @@ export function useAnalytics({ flowId = null, botId = null, nodeIds = [], realti
       if (flowId) q.set('flowId', flowId);
       if (botId) q.set('botId', botId);
       const query = q.toString() ? `?${q}` : '';
-      stopStream = connectAnalyticsStream(query, setSnapshot);
+      stopStream = connectAnalyticsStream(query, (snap) => {
+        setSnapshot(snap);
+        setStreamConnected(true);
+        useAnalyticsStore.getState().setSnapshot(snap);
+        useAnalyticsStore.getState().setStreamConnected(true);
+      });
     }
     const poll = setInterval(refresh, realtime ? 4000 : 3000);
     refresh();
@@ -42,6 +49,8 @@ export function useAnalytics({ flowId = null, botId = null, nodeIds = [], realti
       unsubLocal?.();
       stopStream?.();
       clearInterval(poll);
+      setStreamConnected(false);
+      useAnalyticsStore.getState().setStreamConnected(false);
     };
   }, [flowId, botId, realtime]);
 
@@ -57,6 +66,7 @@ export function useAnalytics({ flowId = null, botId = null, nodeIds = [], realti
 
   return {
     snapshot,
+    streamConnected,
     track,
     reset,
     refresh: () => setSnapshot(getSnapshot(flowId, snapOpts)),

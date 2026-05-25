@@ -1,0 +1,394 @@
+/**
+ * Product polish pass — ManyChat-aligned SaaS editor.
+ * 8px grid · neutral palette · single accent · soft elevation · no gradient noise.
+ */
+
+/* ——— Refined tokens (editor scope) ——— */
+.editor-shell--saas {
+  --pp-accent: #2563eb;
+  --pp-accent-hover: #1d4ed8;
+  --pp-accent-muted: #f0f5ff;
+  --pp-accent-border: #dbeafe;
+
+  --pp-bg: #f3f4f6;
+  --pp-surface: #ffffff;
+  --pp-surface-muted: #f9fafb;
+  --pp-surface-sunken: #f3f4f6;
+
+  --pp-border: rgba(15, 23, 42, 0.06);
+  --pp-border-strong: rgba(15, 23, 42, 0.1);
+
+  --pp-text: #111827;
+  --pp-text-secondary: #4b5563;
+  --pp-text-muted: #9ca3af;
+
+  --pp-radius-sm: 8px;
+  --pp-radius-md: 8px;
+  --pp-radius-lg: 12px;
+  --pp-radius-panel: 12px;
+
+  --pp-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --pp-shadow-sm: 0 2px 6px rgba(15, 23, 42, 0.05);
+  --pp-shadow-md: 0 4px 16px rgba(15, 23, 42, 0.07);
+  --pp-shadow-float: 0 8px 24px rgba(15, 23, 42, 0.08), 0 0 0 1px var(--pp-border);
+
+  --color-primary: var(--pp-accent);
+  --color-primary-hover: var(--pp-accent-hover);
+  --color-primary-muted: var(--pp-accent-muted);
+  --color-primary-border: var(--pp-accent-border);
+  --color-bg: var(--pp-bg);
+  --color-surface: var(--pp-surface);
+  --color-surface-muted: var(--pp-surface-muted);
+  --color-border: var(--pp-border);
+  --color-border-strong: var(--pp-border-strong);
+  --color-text: var(--pp-text);
+  --color-text-secondary: var(--pp-text-secondary);
+  --color-text-muted: var(--pp-text-muted);
+  --color-canvas-bg: #eef0f3;
+  --color-canvas-dot: rgba(107, 114, 128, 0.18);
+  --radius-sm: var(--pp-radius-sm);
+  --radius-md: var(--pp-radius-md);
+  --radius-lg: var(--pp-radius-lg);
+  --radius-panel: var(--pp-radius-panel);
+  --shadow-xs: var(--pp-shadow-xs);
+  --shadow-sm: var(--pp-shadow-sm);
+  --shadow-md: var(--pp-shadow-md);
+  --shadow-floating: var(--pp-shadow-float);
+}
+
+/* ——— Typography hierarchy ——— */
+.editor-shell--saas {
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+}
+
+.editor-shell--saas .mc-sidebar__title,
+.editor-shell--saas .mc-flows-panel__head-title,
+.editor-shell--saas .flow-canvas-empty__title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--pp-text);
+}
+
+.editor-shell--saas .mc-sidebar-panel__section-label,
+.editor-shell--saas .ds-panel-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--pp-text-muted);
+}
+
+.editor-shell--saas .mc-flow-card__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pp-text);
+}
+
+.editor-shell--saas .mc-flow-card__meta {
+  font-size: 12px;
+  color: var(--pp-text-muted);
+}
+
+/* ——— Top bar: flat, breathable ——— */
+.editor-shell--saas .mc-editor-topbar,
+.editor-shell--saas .editor-topbar.editor-shell__topbar {
+  height: 48px;
+  min-height: 48px;
+  padding: 0 var(--space-2);
+  gap: var(--space-1);
+  background: rgba(255, 255, 255, 0.92) !important;
+  border-bottom: 1px solid var(--pp-border) !important;
+  box-shadow: none !important;
+  backdrop-filter: blur(10px) saturate(1.05);
+}
+
+.editor-shell--saas .tb-btn-ghost,
+.editor-shell--saas .tb-btn-ai,
+.editor-shell--saas .tb-btn-danger {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--pp-border);
+  border-radius: var(--pp-radius-sm);
+  background: var(--pp-surface);
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--pp-text-secondary);
+}
+
+.editor-shell--saas .tb-btn-ghost:hover,
+.editor-shell--saas .tb-btn-ai:hover {
+  background: var(--pp-surface-muted);
+  border-color: var(--pp-border-strong);
+  color: var(--pp-text);
+  box-shadow: none;
+}
+
+.editor-shell--saas .tb-btn-run {
+  min-height: 32px;
+  padding: 0 14px;
+  border-radius: var(--pp-radius-sm);
+  background: var(--pp-accent) !important;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: var(--pp-shadow-xs) !important;
+}
+
+.editor-shell--saas .tb-btn-run:hover:not(:disabled) {
+  background: var(--pp-accent-hover) !important;
+  box-shadow: var(--pp-shadow-sm) !important;
+}
+
+/* ——— Status cluster (save + publish) ——— */
+.editor-shell--saas .mc-status-cluster {
+  display: flex;
+  align-items: center;
+  gap: var(--space-half);
+  flex-shrink: 0;
+}
+
+/* ——— Floating panels: single elevation ——— */
+.editor-shell--saas .mc-floating-rail,
+.editor-shell--saas .mc-floating-inspector {
+  border-radius: var(--pp-radius-panel);
+  border: 1px solid var(--pp-border);
+  background: var(--pp-surface);
+  box-shadow: var(--pp-shadow-float);
+  backdrop-filter: none;
+}
+
+.editor-shell--saas .mc-floating-rail:hover,
+.editor-shell--saas .mc-floating-inspector:hover {
+  box-shadow: var(--pp-shadow-float);
+  transform: none;
+}
+
+/* ——— Sidebar: airy layout ——— */
+.editor-shell--saas .mc-sidebar {
+  background: var(--pp-surface-muted);
+}
+
+.editor-shell--saas .mc-sidebar-nav {
+  padding: var(--space-1) var(--space-half);
+  border-right: 1px solid var(--pp-border);
+}
+
+.editor-shell--saas .mc-sidebar__head {
+  padding: var(--space-2) var(--space-2) var(--space-1);
+}
+
+.editor-shell--saas .mc-sidebar-panel__scroll {
+  padding: 0 var(--space-1) var(--space-2);
+}
+
+.editor-shell--saas .mc-sidebar-search__input {
+  min-height: 36px;
+  padding: 0 var(--space-1) 0 32px;
+  border: 1px solid var(--pp-border);
+  border-radius: var(--pp-radius-sm);
+  background: var(--pp-surface);
+  font-size: 13px;
+}
+
+.editor-shell--saas .mc-sidebar-filters {
+  gap: var(--space-half);
+  padding: 0 var(--space-1) var(--space-1);
+}
+
+.editor-shell--saas .mc-flow-card {
+  margin-bottom: var(--space-half);
+  border-radius: var(--pp-radius-lg);
+  border: 1px solid var(--pp-border);
+  background: var(--pp-surface);
+  box-shadow: none;
+}
+
+.editor-shell--saas .mc-flow-card:hover {
+  border-color: var(--pp-border-strong);
+  box-shadow: var(--pp-shadow-xs);
+  transform: none;
+}
+
+.editor-shell--saas .mc-flow-card--active {
+  border-color: var(--pp-accent-border);
+  background: var(--pp-accent-muted);
+}
+
+/* ——— Canvas ——— */
+.editor-shell--saas .editor-shell__stage {
+  background-color: var(--color-canvas-bg);
+  background-image: radial-gradient(circle, var(--color-canvas-dot) 0.6px, transparent 0.7px);
+  background-size: 20px 20px;
+}
+
+.editor-shell--saas .mc-canvas-dock {
+  padding: var(--space-half);
+  gap: var(--space-half);
+  border-radius: var(--pp-radius-lg);
+  border: 1px solid var(--pp-border);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--pp-shadow-sm);
+}
+
+/* ——— Nodes: flat ManyChat cards ——— */
+.editor-shell--saas .vn-card__surface {
+  border-radius: var(--pp-radius-lg);
+  border: 1px solid var(--pp-border);
+  box-shadow: var(--pp-shadow-xs);
+}
+
+.editor-shell--saas .vn-card--selected .vn-card__surface {
+  border-color: var(--pp-accent-border);
+  box-shadow: var(--pp-shadow-sm), 0 0 0 2px var(--pp-accent-muted);
+}
+
+/* ——— Inspector ——— */
+.editor-shell--saas .fi-shell__chrome {
+  padding: var(--space-1) var(--space-1) 0;
+  border-bottom: 1px solid var(--pp-border);
+}
+
+.editor-shell--saas .app-inspector-tab {
+  padding: var(--space-1) 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: var(--pp-radius-sm) var(--pp-radius-sm) 0 0;
+}
+
+.editor-shell--saas .app-inspector-tab.active {
+  background: var(--pp-surface-muted);
+  color: var(--pp-accent);
+  border-bottom: 2px solid var(--pp-accent);
+}
+
+/* ——— Empty states ——— */
+.editor-shell--saas .ds-empty,
+.editor-shell--saas .fi-empty {
+  padding: var(--space-3) var(--space-2);
+  gap: var(--space-1);
+}
+
+.editor-shell--saas .ds-empty__icon {
+  font-size: 28px;
+  opacity: 0.3;
+  filter: none;
+}
+
+.editor-shell--saas .flow-canvas-empty__card {
+  border: 1px solid var(--pp-border);
+  border-radius: var(--pp-radius-panel);
+  box-shadow: var(--pp-shadow-sm);
+  padding: var(--space-3);
+  gap: var(--space-2);
+}
+
+.editor-shell--saas .flow-canvas-empty__template {
+  border-radius: var(--pp-radius-md);
+  border: 1px solid var(--pp-border);
+  background: var(--pp-surface);
+  padding: var(--space-2);
+}
+
+.editor-shell--saas .flow-canvas-empty__template:hover {
+  border-color: var(--pp-accent-border);
+  background: var(--pp-accent-muted);
+  box-shadow: none;
+}
+
+/* ——— Contextual hints: subtle ——— */
+.editor-shell--saas .mc-contextual-hint {
+  margin: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  background: var(--pp-accent-muted);
+  border: 1px solid var(--pp-accent-border);
+  border-radius: var(--pp-radius-md);
+  box-shadow: none;
+}
+
+.editor-shell--saas .mc-contextual-hint__title {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.editor-shell--saas .mc-contextual-hint__text {
+  font-size: 12px;
+  color: var(--pp-text-secondary);
+}
+
+/* ——— Guided bar ——— */
+.editor-shell--saas .mc-guided-bar__chip {
+  border: 1px solid var(--pp-border);
+  background: var(--pp-surface);
+  box-shadow: var(--pp-shadow-xs);
+  backdrop-filter: none;
+}
+
+/* ——— Forms ——— */
+.editor-shell--saas .ds-btn--primary {
+  box-shadow: none;
+}
+
+.editor-shell--saas .ds-btn--secondary {
+  box-shadow: none;
+}
+
+.editor-shell--saas input:focus,
+.editor-shell--saas textarea:focus,
+.editor-shell--saas select:focus {
+  border-color: var(--pp-accent);
+  box-shadow: 0 0 0 3px var(--pp-accent-muted);
+}
+
+/* ——— Global actions (sidebar toolbar) ——— */
+.editor-shell--saas .global-actions {
+  gap: var(--space-half);
+  padding: var(--space-1);
+  border-bottom: 1px solid var(--pp-border);
+  background: var(--pp-surface);
+}
+
+.editor-shell--saas .global-actions__btn {
+  min-height: 32px;
+  border-radius: var(--pp-radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--pp-border);
+  box-shadow: none;
+}
+
+.editor-shell--saas .global-actions__btn--primary {
+  box-shadow: none;
+}
+
+/* ——— Welcome modal: no gradient hero ——— */
+.editor-shell--saas .mc-welcome__hero,
+.mc-welcome__hero {
+  background: var(--pp-accent-muted, var(--color-primary-muted));
+}
+
+/* ——— Sidebar section empty states ——— */
+.editor-shell--saas .mc-sidebar-panel .ds-empty {
+  padding: var(--space-4) var(--space-2);
+}
+
+.editor-shell--saas .mc-sidebar-btn--primary {
+  min-height: 36px;
+  padding: 0 var(--space-2);
+  border-radius: var(--pp-radius-sm);
+  background: var(--pp-accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  box-shadow: none;
+}
+
+/* ——— Reduce motion ——— */
+@media (prefers-reduced-motion: reduce) {
+  .editor-shell--saas .ds-empty,
+  .editor-shell--saas .fi-empty,
+  .editor-shell--saas .flow-canvas-empty__card {
+    animation: none;
+  }
+}

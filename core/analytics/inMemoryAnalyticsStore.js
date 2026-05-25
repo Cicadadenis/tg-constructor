@@ -339,6 +339,9 @@ export class InMemoryAnalyticsStore {
     const funnel = this.buildFunnel(flowId);
     const topPaths = this.buildTopPaths(15);
     const openRate = this.buildOpenRate();
+    const flowPerformance = this.buildFlowPerformance();
+    const edgeTraversals = this.buildEdgeTraversals(flowId, 20);
+    const eventBuckets = this.buildEventBuckets(12, 30_000);
 
     return {
       ts: now(),
@@ -346,11 +349,14 @@ export class InMemoryAnalyticsStore {
       activeUsers: this.activeUsers.size,
       liveSessions: this.liveSessions.size,
       executionStats: { ...this.executionStats },
+      flowPerformance,
       nodeStats,
       heatmap,
       funnel,
       topPaths,
       openRate,
+      edgeTraversals,
+      eventBuckets,
       clickStats: Object.fromEntries(
         [...this.clickStats.entries()].sort((a, b) => b[1] - a[1]).slice(0, 30),
       ),
@@ -426,6 +432,56 @@ export class InMemoryAnalyticsStore {
       opened,
       rate: sent > 0 ? Math.round((opened / sent) * 100) : 0,
     };
+  }
+
+  buildFlowPerformance() {
+    const { started, completed, failed, suspended, totalDurationMs, durationCount } =
+      this.executionStats;
+    const completionRate = started > 0 ? Math.round((completed / started) * 100) : 0;
+    const failureRate = started > 0 ? Math.round((failed / started) * 100) : 0;
+    const avgDurationMs = durationCount > 0 ? Math.round(totalDurationMs / durationCount) : 0;
+    const goals = [...this.conversionGoals.values()];
+    const totalConversions = goals.reduce((a, g) => a + (g.count || 0), 0);
+    return {
+      started,
+      completed,
+      failed,
+      suspended,
+      completionRate,
+      failureRate,
+      avgDurationMs,
+      totalConversions,
+      throughputPerMin: this.buildThroughputPerMin(),
+    };
+  }
+
+  buildThroughputPerMin(windowMs = 60_000) {
+    const cutoff = now() - windowMs;
+    const count = this.events.filter((e) => e.ts >= cutoff).length;
+    return Math.round((count / windowMs) * 60_000 * 10) / 10;
+  }
+
+  buildEventBuckets(buckets = 12, windowMs = 30_000) {
+    const out = Array.from({ length: buckets }, () => 0);
+    const end = now();
+    for (const e of this.events) {
+      const age = end - e.ts;
+      if (age < 0 || age > buckets * windowMs) continue;
+      const idx = buckets - 1 - Math.min(buckets - 1, Math.floor(age / windowMs));
+      out[idx] += 1;
+    }
+    return out;
+  }
+
+  buildEdgeTraversals(flowId, limit = 20) {
+    const entries = [...this.edgeTraversals.entries()]
+      .filter(([key]) => !flowId || key.includes(flowId) || true)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit);
+    return entries.map(([edge, count]) => {
+      const [from, to] = String(edge).split('→').map((s) => s.trim());
+      return { from, to, edge, count };
+    });
   }
 
   getTrace(traceId) {

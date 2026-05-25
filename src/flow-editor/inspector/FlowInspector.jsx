@@ -5,6 +5,8 @@ import { categoryDisplayLabel, resolveProductCategory } from '../../builder/node
 import { getBlockDefinition } from '../../../core/blockRegistry.js';
 import { graphCanDuplicateNodeType } from '../../app/graph/graphHelpers.js';
 import { copywritingAssist } from '../../ai/aiFlowClient.js';
+import AiCopilotPanel from '../../ai/AiCopilotPanel.jsx';
+import '../../ai/ai-flow-studio.css';
 import EntityInspectorPanel from '../../builder/inspector/EntityInspectorPanel.jsx';
 import FlowInspectorShell from './FlowInspectorShell.jsx';
 import FlowInspectorHeader from './FlowInspectorHeader.jsx';
@@ -178,6 +180,20 @@ export default function FlowInspector({
       simulatorPane={simulatorPane}
       onFocusCanvas={onFocusCanvas}
     >
+      {hasSelection && graph && (
+        <AiCopilotPanel
+          graph={graph}
+          selectedBlockId={nodeId}
+          selectedBlock={block}
+          onApplyText={onChange}
+          onRepairHighlight={(ids) => {
+            if (Array.isArray(ids)) {
+              ids.forEach((id) => onJumpToNode?.(id));
+            }
+          }}
+          lang={lang}
+        />
+      )}
       <EntityInspectorPanel
         activeTab={tab}
         graph={graph}

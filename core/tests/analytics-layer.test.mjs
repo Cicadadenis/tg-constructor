@@ -75,6 +75,31 @@ test('analytics pipeline aggregates funnel and heatmap', () => {
   assert.equal(snap.openRate.opened, 1);
   assert.equal(snap.conversionGoals.purchase.count, 1);
   assert.equal(snap.clickStats.buy, 1);
+  assert.ok(snap.flowPerformance);
+  assert.equal(typeof snap.flowPerformance.throughputPerMin, 'number');
+  assert.ok(Array.isArray(snap.edgeTraversals));
+  assert.ok(Array.isArray(snap.eventBuckets));
+});
+
+test('edge traversals aggregate from node enters', () => {
+  const store = resetDefaultAnalyticsStore();
+  registerFlowForAnalytics('flow-e', ['a', 'b'], store);
+  trackAnalyticsEvent({
+    type: AnalyticsEventTypes.NODE_ENTER,
+    flowId: 'flow-e',
+    sessionId: 's1',
+    nodeId: 'a',
+    properties: { fromNodeId: null },
+  }, store);
+  trackAnalyticsEvent({
+    type: AnalyticsEventTypes.NODE_ENTER,
+    flowId: 'flow-e',
+    sessionId: 's1',
+    nodeId: 'b',
+    properties: { fromNodeId: 'a' },
+  }, store);
+  const snap = getAnalyticsSnapshot('flow-e', {}, store);
+  assert.ok(snap.edgeTraversals.some((e) => e.from === 'a' && e.to === 'b'));
 });
 
 test('node error appears in failed nodes', () => {

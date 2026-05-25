@@ -18,6 +18,8 @@ export default function ConnectedGraphCanvas({
   flowToolbarProps = null,
   flowEditorChrome = true,
   canvasUxRef = null,
+  canvasQuickAdd = null,
+  showTemplateEmptyOverlay = false,
 }) {
   const graph = useGraphApi();
   const projection = useCanvasProjection();
@@ -51,6 +53,8 @@ export default function ConnectedGraphCanvas({
       flowToolbarProps={flowToolbarProps}
       flowEditorChrome={flowEditorChrome}
       canvasUxRef={canvasUxRef}
+      canvasQuickAdd={canvasQuickAdd}
+      showTemplateEmptyOverlay={showTemplateEmptyOverlay}
     />
   );
 }

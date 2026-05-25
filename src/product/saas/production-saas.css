@@ -1,0 +1,65 @@
+/**
+ * Production SaaS — performance, a11y, responsive polish (ManyChat-aligned).
+ */
+
+/* Focus visible everywhere in editor shell */
+.editor-shell--saas :focus-visible {
+  outline: 2px solid var(--pp-accent, #2563eb);
+  outline-offset: 2px;
+}
+
+/* Skip rendering off-screen hub panels until needed */
+.editor-shell--saas .prod-hub__body {
+  content-visibility: auto;
+}
+
+/* Canvas: reduce paint during pan/zoom */
+.editor-shell--saas .react-flow__viewport {
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editor-shell--saas .react-flow__viewport {
+    will-change: auto;
+  }
+
+  .editor-shell--saas .mc-sidebar__main,
+  .editor-shell--saas .fi-shell {
+    transition: none !important;
+  }
+}
+
+/* Touch targets on mobile */
+@media (max-width: 768px) {
+  .editor-shell--saas .tb-btn,
+  .editor-shell--saas .global-actions__btn,
+  .editor-shell--saas .prod-hub__btn {
+    min-height: 40px;
+  }
+
+  .editor-shell--saas .mc-status-cluster {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+}
+
+/* Draft badge in save cluster */
+.editor-shell--saas .save-status--draft .save-status__dot {
+  background: #f59e0b;
+}
+
+.editor-shell--saas .prod-hub-trigger {
+  border: 1px solid var(--pp-border);
+  background: var(--pp-surface);
+  color: var(--pp-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.editor-shell--saas .prod-hub-trigger:hover {
+  background: var(--pp-surface-muted);
+  color: var(--pp-text);
+}

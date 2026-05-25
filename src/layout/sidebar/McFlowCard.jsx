@@ -1,14 +1,11 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { interactiveMotion } from '../../motion/index.js';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { buildFlowCardViewModel } from '../flowCardModel.js';
 import ChannelBadge from './ChannelBadge.jsx';
 import './mc-flow-cards.css';
 
-const cardMotion = {
-  rest: { scale: 1, boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)' },
-  hover: { scale: 1.01, boxShadow: '0 8px 24px rgba(15, 23, 42, 0.08)' },
-};
 
 /**
  * Premium flow card — ManyChat / Notion database row density.
@@ -71,18 +68,14 @@ export default function McFlowCard({
 
   return (
     <motion.article
-      layout
       className={[
         'mc-flow-card',
         active ? 'mc-flow-card--active' : '',
         selected ? 'mc-flow-card--selected' : '',
         `mc-flow-card--${vm.status}`,
       ].filter(Boolean).join(' ')}
-      initial={false}
-      whileHover="hover"
-      animate="rest"
-      variants={cardMotion}
-      transition={{ type: 'spring', stiffness: 520, damping: 34 }}
+      layout
+      {...interactiveMotion}
     >
       {showCheckbox && (
         <input

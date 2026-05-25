@@ -10,6 +10,7 @@ export const useAiFlowStore = createImmerStore((set) => ({
   loadingAction: null,
   error: null,
   plan: null,
+  messages: [],
   suggestions: [],
   hints: [],
   repair: null,
@@ -39,5 +40,15 @@ export const useAiFlowStore = createImmerStore((set) => ({
   closeStudio: () => set((s) => {
     s.studioOpen = false;
     s.loading = false;
+    s.messages = [];
+    s.plan = null;
+  }),
+
+  pushMessage: (msg) => set((s) => {
+    s.messages.push({
+      id: `msg_${Date.now()}_${s.messages.length}`,
+      ts: Date.now(),
+      ...msg,
+    });
   }),
 }), 'aiFlow');

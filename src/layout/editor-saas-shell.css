@@ -54,9 +54,9 @@
   gap: var(--mc-space-3, 12px);
   background: rgba(255, 255, 255, 0.82) !important;
   border-bottom: 1px solid rgba(15, 23, 42, 0.06) !important;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8), 0 4px 24px rgba(15, 23, 42, 0.04) !important;
-  backdrop-filter: blur(16px) saturate(1.2);
-  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  box-shadow: none !important;
+  backdrop-filter: blur(10px) saturate(1.05);
+  -webkit-backdrop-filter: blur(10px) saturate(1.05);
 }
 
 .editor-shell--saas .mc-editor-topbar__cluster {
@@ -97,9 +97,9 @@
 }
 
 .editor-shell--saas .tb-btn-run {
-  border-radius: 10px;
+  border-radius: var(--radius-sm, 8px);
   font-weight: 600;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+  box-shadow: var(--shadow-xs) !important;
 }
 
 .editor-shell--saas .editor-brand-word {

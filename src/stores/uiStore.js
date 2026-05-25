@@ -35,7 +35,6 @@ const initial = {
   oauth2faPending: false,
   debugTraceOpen: false,
   debugCodegenSnapshot: null,
-  debugCodegenSnapshot: null,
   botDebugOpen: false,
   graphDiagOpen: false,
   graphStrictMode: (() => {
@@ -54,6 +53,8 @@ const initial = {
   repairBusy: false,
   lastRepairResult: null,
   publishBusy: false,
+  publishSuccess: false,
+  lastPublishedAt: null,
   /** Hide empty-canvas overlay after user starts dragging from palette */
   canvasOnboardingDismissed: false,
 };

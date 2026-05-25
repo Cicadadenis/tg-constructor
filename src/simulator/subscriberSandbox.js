@@ -6,10 +6,50 @@ import { variablesSnapshotFromSubscriber } from './variableInterpolation.js';
 
 const PREVIEW_BOT_ID = 'simulator-preview';
 
+/** @type {readonly { id: string, label: { ru: string, en: string, uk: string }, subscriber: object }[]} */
+export const SUBSCRIBER_PRESETS = Object.freeze([
+  {
+    id: 'new_user',
+    label: { ru: 'Новый', en: 'New user', uk: 'Новий' },
+    subscriber: {
+      externalUserId: 'tg_100001',
+      displayName: 'Анна',
+      firstName: 'Анна',
+      locale: 'ru',
+      tags: [],
+      customFields: { source: 'organic' },
+    },
+  },
+  {
+    id: 'returning',
+    label: { ru: 'Вернувшийся', en: 'Returning', uk: 'Повернувся' },
+    subscriber: {
+      externalUserId: 'tg_204812',
+      displayName: 'Максим',
+      firstName: 'Максим',
+      locale: 'ru',
+      tags: ['returning'],
+      customFields: { visits: '3', last_order: '2025-12-01' },
+    },
+  },
+  {
+    id: 'vip',
+    label: { ru: 'VIP', en: 'VIP', uk: 'VIP' },
+    subscriber: {
+      externalUserId: 'tg_900042',
+      displayName: 'Elena VIP',
+      firstName: 'Elena',
+      locale: 'en',
+      tags: ['vip', 'paid'],
+      customFields: { plan: 'pro', credits: '120' },
+    },
+  },
+]);
+
 /** @type {object|null} */
 let mockContext = null;
 
-function createDefaultMockContext() {
+function buildMockContext(partial = {}) {
   const subscriber = {
     id: 'sub_sim_preview',
     botId: PREVIEW_BOT_ID,
@@ -21,17 +61,39 @@ function createDefaultMockContext() {
     tags: [],
     customFields: {},
     attributes: {},
+    ...partial.subscriber,
   };
   const session = {
-    id: 'sess_sim_preview',
+    id: `sess_${subscriber.externalUserId}`,
     subscriberId: subscriber.id,
     botId: PREVIEW_BOT_ID,
     status: 'active',
     flowId: null,
     executionId: null,
-    variables: {},
+    variables: { ...(partial.sessionVariables || {}) },
   };
   return { subscriber, session, conversation: null };
+}
+
+function createDefaultMockContext() {
+  const preset = SUBSCRIBER_PRESETS[0];
+  return buildMockContext({ subscriber: preset.subscriber });
+}
+
+/**
+ * @param {string} presetId
+ */
+export function switchMockSubscriber(presetId) {
+  const preset = SUBSCRIBER_PRESETS.find((p) => p.id === presetId) || SUBSCRIBER_PRESETS[0];
+  mockContext = buildMockContext({ subscriber: preset.subscriber });
+  return mockContext;
+}
+
+export function presetLabel(preset, lang = 'ru') {
+  if (!preset?.label) return preset?.id || '';
+  if (lang === 'en') return preset.label.en;
+  if (lang === 'uk') return preset.label.uk;
+  return preset.label.ru;
 }
 
 /**
@@ -47,8 +109,10 @@ export async function ensureMockSubscriber() {
   };
 }
 
-export function resetMockSubscriber() {
-  mockContext = createDefaultMockContext();
+export function resetMockSubscriber(presetId) {
+  mockContext = presetId
+    ? switchMockSubscriber(presetId)
+    : createDefaultMockContext();
   return mockContext;
 }
 

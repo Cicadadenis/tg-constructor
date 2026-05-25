@@ -10,14 +10,15 @@ import {
 } from './aiFlowClient.js';
 import { insertSuggestedNode, applyRepairOperations } from './applyAiAssist.js';
 import { graphResolveNodeType } from '../constructor/graph_document/graph_node_payload.js';
+import { getAiLabels } from './aiLabels.js';
 
 const COPILOT_ACTIONS = [
-  { id: 'suggest_nodes', label: 'Узлы', icon: '🧩' },
-  { id: 'autocomplete', label: 'Дополнить', icon: '⚡' },
-  { id: 'optimize', label: 'Подсказки', icon: '💡' },
-  { id: 'repair', label: 'Починить', icon: '🔧' },
-  { id: 'copywriting', label: 'Текст', icon: '✍️' },
-  { id: 'branches', label: 'Ветки', icon: '⑂' },
+  { id: 'suggest_nodes', labelKey: 'suggest', icon: '🧩' },
+  { id: 'autocomplete', labelKey: 'autocomplete', icon: '⚡' },
+  { id: 'optimize', labelKey: 'optimize', icon: '💡' },
+  { id: 'repair', labelKey: 'repair', icon: '🔧' },
+  { id: 'copywriting', labelKey: 'copy', icon: '✍️' },
+  { id: 'branches', labelKey: 'branches', icon: '⑂' },
 ];
 
 /**
@@ -123,6 +124,8 @@ export default function AiCopilotPanel({
     return () => clearTimeout(t);
   }, [selectedBlockId, copilotOpen]);
 
+  const labels = React.useMemo(() => getAiLabels(lang), [lang]);
+
   if (!copilotOpen) {
     return (
       <button
@@ -130,7 +133,7 @@ export default function AiCopilotPanel({
         className="ai-copilot__open"
         onClick={() => useAiFlowStore.getState().patch({ copilotOpen: true })}
       >
-        {lang === 'ru' ? 'AI Copilot' : 'AI Copilot'}
+        ✨ {labels.copilot}
       </button>
     );
   }
@@ -139,7 +142,7 @@ export default function AiCopilotPanel({
     <section className="ai-copilot" aria-label="AI Copilot">
       <header className="ai-copilot__head">
         <span className="ai-copilot__badge">AI</span>
-        <strong>{lang === 'ru' ? 'Copilot' : 'Copilot'}</strong>
+        <strong>{labels.copilot}</strong>
         <button
           type="button"
           className="ai-copilot__toggle"
@@ -159,7 +162,7 @@ export default function AiCopilotPanel({
             onClick={() => runAction(a.id)}
           >
             <span>{a.icon}</span>
-            <span>{a.label}</span>
+            <span>{labels[a.labelKey] || a.id}</span>
           </button>
         ))}
       </div>
@@ -168,7 +171,7 @@ export default function AiCopilotPanel({
 
       {suggestions.length > 0 && (
         <div className="ai-copilot__block">
-          <h4>Предложенные узлы</h4>
+          <h4>{labels.suggest}</h4>
           <ul className="ai-copilot__list">
             {suggestions.map((s) => (
               <li key={s.type}>
@@ -188,7 +191,7 @@ export default function AiCopilotPanel({
 
       {hints.length > 0 && (
         <div className="ai-copilot__block">
-          <h4>Оптимизация</h4>
+          <h4>{labels.optimize}</h4>
           <ul className="ai-copilot__hints">
             {hints.map((h, i) => (
               <li key={`${h.code}-${i}`} className={`severity-${h.severity}`}>
@@ -215,7 +218,7 @@ export default function AiCopilotPanel({
 
       {copywriting?.variants?.length > 0 && (
         <div className="ai-copilot__block">
-          <h4>AI Copywriting</h4>
+          <h4>{labels.copy}</h4>
           {copywriting.variants.map((v, i) => (
             <button
               key={i}

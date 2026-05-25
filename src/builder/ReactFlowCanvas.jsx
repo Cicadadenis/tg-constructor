@@ -49,6 +49,8 @@ import './canvas/canvas-chrome.css';
 import './canvas/canvas-interaction.css';
 import './visualNodes/visual-node-card.css';
 import CanvasZoomControls from './canvas/CanvasZoomControls.jsx';
+import CanvasFloatingControls from '../flow-editor/CanvasFloatingControls.jsx';
+import CanvasEmptyQuickStart from '../flow-editor/CanvasEmptyQuickStart.jsx';
 import { buildCanvasEdgePresentation, resolveExecutionPathEdgeIds } from './canvas/canvasEdgeStyles.js';
 import { FlowEdgePickerHost, useFlowEdgePicker } from './flowEdge/FlowEdgePickerHost.jsx';
 import { isSplittableFlowEdge } from './flowEdge/insertNodeOnEdge.js';
@@ -177,6 +179,8 @@ function GraphFlowInner({
   flowToolbarProps = null,
   flowEditorChrome = true,
   canvasUxRef = null,
+  canvasQuickAdd = null,
+  showTemplateEmptyOverlay = false,
 }) {
   const graphCanvasActions = useGraphCanvasActions();
   const edgePicker = useFlowEdgePicker();
@@ -779,6 +783,8 @@ function GraphFlowInner({
       multiSelectionKeyCode={['Meta', 'Control', 'Shift']}
       minZoom={0.08}
       maxZoom={2.5}
+      translateExtent={[[-8000, -8000], [8000, 8000]]}
+      nodeExtent={[[-6000, -6000], [6000, 6000]]}
       zoomOnScroll
       zoomOnPinch
       zoomOnDoubleClick={false}
@@ -804,6 +810,23 @@ function GraphFlowInner({
         <CanvasZoomControls lang={lang} onFitFlow={fitToFlow} />
       )}
       {showMinimap && <CanvasEnhancedMinimap lang={lang} />}
+      {flowEditorChrome && (
+        <CanvasFloatingControls
+          lang={lang}
+          onQuickAddMessage={canvasQuickAdd?.onQuickAddMessage}
+          onQuickAddCondition={canvasQuickAdd?.onQuickAddCondition}
+          onQuickAddStart={canvasQuickAdd?.onQuickAddStart}
+        />
+      )}
+      {flowEditorChrome && isEmpty && !showTemplateEmptyOverlay && canvasQuickAdd && (
+        <CanvasEmptyQuickStart
+          lang={lang}
+          onQuickAddStart={canvasQuickAdd.onQuickAddStart}
+          onQuickAddMessage={canvasQuickAdd.onQuickAddMessage}
+          onApplyTemplate={canvasQuickAdd.onApplyTemplate}
+          onOpenAi={canvasQuickAdd.onOpenAi}
+        />
+      )}
       {flowEditorChrome && flowToolbarProps && (
         <Panel position="bottom-center" className="fe-toolbar-panel">
           <FlowToolbar lang={lang} {...flowToolbarProps} />

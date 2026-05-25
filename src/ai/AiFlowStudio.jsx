@@ -1,27 +1,22 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useAiFlowStore } from './aiFlowStore.js';
 import {
   PROMPT_TEMPLATE_CATEGORIES,
   getTemplatesByCategory,
   AI_PROMPT_MAX_CHARS,
 } from './promptTemplates.js';
-import { FLOW_TEMPLATES } from './flowTemplates.js';
+import { getAiLabels } from './aiLabels.js';
 import {
   planFlow,
   prepareFlowGeneration,
   generateFlowFromPrompt,
+  buildStacksFromPromptAssist,
 } from './aiFlowClient.js';
 import { normalizeAiPartialResponse } from '../builder/BuilderComponents.jsx';
 import './ai-flow-studio.css';
 
-const TABS = [
-  { id: 'generate', label: 'Generate', icon: '✨' },
-  { id: 'templates', label: 'Templates', icon: '📋' },
-  { id: 'plan', label: 'Preview', icon: '🔮' },
-];
-
 /**
- * ManyChat / Notion AI-style flow generation studio.
+ * Conversational AI-first flow generation — modern SaaS UX.
  */
 export default function AiFlowStudio({
   open,
@@ -31,248 +26,272 @@ export default function AiFlowStudio({
   onUpgrade,
   lang = 'ru',
 }) {
-  const store = useAiFlowStore();
   const {
     prompt,
     category,
     loading,
     error,
     plan,
+    messages,
     activeTab,
-  } = store;
+  } = useAiFlowStore();
+
+  const labels = useMemo(() => getAiLabels(lang), [lang]);
+  const chatEndRef = useRef(null);
+  const inputRef = useRef(null);
 
   const setPrompt = (v) => useAiFlowStore.getState().patch({ prompt: v });
   const setCategory = (v) => useAiFlowStore.getState().patch({ category: v });
   const setTab = (v) => useAiFlowStore.getState().patch({ activeTab: v });
 
-  const [localStep, setLocalStep] = useState(0);
-
   useEffect(() => {
     if (!open) return;
     useAiFlowStore.getState().patch({ error: null });
+    setTimeout(() => inputRef.current?.focus(), 120);
   }, [open]);
 
-  const runPlan = useCallback(async () => {
-    if (!prompt.trim() || prompt.trim().length < 3) {
-      useAiFlowStore.getState().patch({ error: 'Опишите сценарий минимум 3 символа' });
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages.length, loading]);
+
+  const appendUser = useCallback((text) => {
+    useAiFlowStore.getState().pushMessage({ role: 'user', content: text });
+    setPrompt(text);
+  }, []);
+
+  const appendAssistant = useCallback((content, extra = {}) => {
+    useAiFlowStore.getState().pushMessage({ role: 'assistant', content, ...extra });
+  }, []);
+
+  const runConversationalGenerate = useCallback(async (text) => {
+    const q = String(text || prompt).trim();
+    if (!q || q.length < 3) {
+      useAiFlowStore.getState().patch({ error: lang === 'en' ? 'Describe your flow (min. 3 chars)' : 'Опишите сценарий (мин. 3 символа)' });
       return;
     }
-    useAiFlowStore.getState().patch({ loading: true, loadingAction: 'plan', error: null });
-    try {
-      const res = await planFlow(prompt.trim());
-      useAiFlowStore.getState().patch({ plan: res.plan, activeTab: 'plan' });
-    } catch (e) {
-      useAiFlowStore.getState().patch({ error: e.message });
-    } finally {
-      useAiFlowStore.getState().patch({ loading: false, loadingAction: null });
-    }
-  }, [prompt]);
-
-  const runGenerate = useCallback(async () => {
     if (!canUseAi) {
       onUpgrade?.();
       return;
     }
-    if (!prompt.trim() || prompt.trim().length < 5) {
-      useAiFlowStore.getState().patch({ error: 'Опишите сценарий подробнее (мин. 5 символов)' });
-      return;
-    }
-    useAiFlowStore.getState().patch({ loading: true, loadingAction: 'generate', error: null });
-    setLocalStep(0);
-    const stepTimer = setInterval(() => setLocalStep((s) => Math.min(s + 1, 4)), 900);
+
+    appendUser(q);
+    useAiFlowStore.getState().patch({ loading: true, loadingAction: 'generate', error: null, plan: null });
+
     try {
-      const prep = await prepareFlowGeneration(prompt.trim());
-      const expanded = prep.expandedPrompt || prompt.trim();
-      const data = await generateFlowFromPrompt(expanded);
-      clearInterval(stepTimer);
-      if (data.status === 'partial_success' || data.status === 'fallback_skeleton' || data.partial) {
-        const partial = normalizeAiPartialResponse(data);
-        useAiFlowStore.getState().patch({
-          error: partial.hasContext
-            ? 'Частичный сценарий — нажмите «Проверить» на холсте или упростите запрос.'
-            : 'Partial IR без контекста',
-        });
-        return;
+      appendAssistant(labels.planning, { status: 'thinking' });
+      const planRes = await planFlow(q);
+      const structured = planRes.plan;
+      useAiFlowStore.getState().patch({ plan: structured });
+
+      const seqLines = (structured?.sequence || [])
+        .map((s, i) => `${i + 1}. ${s.label || s.type} (${s.type})`)
+        .join('\n');
+      appendAssistant(
+        `${labels.planReady}\n${seqLines || '—'}`,
+        { status: 'plan', plan: structured },
+      );
+
+      appendAssistant(labels.generating, { status: 'thinking' });
+
+      let stacks = null;
+      let meta = {};
+      let aiConfidenceLabel = null;
+
+      try {
+        const prep = await prepareFlowGeneration(q);
+        const expanded = prep.expandedPrompt || q;
+        const data = await generateFlowFromPrompt(expanded);
+        if (data.status === 'partial_success' || data.status === 'fallback_skeleton' || data.partial) {
+          const partial = normalizeAiPartialResponse(data);
+          useAiFlowStore.getState().patch({
+            error: partial.hasContext
+              ? (lang === 'en' ? 'Partial flow — simplify the prompt or use Repair on canvas.' : 'Частичный сценарий — упростите запрос или «Починить» на холсте.')
+              : 'Partial IR',
+          });
+          return;
+        }
+        if (data.status === 'failed') {
+          throw new Error(data.error || data.reason || 'Generation failed');
+        }
+        if (data.stacks?.length) {
+          stacks = data.stacks;
+          meta = data.meta || {};
+          aiConfidenceLabel = data.aiConfidenceLabel;
+        }
+      } catch (llmErr) {
+        const fallback = await buildStacksFromPromptAssist(q);
+        stacks = fallback.stacks;
+        meta = { ...fallback.meta, fallbackReason: llmErr.message };
       }
-      if (data.status === 'failed') {
-        throw new Error(data.error || data.reason || 'Generation failed');
-      }
-      if (data.stacks?.length) {
-        onApplyStacks?.(data.stacks, {
-          templateMode: Boolean(data.meta?.deterministicTemplate),
-          templateLabel: data.meta?.semanticTemplate,
-          aiConfidenceLabel: data.aiConfidenceLabel,
+
+      if (stacks?.length) {
+        onApplyStacks?.(stacks, {
+          templateMode: Boolean(meta?.deterministicTemplate),
+          templateLabel: meta?.semanticTemplate || structured?.niche,
+          aiConfidenceLabel,
+          recoveryMode: Boolean(meta?.fallbackReason),
         });
+        appendAssistant(labels.applied, { status: 'done' });
+        useAiFlowStore.getState().patch({ studioOpen: false, prompt: '', plan: null, messages: [] });
         onClose?.();
-        useAiFlowStore.getState().patch({ studioOpen: false, prompt: '', plan: null });
-      } else if (data.error) {
-        throw new Error(data.error);
+      } else {
+        throw new Error(lang === 'en' ? 'No flow generated' : 'Flow не сгенерирован');
       }
     } catch (e) {
       useAiFlowStore.getState().patch({ error: e.message });
+      appendAssistant(`⚠ ${e.message}`, { status: 'error' });
     } finally {
-      clearInterval(stepTimer);
       useAiFlowStore.getState().patch({ loading: false, loadingAction: null });
     }
-  }, [prompt, canUseAi, onApplyStacks, onClose, onUpgrade]);
+  }, [
+    prompt,
+    canUseAi,
+    onApplyStacks,
+    onClose,
+    onUpgrade,
+    lang,
+    labels,
+    appendUser,
+    appendAssistant,
+  ]);
+
+  const handleChip = (text) => {
+    setPrompt(text);
+    void runConversationalGenerate(text);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (!loading) void runConversationalGenerate();
+    }
+  };
 
   if (!open) return null;
 
   const templates = getTemplatesByCategory(category);
-  const ru = lang === 'ru';
 
   return (
     <div className="ai-studio-backdrop" onClick={() => !loading && onClose?.()}>
-      <div className="ai-studio" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="AI Flow Studio">
+      <div className="ai-studio ai-studio--chat" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="AI Flow">
         <header className="ai-studio__head">
           <div>
             <h2 className="ai-studio__title">
-              <span className="ai-studio__spark">✨</span>
-              {ru ? 'AI Flow Studio' : 'AI Flow Studio'}
+              <span className="ai-studio__spark" aria-hidden>✨</span>
+              {labels.studioTitle}
             </h2>
-            <p className="ai-studio__subtitle">
-              {ru
-                ? 'Опишите сценарий на естественном языке — получите готовый flow с узлами и связями'
-                : 'Describe your bot in natural language — get a complete visual flow'}
-            </p>
+            <p className="ai-studio__subtitle">{labels.studioSubtitle}</p>
           </div>
           <button type="button" className="ai-studio__close" onClick={onClose} disabled={loading} aria-label="Close">×</button>
         </header>
 
-        <nav className="ai-studio__tabs">
-          {TABS.map((t) => (
+        <div className="ai-studio__chips">
+          {labels.chips.map((chip) => (
             <button
-              key={t.id}
+              key={chip}
               type="button"
-              className={`ai-studio__tab ${activeTab === t.id ? 'is-active' : ''}`}
-              onClick={() => setTab(t.id)}
+              className="ai-studio__chip"
+              disabled={loading}
+              onClick={() => handleChip(chip)}
             >
-              <span>{t.icon}</span> {t.label}
+              {chip}
             </button>
           ))}
-        </nav>
-
-        <div className="ai-studio__body">
-          {activeTab === 'templates' && (
-            <div className="ai-studio__templates">
-              <div className="ai-studio__cat-row">
-                <button
-                  type="button"
-                  className={`ai-studio__chip ${category === 'all' ? 'is-active' : ''}`}
-                  onClick={() => setCategory('all')}
-                >
-                  Все
-                </button>
-                {PROMPT_TEMPLATE_CATEGORIES.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    className={`ai-studio__chip ${category === c.id ? 'is-active' : ''}`}
-                    onClick={() => setCategory(c.id)}
-                  >
-                    {c.icon} {c.label}
-                  </button>
-                ))}
-              </div>
-              <div className="ai-studio__template-grid">
-                {templates.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    className="ai-studio__template-card"
-                    onClick={() => {
-                      setPrompt(t.prompt.slice(0, AI_PROMPT_MAX_CHARS));
-                      setTab('generate');
-                    }}
-                  >
-                    <strong>{t.title}</strong>
-                    <span>{t.description}</span>
-                  </button>
-                ))}
-              </div>
-              <div className="ai-studio__flow-templates">
-                <h4>Структура flow</h4>
-                {FLOW_TEMPLATES.map((ft) => (
-                  <div key={ft.id} className="ai-studio__flow-tpl">
-                    <span>{ft.icon}</span>
-                    <div>
-                      <strong>{ft.name}</strong>
-                      <span>{ft.nodes.join(' → ')}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {(activeTab === 'generate' || activeTab === 'plan') && (
-            <>
-              <div className="ai-studio__prompt-wrap">
-                <textarea
-                  className="ai-studio__prompt"
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value.slice(0, AI_PROMPT_MAX_CHARS))}
-                  placeholder={ru
-                    ? 'Например: Сделай автоворонку для салона / Сделай onboarding flow'
-                    : 'e.g. Build a salon booking funnel / Create onboarding flow'}
-                  rows={5}
-                  disabled={loading}
-                />
-                <div className="ai-studio__prompt-meta">
-                  <span>{prompt.length}/{AI_PROMPT_MAX_CHARS}</span>
-                </div>
-              </div>
-
-              {error && <div className="ai-studio__error" role="alert">{error}</div>}
-
-              {plan && activeTab === 'plan' && (
-                <div className="ai-studio__plan">
-                  <h4>Структурированный план</h4>
-                  <p className="ai-studio__plan-niche">Ниша: <code>{plan.niche}</code> · шаблон: {plan.suggestedTemplate}</p>
-                  <ol className="ai-studio__sequence">
-                    {(plan.sequence || []).map((step, i) => (
-                      <li key={`${step.type}-${i}`}>
-                        <span className="ai-studio__seq-type">{step.type}</span>
-                        <span>{step.label}</span>
-                      </li>
-                    ))}
-                  </ol>
-                  <details className="ai-studio__expanded">
-                    <summary>Расширенный prompt</summary>
-                    <pre>{plan.expandedPrompt}</pre>
-                  </details>
-                </div>
-              )}
-            </>
-          )}
         </div>
 
-        <footer className="ai-studio__foot">
-          <button
-            type="button"
-            className="ai-studio__btn ai-studio__btn--ghost"
-            onClick={runPlan}
-            disabled={loading || !prompt.trim()}
-          >
-            {loading && useAiFlowStore.getState().loadingAction === 'plan' ? '…' : 'Preview plan'}
-          </button>
-          <button
-            type="button"
-            className="ai-studio__btn ai-studio__btn--primary"
-            onClick={runGenerate}
-            disabled={loading || prompt.trim().length < 5}
-          >
-            {loading && useAiFlowStore.getState().loadingAction === 'generate'
-              ? `Generating… (${localStep + 1}/5)`
-              : (ru ? 'Сгенерировать flow' : 'Generate flow')}
-          </button>
-        </footer>
+        <div className="ai-studio__chat">
+          {messages.length === 0 && (
+            <div className="ai-studio__welcome">
+              <p>{lang === 'en' ? 'Try a quick start or describe your bot below.' : 'Выберите пример или опишите бота ниже.'}</p>
+            </div>
+          )}
+          {messages.map((m) => (
+            <div
+              key={m.id}
+              className={`ai-studio__bubble ai-studio__bubble--${m.role}${m.status ? ` is-${m.status}` : ''}`}
+            >
+              <pre className="ai-studio__bubble-text">{m.content}</pre>
+              {m.plan?.sequence?.length > 0 && m.status === 'plan' && (
+                <ol className="ai-studio__seq-mini">
+                  {m.plan.sequence.map((step, i) => (
+                    <li key={`${step.type}-${i}`}>
+                      <code>{step.type}</code> {step.label}
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          ))}
+          {loading && (
+            <div className="ai-studio__bubble ai-studio__bubble--assistant is-thinking">
+              <span className="ai-studio__typing" aria-hidden />
+            </div>
+          )}
+          <div ref={chatEndRef} />
+        </div>
 
-        {loading && (
-          <div className="ai-studio__loading-bar" aria-hidden>
-            <div className="ai-studio__loading-fill" style={{ width: `${((localStep + 1) / 5) * 100}%` }} />
+        {activeTab === 'templates' && (
+          <div className="ai-studio__templates-inline">
+            <div className="ai-studio__cat-row">
+              <span className="ai-studio__templates-label">{labels.templates}</span>
+              {PROMPT_TEMPLATE_CATEGORIES.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={`ai-studio__chip ${category === c.id ? 'is-active' : ''}`}
+                  onClick={() => setCategory(c.id)}
+                >
+                  {c.icon}
+                </button>
+              ))}
+            </div>
+            <div className="ai-studio__template-grid ai-studio__template-grid--compact">
+              {templates.slice(0, 4).map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  className="ai-studio__template-card"
+                  onClick={() => handleChip(t.prompt.slice(0, AI_PROMPT_MAX_CHARS))}
+                >
+                  <strong>{t.title}</strong>
+                </button>
+              ))}
+            </div>
           </div>
         )}
+
+        {error && <div className="ai-studio__error" role="alert">{error}</div>}
+
+        <footer className="ai-studio__composer">
+          <textarea
+            ref={inputRef}
+            className="ai-studio__composer-input"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value.slice(0, AI_PROMPT_MAX_CHARS))}
+            onKeyDown={handleKeyDown}
+            placeholder={labels.placeholder}
+            rows={2}
+            disabled={loading}
+          />
+          <div className="ai-studio__composer-bar">
+            <span className="ai-studio__prompt-meta">{prompt.length}/{AI_PROMPT_MAX_CHARS}</span>
+            <button
+              type="button"
+              className="ai-studio__btn ai-studio__btn--ghost"
+              onClick={() => setTab(activeTab === 'templates' ? 'generate' : 'templates')}
+            >
+              📋
+            </button>
+            <button
+              type="button"
+              className="ai-studio__btn ai-studio__btn--primary"
+              onClick={() => runConversationalGenerate()}
+              disabled={loading || prompt.trim().length < 3}
+            >
+              {loading ? '…' : labels.send}
+            </button>
+          </div>
+        </footer>
       </div>
     </div>
   );

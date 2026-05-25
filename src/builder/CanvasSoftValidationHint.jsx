@@ -1,13 +1,18 @@
 import React from 'react';
+import { BuilderUiContext } from '../builderContext.js';
+import { softenEngineeringCopy } from '../copy/productCopy.js';
 import { useGraphValidation } from './graphValidationContext.jsx';
 
 /** Subtle non-blocking hint during editing (no toast, no modal). */
 export default function CanvasSoftValidationHint() {
+  const ctx = React.useContext(BuilderUiContext);
+  const lang = ctx?.lang || 'ru';
   const validation = useGraphValidation();
   const soft = validation?.softStatus;
   if (!soft || soft.badge === 'ok') return null;
   const hint = soft.hints?.[0];
   if (!hint?.title) return null;
+  const title = softenEngineeringCopy(hint.title, lang);
 
   return (
     <div
@@ -29,7 +34,7 @@ export default function CanvasSoftValidationHint() {
         backdropFilter: 'blur(6px)',
       }}
     >
-      {hint.title}
+      {title}
     </div>
   );
 }

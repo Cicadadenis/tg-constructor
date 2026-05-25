@@ -169,6 +169,7 @@ import {
   logDevIdeStartupBanner,
   setDevIdeAdminAccessChecker,
 } from './server/devIde.mjs';
+import { registerSubscriberRoutes } from './server/routes/subscribers.mjs';
 
 const { Pool } = pg;
 
@@ -1102,6 +1103,7 @@ async function requireUserAuth(req, res, next) {
   }
 }
 
+
 function safeReturnToPath(value) {
   if (!value || typeof value !== 'string') return null;
   const trimmed = value.trim();
@@ -2033,6 +2035,11 @@ app.post('/api/login', loginRateLimit, async (req, res) => {
 });
 
 /** Свежие данные пользователя из БД (план, подписка после выдачи в админке и т.д.) — клиент синхронизирует cicada_session. */
+registerSubscriberRoutes(app, {
+  requireAuth: (req) => Boolean(req.authUserId),
+  authMiddleware: requireUserAuth,
+});
+
 app.get('/api/me', requireUserAuth, sessionSyncRateLimit, async (req, res) => {
   const auth = requireRequestAuthContext(req, res);
   if (!auth) return;

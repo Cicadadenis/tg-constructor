@@ -13,6 +13,7 @@ import {
   suggestCopywriting,
 } from '../core/ai/flowAssistEngine.mjs';
 import { detectFlowNiche } from '../core/ai/flowIntentExtensions.mjs';
+import { buildStacksFromPrompt } from '../core/ai/flowPlanToStacks.mjs';
 import { runGraphValidationPipeline } from '../src/constructor/graph_document/graph_validation_pipeline.js';
 
 /**
@@ -68,12 +69,30 @@ export function mountAiFlowAssistRoutes(app, deps) {
           }
           const expandedPrompt = expandFlowPrompt(prompt).slice(0, AI_FLOW_PROMPT_MAX_CHARS);
           const plan = buildStructuredFlowPlan(prompt);
+          const built = buildStacksFromPrompt(prompt, plan);
           return res.json({
             ok: true,
             action,
             expandedPrompt,
             plan,
-            message: 'Отправьте expandedPrompt на POST /api/ai-generate для полной сборки flow.',
+            stacks: built.stacks,
+            meta: built.meta,
+            message: 'Используйте stacks локально или POST /api/ai-generate для LLM-сборки.',
+          });
+        }
+
+        case 'build_stacks': {
+          if (prompt.length < 3) {
+            return res.status(400).json({ ok: false, error: 'PROMPT_TOO_SHORT' });
+          }
+          const plan = buildStructuredFlowPlan(prompt);
+          const built = buildStacksFromPrompt(prompt, plan);
+          return res.json({
+            ok: true,
+            action,
+            plan,
+            stacks: built.stacks,
+            meta: built.meta,
           });
         }
 

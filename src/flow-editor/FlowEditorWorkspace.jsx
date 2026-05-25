@@ -20,9 +20,16 @@ export default function FlowEditorWorkspace({
   canvasUxRef = null,
   overlays = null,
   emptyState = null,
+  canvasQuickAdd = null,
+  showTemplateEmptyOverlay = false,
 }) {
   return (
-    <div className="fe-workspace app-zone app-zone--center" data-zone="center" ref={canvasRef}>
+    <div
+      className="fe-workspace app-zone app-zone--center"
+      data-zone="center"
+      data-tour="canvas-area"
+      ref={canvasRef}
+    >
       <div className="fe-workspace__stage mc-ds-canvas-host app-canvas-host">
         <GraphCanvasActionsProvider value={graphCanvasActions}>
           <FlowCanvas
@@ -35,6 +42,8 @@ export default function FlowEditorWorkspace({
             onInsertNodeOnEdge={onInsertNodeOnEdge}
             onRequestDeleteNodes={onRequestDeleteNodes}
             canvasUxRef={canvasUxRef}
+            canvasQuickAdd={canvasQuickAdd}
+            showTemplateEmptyOverlay={showTemplateEmptyOverlay}
           />
         </GraphCanvasActionsProvider>
         {overlays}

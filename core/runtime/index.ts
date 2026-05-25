@@ -283,4 +283,13 @@ export {
   type SegmentFilter,
 } from "../subscriber/index.js";
 
+export {
+  createProductSubscriberLayer,
+  createSubscriberProductApi,
+  AudienceEngine,
+  SubscriberEventPipeline,
+  SUBSCRIBER_FLOW_BLOCKS,
+  registerSubscriberProductExtensions,
+} from "../product/subscriber/index.js";
+
 

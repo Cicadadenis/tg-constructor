@@ -1,7 +1,18 @@
 import React, { useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { PreviewRichText, safePreviewHref } from '../previewRichText.jsx';
 import { previewKeyboardButtonKey } from '../previewMessages.js';
 import { normalizeCallbackData } from '../../../core/codegen/callbackDataNormalize.js';
+import TelegramDeviceFrame from './TelegramDeviceFrame.jsx';
+
+function formatTime(ts) {
+  if (!ts) return '';
+  try {
+    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return '';
+  }
+}
 
 function TypingBubble() {
   return (
@@ -21,7 +32,10 @@ function MessageBubble({ message, busy, onReplyText, onCallback }) {
 
   const animClass = m._animate ? ' chat-sim__bubble--enter' : '';
 
+  const time = formatTime(m.ts);
+
   return (
+    <div className={`chat-sim__bubble-wrap ${isUser ? 'chat-sim__bubble-wrap--user' : 'chat-sim__bubble-wrap--bot'}`}>
     <div className={`chat-sim__bubble ${isUser ? 'chat-sim__bubble--user' : 'chat-sim__bubble--bot'}${animClass}`}>
       {m.role === 'bot' && m.kind === 'sys' && (
         <span className="chat-sim__sys">{m.text}</span>
@@ -95,6 +109,8 @@ function MessageBubble({ message, busy, onReplyText, onCallback }) {
           {m.kind === 'photo' ? '🖼 ' : '📎 '}{m.fileName || 'файл'}
         </span>
       )}
+      {time && <span className="chat-sim__bubble-time">{time}</span>}
+    </div>
     </div>
   );
 }
@@ -108,6 +124,7 @@ export default function MessengerPreview({
   activeNodeId = null,
   activeNodeLabel = null,
   viewMode = 'mobile',
+  useDeviceFrame = false,
   onSendText,
   onSendCallback,
   draft = '',
@@ -129,7 +146,7 @@ export default function MessengerPreview({
     viewMode === 'desktop' ? 'chat-sim__device--desktop' : 'chat-sim__device--mobile',
   ].join(' ');
 
-  return (
+  const chat = (
     <div className={shellClass}>
       <header className="chat-sim__header">
         <div className="chat-sim__avatar" aria-hidden />
@@ -154,15 +171,23 @@ export default function MessengerPreview({
             Отправьте <strong>/start</strong>, текст или нажмите кнопку — сценарий выполняется в изолированной песочнице.
           </p>
         )}
-        {messages.map((m, i) => (
-          <MessageBubble
-            key={m.id ?? `msg-${i}-${m.ts ?? i}`}
-            message={{ ...m, _animate: i === messages.length - 1 }}
-            busy={busy}
-            onReplyText={onSendText}
-            onCallback={onSendCallback}
-          />
-        ))}
+        <AnimatePresence initial={false}>
+          {messages.map((m, i) => (
+            <motion.div
+              key={m.id ?? `msg-${i}-${m.ts ?? i}`}
+              initial={{ opacity: 0, y: 6, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <MessageBubble
+                message={{ ...m, _animate: i === messages.length - 1 }}
+                busy={busy}
+                onReplyText={onSendText}
+                onCallback={onSendCallback}
+              />
+            </motion.div>
+          ))}
+        </AnimatePresence>
         {typing && <TypingBubble />}
       </div>
 
@@ -212,4 +237,14 @@ export default function MessengerPreview({
       </footer>
     </div>
   );
+
+  if (useDeviceFrame) {
+    return (
+      <TelegramDeviceFrame viewMode={viewMode} botName={botName}>
+        {chat}
+      </TelegramDeviceFrame>
+    );
+  }
+
+  return chat;
 }

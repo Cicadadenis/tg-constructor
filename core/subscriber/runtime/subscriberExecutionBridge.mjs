@@ -203,5 +203,39 @@ export function effectsForBlockType(blockType, payload = {}) {
     );
   }
 
+  /* ——— Product layer block types (subscriber-centric) ——— */
+  if (t === 'add_tag') {
+    const tag = String(p.tag ?? p.name ?? '').trim();
+    if (tag) out.push({ type: 'subscriberTag', tag, action: 'add' });
+  }
+
+  if (t === 'remove_tag') {
+    const tag = String(p.tag ?? p.name ?? '').trim();
+    if (tag) out.push({ type: 'subscriberTag', tag, action: 'remove' });
+  }
+
+  if (t === 'set_subscriber_field') {
+    const field = String(p.field ?? p.key ?? '').trim();
+    if (field) {
+      out.push({ type: 'subscriberSetField', field, value: p.value ?? p.val ?? null });
+    }
+  }
+
+  if (t === 'set_subscriber_variable') {
+    const key = String(p.key ?? p.varname ?? p.name ?? '').trim();
+    if (key) {
+      out.push({ type: 'subscriberSetVariable', key, value: p.value ?? p.val ?? null });
+    }
+  }
+
+  if (t === 'track_subscriber_event') {
+    const eventType = String(p.eventType ?? p.event ?? 'subscriber.custom').trim();
+    out.push({
+      type: 'subscriberTrackEvent',
+      eventType,
+      payload: { ...(typeof p.payload === 'object' && p.payload ? p.payload : p) },
+    });
+  }
+
   return Object.freeze(out);
 }

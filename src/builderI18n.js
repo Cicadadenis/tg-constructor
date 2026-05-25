@@ -1,5 +1,6 @@
 /** Локализация конструктора (палитра блоков, панели, тулбар) — ru / en / uk */
 
+import { mapProductStrings, softenEngineeringCopy } from './copy/productCopy.js';
 import { PALETTE_NODE_CATEGORIES } from './constructor/graph_document/palette_core.js';
 
 const FLOW_SECTION_GROUP_IDS = new Set(PALETTE_NODE_CATEGORIES);
@@ -43,7 +44,7 @@ const GROUP_LABELS = {
     media: 'Media',
     actions: 'Actions',
     scenarios: 'Scenarios',
-    middleware: 'Middleware',
+    middleware: 'Extensions',
     telegram: 'Telegram',
     data: 'Data',
   },
@@ -54,7 +55,7 @@ const GROUP_LABELS = {
     media: 'Медіа',
     actions: 'Дії',
     scenarios: 'Сценарії',
-    middleware: 'Middleware',
+    middleware: 'Розширення',
     telegram: 'Telegram',
     data: 'Дані',
   },
@@ -115,7 +116,7 @@ const BLOCK_LABELS = {
     poll: 'Poll',
     scenario: 'Scenario',
     step: 'Step',
-    middleware: 'Middleware',
+    middleware: 'Extensions',
     check_sub: 'Check subscription',
     member_role: 'Member role',
     forward_msg: 'Forward',
@@ -181,7 +182,7 @@ const BLOCK_LABELS = {
     poll: 'Опитування',
     scenario: 'Сценарій',
     step: 'Крок',
-    middleware: 'Middleware',
+    middleware: 'Extensions',
     check_sub: 'Перевірка підписки',
     member_role: 'Роль учасника',
     forward_msg: 'Переслати',
@@ -450,11 +451,17 @@ const PROP_FIELD_LABELS = {
 
 export function localizedPropFields(blockType, lang, baseFields) {
   const lc = String(lang || 'ru').toLowerCase();
-  if (lc === 'ru' || !baseFields?.length) return baseFields || [];
+  if (!baseFields?.length) return baseFields || [];
+  if (lc === 'ru') {
+    return baseFields.map((f) => (
+      f.label ? { ...f, label: softenEngineeringCopy(f.label, lc) } : f
+    ));
+  }
   const patch = PROP_FIELD_LABELS[lc] || PROP_FIELD_LABELS.en;
   return baseFields.map((f) => {
     const k = `${blockType}.${f.key}`;
-    return patch[k] ? { ...f, label: patch[k] } : f;
+    const label = patch[k] || f.label;
+    return label ? { ...f, label: softenEngineeringCopy(label, lc) } : f;
   });
 }
 
@@ -879,7 +886,7 @@ export const CONSTRUCTOR_I18N = {
     blockHelpTitle: 'Help: what this block does and what can go below',
     blockHelpAria: 'Block help',
     langUpdatedToast: 'Interface language updated',
-    mobileMenuDebug: '🐛 Debug (logs)',
+    mobileMenuDebug: '📋 Activity log',
     mobileMenuPreview: '💬 Chat preview',
     mobileLoadCcd: '📁 Load .ccd',
     mobileInstructions: '📖 Instructions',
@@ -1144,7 +1151,7 @@ export const CONSTRUCTOR_I18N = {
     blockHelpTitle: 'Довідка: що робить блок і що можна вставити нижче',
     blockHelpAria: 'Довідка щодо блоку',
     langUpdatedToast: 'Мову інтерфейсу оновлено',
-    mobileMenuDebug: '🐛 Налагодження (логи)',
+    mobileMenuDebug: '📋 Журнал активності',
     mobileMenuPreview: '💬 Чат-превʼю',
     mobileLoadCcd: '📁 Завантажити .ccd',
     mobileInstructions: '📖 Інструкція',
@@ -1273,7 +1280,8 @@ export const CONSTRUCTOR_I18N = {
 
 export function getConstructorStrings(lang) {
   const lc = String(lang || 'ru').toLowerCase();
-  return CONSTRUCTOR_I18N[lc] || CONSTRUCTOR_I18N.ru;
+  const base = CONSTRUCTOR_I18N[lc] || CONSTRUCTOR_I18N.ru;
+  return mapProductStrings(base, lc);
 }
 
 /** Англоязычные подсказки панели свойств (слить с русской базой из App) */
@@ -1345,8 +1353,15 @@ export const BEGINNER_GUIDE_I18N = {
 
 export function mergeBeginnerGuide(lang, ruGuide) {
   const lc = String(lang || 'ru').toLowerCase();
-  if (lc !== 'en' || !ruGuide) return ruGuide;
-  return { ...ruGuide, ...BEGINNER_GUIDE_I18N.en };
+  if (!ruGuide) return ruGuide;
+  const merged = lc === 'en'
+    ? { ...ruGuide, ...BEGINNER_GUIDE_I18N.en }
+    : ruGuide;
+  const out = {};
+  for (const [k, v] of Object.entries(merged)) {
+    out[k] = typeof v === 'string' ? softenEngineeringCopy(v, lc) : v;
+  }
+  return out;
 }
 
 export const BLOCK_NOTES_I18N = {
@@ -1398,8 +1413,9 @@ export const BLOCK_NOTES_I18N = {
 export function blockNoteForLang(lang, type, ruNote) {
   if (!ruNote) return null;
   const lc = String(lang || 'ru').toLowerCase();
-  if (lc !== 'en') return ruNote;
-  const text = BLOCK_NOTES_I18N.en[type];
-  if (!text) return ruNote;
-  return { ...ruNote, text };
+  const base = lc === 'en' ? (BLOCK_NOTES_I18N.en[type] ? { ...ruNote, text: BLOCK_NOTES_I18N.en[type] } : ruNote) : ruNote;
+  if (typeof base.text === 'string') {
+    return { ...base, text: softenEngineeringCopy(base.text, lc) };
+  }
+  return base;
 }

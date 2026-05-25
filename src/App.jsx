@@ -80,6 +80,11 @@ import { FlowEditorWorkspace } from './flow-editor/index.js';
 import { useAppLayout } from './layout/AppLayoutContext.jsx';
 import RightInspectorPanel from './layout/RightInspectorPanel.jsx';
 import SaveStatusIndicator from './layout/SaveStatusIndicator.jsx';
+import PublishStatusIndicator from './layout/PublishStatusIndicator.jsx';
+import ProductionHub from './product/saas/ProductionHub.jsx';
+import { pushFlowVersion } from './product/saas/versionHistory.js';
+import { useProductionStore } from './stores/productionStore.js';
+import { getProductionLabels } from './product/saas/productionLabels.js';
 import { deriveFlowListMeta } from './layout/flowListMeta.js';
 import { usePersistenceStore } from './stores/persistenceStore.js';
 import MobileZoneNav from './layout/MobileZoneNav.jsx';
@@ -706,6 +711,7 @@ function FlowEditorCenter({
   setTourStep,
   setTourActive,
   aiGlobalLoading,
+  canvasQuickAdd,
 }) {
   const { toggleFocusMode, focusMode } = useAppLayout();
 
@@ -752,6 +758,8 @@ function FlowEditorCenter({
           />
         </>
       )}
+      canvasQuickAdd={canvasQuickAdd}
+      showTemplateEmptyOverlay={showCanvasOnboarding}
       emptyState={(
         <FlowCanvasEmptyState
           show={showCanvasOnboarding}
@@ -1178,8 +1186,8 @@ export default function App() {
       actions.push({
         id: 'blocks',
         icon: '🧱',
-        label: en ? 'Blocks' : 'Блоки',
-        title: en ? 'Open block palette' : 'Открыть палитру блоков',
+        label: en ? 'Elements' : uiLang === 'uk' ? 'Елементи' : 'Элементы',
+        title: en ? 'Open element palette' : uiLang === 'uk' ? 'Відкрити палітру елементів' : 'Открыть палитру элементов',
         onClick: () => {
           if (isMobileView) setMobileZone('left');
           else if (appSection !== 'flows' && appSection !== 'automations') setAppSection('templates');
@@ -1413,10 +1421,13 @@ export default function App() {
   }, [canSeeCode, inspectorTab]);
 
   useEffect(() => {
-    if (!isCanvasSection(appSection) && mobileZone === 'canvas') {
+    if (!currentUser) return;
+    if (isCanvasSection(appSection)) {
+      setMobileZone('canvas');
+    } else if (mobileZone === 'canvas') {
       setMobileZone('left');
     }
-  }, [appSection, mobileZone]);
+  }, [currentUser?.id, appSection, mobileZone, setMobileZone]);
 
   useEffect(() => {
     const handler = () => setIsMobileView(isMobileBuilderViewport());
@@ -2525,6 +2536,43 @@ export default function App() {
     useSelectionStore.getState().requestCanvasFocus(nodeId);
   }, [endPaletteDrag, currentUser, showToast, graph, draggingPaletteEntry, uiLang, builderBlockTypes, builderUi, selectedBlockId, insertNodeAfter, getCanvasCenterPosition, attachLegacyUiToNode]);
 
+  const handleQuickAddStart = useCallback(() => {
+    const doc = graph.getGraphDocument();
+    const hasStart = Object.values(doc.nodes || {}).some((n) => n.type === 'start');
+    if (hasStart) {
+      showToast(
+        uiLang === 'en' ? 'Start block already exists' : 'Блок «Старт» уже есть на холсте',
+        'info',
+      );
+      return;
+    }
+    const type = 'start';
+    const props = graphMakePropsForNewBlock(graph, type, currentUser);
+    const nodeId = uid();
+    const position = getCanvasCenterPosition();
+    const result = graphAddNode(graph, {
+      nodeId,
+      type,
+      position,
+      data: props,
+    });
+    if (!result?.ok) {
+      showToast(result?.error || (uiLang === 'en' ? 'Could not add Start' : 'Не удалось добавить Старт'), 'info');
+      return;
+    }
+    setSelectedBlockId(nodeId);
+    setMobileZone('canvas');
+    setInspectorTab('props');
+    useSelectionStore.getState().requestCanvasFocus(nodeId);
+  }, [
+    graph,
+    currentUser,
+    getCanvasCenterPosition,
+    showToast,
+    uiLang,
+    setMobileZone,
+    setInspectorTab,
+  ]);
 
   const handleClearCanvas = useCallback(async () => {
     const confirmed = await appConfirm({
@@ -2922,6 +2970,20 @@ export default function App() {
     setMobileZone('canvas');
   }, [loadExampleGraph, showToast, uiLang, setMobileZone]);
 
+  const canvasQuickAdd = React.useMemo(() => ({
+    onQuickAddMessage: handleQuickAddMessage,
+    onQuickAddCondition: handleQuickAddCondition,
+    onQuickAddStart: handleQuickAddStart,
+    onApplyTemplate: handleApplyFlowTemplate,
+    onOpenAi: openAiGeneratorModal,
+  }), [
+    handleQuickAddMessage,
+    handleQuickAddCondition,
+    handleQuickAddStart,
+    handleApplyFlowTemplate,
+    openAiGeneratorModal,
+  ]);
+
   const loadExampleFromFile = loadExampleGraph;
 
   const handleComposeGraphModules = useCallback(({ document: composedDoc, report, moduleIds }) => {
@@ -3079,6 +3141,7 @@ export default function App() {
   const botDebugModeRef = useRef('sandbox');
 
   const publishBusy = useUiStore((s) => s.publishBusy);
+  const publishSuccess = useUiStore((s) => s.publishSuccess);
   const setPublishBusy = (v) => setUi({ publishBusy: v });
   const botDebugOpen = uiSlice.botDebugOpen;
   const setBotDebugOpen = (v) => setUi({ botDebugOpen: v });
@@ -3087,7 +3150,7 @@ export default function App() {
   const graphStrictMode = uiSlice.graphStrictMode;
   const setGraphStrictMode = (v) => useUiStore.getState().setGraphStrictMode(v);
 
-  const softValidationStatus = useGraphSoftValidation(graph.getGraphDocument, graphRevision);
+  const softValidationStatus = useGraphSoftValidation(graph.getGraphDocument, graphRevision, uiLang);
 
   const graphRefIndex = useGraphReferenceIndex(
     graph.getGraphDocument,
@@ -4005,12 +4068,102 @@ export default function App() {
 
   const handleGlobalPublish = useCallback(async () => {
     setPublishBusy(true);
+    setUi({ publishSuccess: false });
     try {
       await saveProject();
+      pushFlowVersion(activeProjectId || '__draft__', graph.getGraphDocument(), {
+        kind: 'publish',
+        label: uiLang === 'en' ? 'Published' : uiLang === 'uk' ? 'Опубліковано' : 'Опубликовано',
+      });
+      useProductionStore.getState().bumpVersions();
+      setUi({ publishSuccess: true, lastPublishedAt: Date.now() });
+      const publishedMsg = uiLang === 'en'
+        ? 'Flow published'
+        : uiLang === 'uk'
+          ? 'Сценарій опубліковано'
+          : 'Сценарий опубликован';
+      showToast(publishedMsg, 'success');
+      window.setTimeout(() => {
+        setUi({ publishSuccess: false });
+      }, 4000);
+    } catch (err) {
+      const failMsg = uiLang === 'en'
+        ? 'Publish failed'
+        : uiLang === 'uk'
+          ? 'Помилка публікації'
+          : 'Ошибка публикации';
+      showToast(err?.message || failMsg, 'error');
     } finally {
       setPublishBusy(false);
     }
-  }, [saveProject]);
+  }, [saveProject, setUi, showToast, uiLang, activeProjectId, graph]);
+
+  const productionHubOpen = useProductionStore((s) => s.hubOpen);
+  const productionLabels = React.useMemo(() => getProductionLabels(uiLang), [uiLang]);
+  const autosaveVersionCounterRef = useRef(0);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    autosaveVersionCounterRef.current += 1;
+    if (autosaveVersionCounterRef.current % 10 !== 0) return;
+    pushFlowVersion(activeProjectId || '__draft__', graph.getGraphDocument(), { kind: 'autosave' });
+    useProductionStore.getState().bumpVersions();
+  }, [graphRevision, currentUser, activeProjectId, graph]);
+
+  const handleRestoreFlowVersion = useCallback((snapshot) => {
+    const done = beginLoad();
+    try {
+      const doc = createGraphDocument(snapshot);
+      const result = migrateGraphDocument(graph, doc);
+      if (!result?.ok) throw new Error(result?.error || 'restore_failed');
+      setSelectedBlockId(null);
+      showToast(
+        uiLang === 'en' ? 'Version restored' : uiLang === 'uk' ? 'Версію відновлено' : 'Версия восстановлена',
+        'success',
+      );
+      applyCanvasLayout();
+      syncGraphUidSequence();
+    } catch (e) {
+      showToast(e?.message || (uiLang === 'en' ? 'Restore failed' : 'Не удалось восстановить'), 'error');
+    } finally {
+      done();
+    }
+  }, [beginLoad, graph, showToast, uiLang, applyCanvasLayout, syncGraphUidSequence]);
+
+  const handleImportFlowDocument = useCallback((doc) => {
+    const done = beginLoad();
+    try {
+      const result = migrateGraphDocument(graph, doc);
+      if (!result?.ok) throw new Error(result?.error || 'import_failed');
+      setSelectedBlockId(null);
+      showToast(
+        uiLang === 'en' ? 'Flow imported' : uiLang === 'uk' ? 'Сценарій імпортовано' : 'Сценарий импортирован',
+        'success',
+      );
+      applyCanvasLayout();
+      syncGraphUidSequence();
+      useProductionStore.getState().closeHub();
+    } catch (e) {
+      showToast(e?.message || (uiLang === 'en' ? 'Import failed' : 'Ошибка импорта'), 'error');
+    } finally {
+      done();
+    }
+  }, [beginLoad, graph, showToast, uiLang, applyCanvasLayout, syncGraphUidSequence]);
+
+  const handleInsertSharedComponent = useCallback(({ type, props }) => {
+    const doc = graph.getGraphDocument();
+    const anchor = selectedBlockId || Object.keys(doc.nodes || {}).slice(-1)[0];
+    const nodeId = `shared_${type}_${Date.now()}`;
+    const inserted = insertNodeAfter(anchor, nodeId, type, props || {});
+    if (inserted) {
+      setSelectedBlockId(inserted);
+      showToast(
+        uiLang === 'en' ? 'Component added' : 'Компонент добавлен',
+        'success',
+      );
+      useProductionStore.getState().closeHub();
+    }
+  }, [graph, selectedBlockId, insertNodeAfter, showToast, uiLang]);
 
   const handleGlobalPreview = useCallback(() => {
     setPreviewPanelOpen((v) => {
@@ -4172,7 +4325,6 @@ export default function App() {
 
   const useInspectorSimulator = Boolean(
     currentUser
-    && isCanvasSection(appSection)
     && simulatorDocked
     && (!isMobileView || mobileZone === 'right'),
   );
@@ -4655,7 +4807,7 @@ export default function App() {
     >
     <AddBlockContext.Provider value={addBlockFromContext}>
     <BlockInfoContext.Provider value={handleBlockInfoRequest}>
-    <div className="editor-shell editor-shell--saas" data-editor-ui="saas">
+    <div className="editor-shell editor-shell--saas editor-shell--canvas-first" data-editor-ui="saas">
       {/* Top bar */}
       <div className="editor-topbar editor-shell__topbar mc-editor-topbar">
         <div className="mc-editor-topbar__cluster editor-topbar__brand" style={{ flexShrink: isMobileView ? 1 : 0, minWidth: 0, display:'flex', alignItems:'center', gap: isMobileView ? 8 : 10 }}>
@@ -4680,7 +4832,24 @@ export default function App() {
         )}
         {!isMobileView && <div className="tb-divider" />}
         {!isMobileView && currentUser && (
-          <SaveStatusIndicator lang={uiLang} />
+          <div className="mc-status-cluster">
+            <button
+              type="button"
+              className="prod-hub-trigger"
+              data-tour="production-hub"
+              onClick={() => useProductionStore.getState().openHub('overview')}
+              title={productionLabels.openHub}
+            >
+              {productionLabels.openHub}
+            </button>
+            <SaveStatusIndicator lang={uiLang} />
+            <PublishStatusIndicator
+              lang={uiLang}
+              busy={publishBusy}
+              success={publishSuccess}
+              onPublish={handleGlobalPublish}
+            />
+          </div>
         )}
         {!isMobileView && <div className="tb-divider" />}
         {/* Desktop: secondary actions in overflow (primary bar = run + ···) */}
@@ -5084,6 +5253,26 @@ export default function App() {
           }}
         />
       )}
+      <ProductionHub
+        open={productionHubOpen}
+        onClose={() => useProductionStore.getState().closeHub()}
+        lang={uiLang}
+        projectId={activeProjectId || '__draft__'}
+        graph={graph}
+        graphRevision={graphRevision}
+        onRestoreVersion={handleRestoreFlowVersion}
+        onApplyTemplate={(id) => {
+          handleApplyFlowTemplate(id);
+          useProductionStore.getState().closeHub();
+        }}
+        onOpenModuleLibrary={() => setShowLibrary(true)}
+        onInsertSharedComponent={handleInsertSharedComponent}
+        onImportDocument={handleImportFlowDocument}
+        canUndo={graphHistory.canUndo}
+        canRedo={graphHistory.canRedo}
+        onOpenHistory={() => window.dispatchEvent(new Event('cicada:toggle-history'))}
+      />
+
       <AiFlowStudio
         open={aiStudioOpen}
         onClose={() => {
@@ -5453,11 +5642,18 @@ export default function App() {
           canvasControls={null}
           left={(
             <LeftPanel
+              canvasFirst
               lang={uiLang}
               sectionListItems={controlPanelSectionLists}
               activeListId={(appSection === 'flows' || appSection === 'automations') ? activeProjectId : null}
               navCounts={sidebarNavCounts}
               onOpenAnalytics={() => setAnalyticsPanelOpen(true)}
+              analyticsFlowId={analyticsFlowId}
+              analyticsNodeIds={analyticsNodeIds}
+              getGraphDocument={() => graph.getGraphDocument()}
+              onHighlightNodes={(ids) => graph.highlightNodes?.(ids)}
+              lastTraceId={graph.lastTraceId ?? null}
+              onAnalyticsPopout={() => setAnalyticsPanelOpen(true)}
               onSelectListItem={handleControlPanelSelectItem}
               onCreateFlow={handleCreateFlow}
               onBulkDelete={handleBulkDeleteFlows}
@@ -5487,7 +5683,7 @@ export default function App() {
               )}
             />
           )}
-          center={isCanvasSection(appSection) ? (
+          center={currentUser ? (
             <FlowEditorCenter
               canvasRef={canvasRef}
               canvasUxRef={canvasUxRef}
@@ -5519,28 +5715,10 @@ export default function App() {
               setTourStep={setTourStep}
               setTourActive={setTourActive}
               aiGlobalLoading={aiGlobalLoading}
+              canvasQuickAdd={canvasQuickAdd}
             />
-          ) : (
-            <CenterPanel>
-              <EmptyState
-                icon="⚡"
-                title={uiLang === 'en' ? 'Build on the canvas' : 'Сборка на холсте'}
-                hint={uiLang === 'en'
-                  ? 'Open Flows or Templates in the sidebar to edit your bot.'
-                  : 'Откройте «Сценарии» или «Шаблоны» в боковой панели.'}
-                actions={(
-                  <button
-                    type="button"
-                    className="ds-btn ds-btn--primary ds-btn--sm"
-                    onClick={() => setAppSection('flows')}
-                  >
-                    {uiLang === 'en' ? 'Open flows' : 'Открыть сценарии'}
-                  </button>
-                )}
-              />
-            </CenterPanel>
-          )}
-          right={isCanvasSection(appSection) ? (
+          ) : null}
+          right={currentUser ? (
             <RightInspectorPanel
               tab={inspectorTab}
               onTabChange={setInspectorTab}
@@ -5630,6 +5808,7 @@ export default function App() {
                 isMobileView,
                 generateCodegenSnapshot: generateBotPythonSnapshot,
                 getGraphDocument: () => graph.getGraphDocument(),
+                graphRevision,
                 graphPalette,
                 paletteOptions: { lang: uiLang, blockTypes: builderBlockTypes },
                 onHighlightNodes: (ids) => handleTraceHighlightChange({ active: ids }),
@@ -5859,6 +6038,7 @@ export default function App() {
         onPanelPosChange={setPreviewPanelPos}
         generateCodegenSnapshot={generateBotPythonSnapshot}
         getGraphDocument={() => graph.getGraphDocument()}
+        graphRevision={graphRevision}
         graphPalette={graphPalette}
         paletteOptions={{ lang: uiLang, blockTypes: builderBlockTypes }}
         onHighlightNodes={(ids) => handleTraceHighlightChange({ active: ids })}
@@ -5878,6 +6058,7 @@ export default function App() {
         onClose={() => setAnalyticsPanelOpen(false)}
         flowId={analyticsFlowId}
         nodeIds={analyticsNodeIds}
+        lang={uiLang}
         getGraphDocument={() => graph.getGraphDocument()}
         onHighlightNodes={(ids) => handleTraceHighlightChange({ active: ids })}
         lastTraceId={debugTraceId}
@@ -6191,6 +6372,7 @@ export default function App() {
         compileWarnings={debugCodegenSnapshot?.compileWarnings}
         onClose={() => setDebugTraceOpen(false)}
         onHighlightChange={handleTraceHighlightChange}
+        lang={uiLang}
       />
 
     </div>

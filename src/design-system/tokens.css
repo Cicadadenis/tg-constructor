@@ -11,23 +11,23 @@
   --color-primary-muted: #eff6ff;
   --color-primary-border: #bfdbfe;
 
-  /* Surfaces — neutral slate (Linear / Notion) */
-  --color-bg: #f4f5f7;
+  /* Surfaces — soft neutral (ManyChat) */
+  --color-bg: #f3f4f6;
   --color-surface: #ffffff;
-  --color-surface-muted: #f8f9fb;
+  --color-surface-muted: #f9fafb;
   --color-surface-elevated: #ffffff;
-  --color-overlay: rgba(15, 23, 42, 0.4);
+  --color-overlay: rgba(17, 24, 39, 0.36);
 
   /* Borders — hairline */
-  --color-border: rgba(15, 23, 42, 0.08);
-  --color-border-strong: rgba(15, 23, 42, 0.12);
+  --color-border: rgba(15, 23, 42, 0.06);
+  --color-border-strong: rgba(15, 23, 42, 0.1);
   --border-width: 1px;
   --color-border-focus: var(--color-primary);
 
   /* Text — readable hierarchy */
   --color-text: #0f172a;
   --color-text-secondary: #475569;
-  --color-text-muted: #64748b;
+  --color-text-muted: #9ca3af;
   --color-text-inverse: #ffffff;
 
   /* Semantic (minimal — status only) */
@@ -66,18 +66,18 @@
 
   /* Radius — 8px system */
   --radius-sm: 8px;
-  --radius-md: 10px;
+  --radius-md: 8px;
   --radius-lg: 12px;
-  --radius-xl: 16px;
-  --radius-panel: 16px;
+  --radius-xl: 12px;
+  --radius-panel: 12px;
   --radius-full: 999px;
 
   /* Shadows — soft elevation only */
   --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.06);
-  --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08);
-  --shadow-lg: 0 12px 40px rgba(15, 23, 42, 0.1);
-  --shadow-floating: 0 12px 40px rgba(15, 23, 42, 0.1), 0 0 0 1px rgba(15, 23, 42, 0.06);
+  --shadow-sm: 0 2px 6px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 4px 16px rgba(15, 23, 42, 0.07);
+  --shadow-lg: 0 8px 24px rgba(15, 23, 42, 0.08);
+  --shadow-floating: 0 8px 24px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.06);
   --shadow-focus: 0 0 0 3px var(--color-primary-muted);
 
   /* Layout */
@@ -87,9 +87,9 @@
   --layout-mobile-nav-h: 56px;
 
   /* Canvas */
-  --color-canvas-bg: #eceef2;
-  --color-canvas-grid: #e2e5eb;
-  --color-canvas-dot: rgba(100, 116, 139, 0.22);
+  --color-canvas-bg: #eef0f3;
+  --color-canvas-grid: #e5e7eb;
+  --color-canvas-dot: rgba(107, 114, 128, 0.18);
 
   /* Legacy aliases — keep existing var() references working */
   --bg: var(--color-bg);

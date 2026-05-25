@@ -1,5 +1,6 @@
 import React from 'react';
 import { usePersistenceStore } from '../stores/persistenceStore.js';
+import { useUiStore } from '../stores/uiStore.js';
 import './save-status-indicator.css';
 
 /**
@@ -10,12 +11,34 @@ export default function SaveStatusIndicator({ lang = 'ru' }) {
   const saveError = usePersistenceStore((s) => s.saveError);
   const pendingCloud = usePersistenceStore((s) => s.pendingCloudSave);
   const lastPersistedAt = usePersistenceStore((s) => s.lastPersistedAt);
+  const lastPublishedAt = useUiStore((s) => s.lastPublishedAt);
 
   const copy = lang === 'en'
-    ? { saving: 'Saving…', saved: 'Saved', pending: 'Unsaved changes', error: 'Save failed' }
+    ? {
+      saving: 'Saving…',
+      saved: 'Saved',
+      draft: 'Draft',
+      pending: 'Unsaved changes',
+      error: 'Save failed',
+    }
     : lang === 'uk'
-      ? { saving: 'Зберігаємо…', saved: 'Збережено', pending: 'Є незбережені зміни', error: 'Помилка збереження' }
-      : { saving: 'Сохраняем…', saved: 'Сохранено', pending: 'Есть несохранённые изменения', error: 'Ошибка сохранения' };
+      ? {
+        saving: 'Зберігаємо…',
+        saved: 'Збережено',
+        draft: 'Чернетка',
+        pending: 'Є незбережені зміни',
+        error: 'Помилка збереження',
+      }
+      : {
+        saving: 'Сохраняем…',
+        saved: 'Сохранено',
+        draft: 'Черновик',
+        pending: 'Есть несохранённые изменения',
+        error: 'Ошибка сохранения',
+      };
+
+  const hasUnpublishedDraft = !lastPublishedAt
+    || (lastPersistedAt && lastPublishedAt && lastPersistedAt > lastPublishedAt);
 
   let state = 'idle';
   let label = copy.saved;
@@ -28,6 +51,9 @@ export default function SaveStatusIndicator({ lang = 'ru' }) {
   } else if (pendingCloud) {
     state = 'pending';
     label = copy.pending;
+  } else if (hasUnpublishedDraft) {
+    state = 'draft';
+    label = copy.draft;
   }
 
   const timeHint = lastPersistedAt && state === 'idle' && !pendingCloud
@@ -37,17 +63,24 @@ export default function SaveStatusIndicator({ lang = 'ru' }) {
     )
     : null;
 
+  const title = saveError
+    ? label
+    : timeHint
+      ? `${label} · ${timeHint}`
+      : label;
+
   return (
     <div
       className={`save-status save-status--${state}`}
       role="status"
       aria-live="polite"
-      title={timeHint ? `${label} · ${timeHint}` : label}
+      aria-busy={state === 'saving'}
+      title={title}
     >
       <span className="save-status__dot" aria-hidden />
       <span className="save-status__label">{label}</span>
       {timeHint && state === 'idle' && !saveError && (
-        <span className="save-status__time">{timeHint}</span>
+        <span className="save-status__time" aria-label={timeHint}>{timeHint}</span>
       )}
     </div>
   );

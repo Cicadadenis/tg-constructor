@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { MC_SPRING, slideInRight, staggerContainer, staggerItem } from '../motion/index.js';
 
 function formatOpType(type, lang) {
   const map = {
@@ -42,10 +43,10 @@ export default function HistoryTimeline({
       {open && (
         <motion.div
           className="ux-history"
-          initial={{ opacity: 0, x: 12 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: 8 }}
-          transition={{ duration: 0.18 }}
+          initial={slideInRight.initial}
+          animate={slideInRight.animate}
+          exit={slideInRight.exit}
+          transition={MC_SPRING.panel}
           role="region"
           aria-label={title}
         >
@@ -61,10 +62,17 @@ export default function HistoryTimeline({
             {cursor} / {entries.length}
             {futureCount > 0 && ` · ${futureCount} ${lang === 'en' ? 'ahead' : 'впереди'}`}
           </p>
-          <ol className="ux-history__list">
+          <motion.ol
+            className="ux-history__list"
+            variants={staggerContainer}
+            initial="hidden"
+            animate="show"
+          >
             {visible.map((entry) => (
-              <li
+              <motion.li
                 key={`${entry.index}-${entry.revision}`}
+                variants={staggerItem}
+                layout
                 className={[
                   'ux-history__item',
                   entry.isCurrent ? 'ux-history__item--current' : '',
@@ -81,9 +89,9 @@ export default function HistoryTimeline({
                   <span className="ux-history__type">{formatOpType(entry.type, lang)}</span>
                   <span className="ux-history__rev">#{entry.revision}</span>
                 </button>
-              </li>
+              </motion.li>
             ))}
-          </ol>
+          </motion.ol>
         </motion.div>
       )}
     </AnimatePresence>

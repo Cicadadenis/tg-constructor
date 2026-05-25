@@ -80,7 +80,7 @@
 }
 
 /* Selection */
-.graph-flow-host.flow-editor-canvas .react-flow__node.selected .visual-node-card__surface {
+.graph-flow-host.flow-editor-canvas .react-flow__node.selected .vn-card__surface {
   box-shadow: var(--shadow-md), 0 0 0 2px var(--color-primary-border);
 }
 
@@ -187,6 +187,26 @@
 /* Hide legacy zoom dock when flow toolbar active */
 .graph-flow-host.flow-editor-canvas .canvas-zoom-controls {
   display: none;
+}
+
+.cf-floating-controls-panel,
+.cf-empty-quick-panel {
+  margin: 0 !important;
+  pointer-events: none;
+  z-index: 12;
+}
+
+.cf-floating-controls-panel > *,
+.cf-empty-quick-panel > * {
+  pointer-events: auto;
+}
+
+.editor-shell--canvas-first .fe-workspace {
+  z-index: 1;
+}
+
+.editor-shell--canvas-first .flow-canvas-empty {
+  z-index: 8;
 }
 
 .fe-inspector-hint {

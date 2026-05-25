@@ -4,7 +4,7 @@ import { getFlowStarterTemplates } from '../../builder/flowTemplates.js';
 import { SECTION_PANEL_CONFIG, filterLabel, itemMatchesFilter } from '../controlPanelConfig.js';
 import { sortFlowItems } from '../flowCardModel.js';
 import EmptyState from '../../ui/EmptyState.jsx';
-import { SkeletonList } from '../../ui/Skeleton.jsx';
+import { MotionSkeletonList } from '../../motion/MotionSkeleton.jsx';
 import McCollapsibleGroup from './McCollapsibleGroup.jsx';
 import McFlowCard from './McFlowCard.jsx';
 import { SidebarIcons } from './sidebarIcons.jsx';
@@ -235,7 +235,7 @@ export default function McSidebarFlowsPanel({
 
       <div className="mc-sidebar-panel__scroll mc-sidebar-panel__scroll--cards">
         {listLoading ? (
-          <SkeletonList rows={3} />
+          <MotionSkeletonList rows={3} />
         ) : (
           <>
             {listFilter !== 'favorites' && favoriteItems.length > 0 && (

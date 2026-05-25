@@ -1,5 +1,6 @@
 import React from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { MC_SPRING, tabPanelVariants } from '../../motion/index.js';
 import { useAppLayout } from '../../layout/AppLayoutContext.jsx';
 import FlowInspectorTabBar from './FlowInspectorTabBar.jsx';
 import FlowInspectorEmpty from './FlowInspectorEmpty.jsx';
@@ -92,10 +93,10 @@ export default function FlowInspectorShell({
                       <motion.div
                         key={tab}
                         className="fi-shell__tab-panel"
-                        initial={{ opacity: 0, y: 4 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -4 }}
-                        transition={{ duration: 0.14 }}
+                        variants={tabPanelVariants}
+                        initial="initial"
+                        animate="animate"
+                        exit="exit"
                       >
                         {children}
                       </motion.div>
@@ -130,10 +131,11 @@ export default function FlowInspectorShell({
                 <motion.div
                   key={tab}
                   className="fi-shell__tab-panel"
-                  initial={{ opacity: 0, x: 6 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -6 }}
-                  transition={{ duration: 0.16 }}
+                  variants={tabPanelVariants}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  transition={MC_SPRING.gentle}
                 >
                   {children}
                 </motion.div>

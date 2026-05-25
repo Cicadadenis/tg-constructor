@@ -7,6 +7,7 @@ export default function ObservabilityDashboard({
   onFetchTrace,
   onHighlightNodes,
   nodeLabel,
+  labels = {},
 }) {
   const [traceEvents, setTraceEvents] = useState([]);
   const [replayIdx, setReplayIdx] = useState(0);
@@ -32,9 +33,9 @@ export default function ObservabilityDashboard({
   return (
     <div className="analytics-dash analytics-dash--obs">
       <section className="analytics-panel">
-        <h3 className="analytics-panel__title">Failed nodes</h3>
+        <h3 className="analytics-panel__title">{labels.failedNodes || 'Failed steps'}</h3>
         {(snapshot?.failedNodes || []).length === 0 ? (
-          <p className="analytics-empty">Ошибок узлов пока нет</p>
+          <p className="analytics-empty">{labels.noErrors || 'No step errors yet'}</p>
         ) : (
           <ul className="analytics-log-list">
             {(snapshot?.failedNodes || []).map((f, i) => (
@@ -49,7 +50,7 @@ export default function ObservabilityDashboard({
       </section>
 
       <section className="analytics-panel">
-        <h3 className="analytics-panel__title">Runtime logs</h3>
+        <h3 className="analytics-panel__title">{labels.runtimeLogs || 'Runtime logs'}</h3>
         <ul className="analytics-log-list analytics-log-list--mono">
           {(snapshot?.runtimeLogs || []).map((l, i) => (
             <li key={`${l.ts}-${i}`} className={`level-${l.level}`}>
@@ -63,9 +64,9 @@ export default function ObservabilityDashboard({
 
       <section className="analytics-panel analytics-panel--wide">
         <div className="analytics-panel__head-row">
-          <h3 className="analytics-panel__title">Execution trace replay</h3>
+          <h3 className="analytics-panel__title">{labels.traceReplay || 'Execution trace replay'}</h3>
           <button type="button" className="analytics-btn" disabled={!traceId || loading} onClick={loadTrace}>
-            {loading ? '…' : 'Load trace'}
+            {loading ? '…' : (labels.loadTrace || 'Load trace')}
           </button>
         </div>
         {traceId && <p className="analytics-panel__hint">trace: {traceId}</p>}

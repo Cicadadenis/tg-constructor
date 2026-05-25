@@ -1,0 +1,497 @@
+/**
+ * Inspector-embedded Telegram simulator — ManyChat / production SaaS chrome.
+ */
+
+.chat-sim-panel--studio {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.tg-sim-studio__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 4px;
+  flex-shrink: 0;
+}
+
+.tg-sim-studio__live {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.3);
+  animation: tg-sim-live 2s ease-in-out infinite;
+}
+
+@keyframes tg-sim-live {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.tg-sim-studio__title {
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.tg-sim-studio__badge {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.tg-sim-studio__undock {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.tg-sim-studio__undock:hover {
+  background: #e2e8f0;
+}
+
+/* Control bar */
+.tg-sim-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 8px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
+  flex-shrink: 0;
+}
+
+.tg-sim-bar__label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tg-sim-bar__group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tg-sim-bar__select {
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  font-size: 12px;
+  font-weight: 500;
+  background: #f8fafc;
+  color: #0f172a;
+  font-family: inherit;
+  max-width: 120px;
+}
+
+.tg-sim-bar__view {
+  padding: 2px;
+  border-radius: 8px;
+  background: #f1f5f9;
+}
+
+.tg-sim-bar__chip {
+  width: 30px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.tg-sim-bar__chip--on {
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.tg-sim-bar__spacer {
+  flex: 1;
+  min-width: 8px;
+}
+
+.tg-sim-bar__btn {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.tg-sim-bar__btn:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.tg-sim-bar__btn--ghost.tg-sim-bar__btn--on {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #2563eb;
+}
+
+.tg-sim-bar__btn--primary {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+  min-width: 36px;
+}
+
+.tg-sim-bar__menu {
+  z-index: 100;
+  padding: 4px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
+  min-width: 140px;
+}
+
+.tg-sim-bar__menu-item {
+  padding: 8px 12px;
+  font-size: 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  outline: none;
+}
+
+.tg-sim-bar__menu-item[data-highlighted] {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+/* Execution path rail */
+.tg-sim-path {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #fff;
+  border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
+}
+
+.tg-sim-path__label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.tg-sim-path__track {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  flex: 1;
+  min-width: 0;
+  scrollbar-width: thin;
+  padding-bottom: 2px;
+}
+
+.tg-sim-path__chip {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  font-size: 10px;
+  cursor: pointer;
+  font-family: inherit;
+  max-width: 140px;
+}
+
+.tg-sim-path__chip--active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.2);
+}
+
+.tg-sim-path__chip--busy {
+  animation: tg-sim-chip-pulse 1s ease-in-out infinite;
+}
+
+@keyframes tg-sim-chip-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.tg-sim-path__chip-in {
+  font-weight: 600;
+  color: #334155;
+}
+
+.tg-sim-path__chip-node {
+  color: #2563eb;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 120px;
+}
+
+.tg-sim-path__chip-branch {
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.tg-sim-path__chip-branch--true {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.tg-sim-path__chip-branch--false {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+/* Studio body */
+.chat-sim-panel__body--studio {
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.chat-sim-panel--studio .chat-sim-panel__main {
+  flex: 1;
+  min-height: 200px;
+  padding: 10px 12px 8px;
+  background: linear-gradient(180deg, #e8ecf1 0%, #dfe4eb 100%);
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+}
+
+.chat-sim-panel--studio .chat-sim__device {
+  width: 100%;
+  max-height: 100%;
+  box-shadow: none;
+}
+
+/* Device frame */
+.tg-device {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.tg-device--mobile {
+  max-width: 320px;
+  margin: 0 auto;
+}
+
+.tg-device__bezel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #1c1c1e;
+  border-radius: 28px;
+  padding: 8px 8px 10px;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.08),
+    0 20px 50px rgba(15, 23, 42, 0.22);
+}
+
+.tg-device__status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 12px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  position: relative;
+}
+
+.tg-device__notch {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: 0;
+  width: 88px;
+  height: 22px;
+  background: #1c1c1e;
+  border-radius: 0 0 14px 14px;
+}
+
+.tg-device__screen {
+  flex: 1;
+  min-height: 0;
+  border-radius: 18px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.tg-device__screen .chat-sim__device {
+  border-radius: 0;
+  max-width: none;
+  height: 100%;
+}
+
+.tg-device__home {
+  width: 100px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.35);
+  border-radius: 4px;
+  margin: 8px auto 0;
+}
+
+.tg-device--desktop {
+  max-width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.15);
+}
+
+.tg-device__desktop-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: #2d2d2d;
+  color: #e4e4e4;
+  font-size: 12px;
+}
+
+.tg-device__desktop-dots {
+  display: flex;
+  gap: 5px;
+}
+
+.tg-device__desktop-dots i {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ff5f57;
+}
+
+.tg-device__desktop-dots i:nth-child(2) { background: #febc2e; }
+.tg-device__desktop-dots i:nth-child(3) { background: #28c840; }
+
+.tg-device__desktop-body {
+  flex: 1;
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+}
+
+.tg-device__desktop-body .chat-sim__device--desktop {
+  max-width: none;
+  height: 100%;
+}
+
+/* Bubble time + wrap */
+.chat-sim__bubble-wrap {
+  display: flex;
+  flex-direction: column;
+  max-width: 88%;
+}
+
+.chat-sim__bubble-wrap--user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.chat-sim__bubble-wrap--bot {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+.chat-sim__bubble-time {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.45);
+  margin-top: 2px;
+  padding: 0 4px;
+}
+
+.chat-sim__bubble-wrap--user .chat-sim__bubble-time {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+/* Bottom drawer */
+.tg-sim-drawer {
+  flex-shrink: 0;
+  border-top: 1px solid #e2e8f0;
+  background: #fff;
+  max-height: 36px;
+  overflow: hidden;
+  transition: max-height 0.22s ease;
+}
+
+.tg-sim-drawer--open {
+  max-height: min(220px, 35vh);
+}
+
+.tg-sim-drawer .chat-sim__debug {
+  width: 100%;
+  max-height: none;
+  border: none;
+  background: #fff;
+  color: #0f172a;
+}
+
+.tg-sim-drawer .chat-sim__debug--open {
+  width: 100%;
+  min-height: 120px;
+}
+
+.tg-sim-drawer .chat-sim__debug-head {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.tg-sim-drawer .chat-sim__debug-tab--active {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.tg-sim-drawer .chat-sim__var-key {
+  color: #64748b;
+}
+
+.tg-sim-drawer .chat-sim__var-val {
+  color: #0f172a;
+}
+
+.tg-sim-drawer .chat-sim__path-in {
+  color: #334155;
+}
+
+.tg-sim-drawer .chat-sim__path-nodes {
+  color: #2563eb;
+}

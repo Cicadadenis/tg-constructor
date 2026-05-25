@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { collapseVariants } from '../../motion/index.js';
 import { SidebarIcons } from './sidebarIcons.jsx';
 
 /**
@@ -36,10 +37,10 @@ export default function McCollapsibleGroup({
           <motion.div
             key={id}
             className="mc-sidebar-group__body"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+            variants={collapseVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
           >
             {children}
           </motion.div>

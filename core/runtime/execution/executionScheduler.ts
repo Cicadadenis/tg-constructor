@@ -25,6 +25,37 @@ import {
   freezeEffects,
   type EmitEventEffect,
 } from "./executionEffects.mjs";
+import type { ExecutionEffect } from "./executionEffects.mjs";
+
+async function applySchedulerEffects(
+  execution: ExecutionContext,
+  effects: readonly ExecutionEffect[],
+  opts: {
+    replayOnly?: boolean;
+    onEmitEvent?: (effect: EmitEventEffect) => void | Promise<void>;
+    subscriberStateManager?: SchedulerRunOptions["subscriberStateManager"];
+  },
+): Promise<void> {
+  const stateManager =
+    opts.subscriberStateManager
+    ?? /** @type {import("../../subscriber/services/subscriberStateManager.js").SubscriberStateManager | undefined} */ (
+      execution.temp.__subscriberStateManager
+    );
+  if (stateManager) {
+    const { applyExecutionEffectsWithSubscriber } = await import(
+      "../../subscriber/runtime/subscriberExecutionBridge.mjs"
+    );
+    await applyExecutionEffectsWithSubscriber(execution, effects, {
+      stateManager,
+      replayOnly: opts.replayOnly,
+    });
+    return;
+  }
+  await applyExecutionEffects(execution, effects, {
+    replayOnly: opts.replayOnly,
+    onEmitEvent: opts.onEmitEvent,
+  });
+}
 import type { ExecutionIrPlan, ExecutionIrStep, RetryPolicy } from "./executionIr.js";
 import { getExecutionStep, getJoinBarrier } from "./executionIr.js";
 import {
@@ -80,6 +111,11 @@ export interface SchedulerRunOptions {
   enableTrace?: boolean;
   /** Optional hook for emitEvent effects (subscriber layer, analytics, etc.). */
   onEmitEvent?: (effect: EmitEventEffect) => void | Promise<void>;
+  /**
+   * When set, applies effects via subscriber-aware bridge (tag/field/variable + core).
+   * Opt-in — omit to preserve legacy applyExecutionEffects behavior.
+   */
+  subscriberStateManager?: import("../../subscriber/services/subscriberStateManager.js").SubscriberStateManager;
 }
 
 export interface SchedulerRunResult {
@@ -219,6 +255,10 @@ export class ExecutionScheduler {
       vars: { ...snapshot.variables },
     });
     bindRunScope(execution, { transport, replayOnly: options.replayOnly === true });
+
+    if (options.subscriberStateManager) {
+      execution.temp.__subscriberStateManager = options.subscriberStateManager;
+    }
 
     const traceEnabled =
       options.enableTrace !== false
@@ -648,7 +688,7 @@ export class ExecutionScheduler {
           try {
             const capResult = await executeCapability(capabilityId, execution);
             if (capResult.ok) {
-              await applyExecutionEffects(execution, capResult.effects, {
+              await applySchedulerEffects(execution, capResult.effects, {
                 replayOnly,
                 onEmitEvent,
               });
@@ -741,7 +781,7 @@ export class ExecutionScheduler {
               try {
                 const compResult = await executeCapability(comp.capabilityId, execution);
                 if (compResult.ok) {
-                  await applyExecutionEffects(execution, compResult.effects, {
+                  await applySchedulerEffects(execution, compResult.effects, {
                     replayOnly,
                     onEmitEvent,
                   });

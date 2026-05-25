@@ -1,0 +1,135 @@
+/**
+ * Embedded analytics workspace — production automation platform (ManyChat-style).
+ */
+
+.analytics-workspace {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--color-surface-muted, #f9fafb);
+  font-family: var(--font-sans, Inter, system-ui, sans-serif);
+  color: var(--color-text, #111827);
+}
+
+.analytics-workspace__head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-1, 8px);
+  padding: var(--space-2, 16px) var(--space-2, 16px) var(--space-1, 8px);
+  border-bottom: 1px solid var(--color-border, rgba(15, 23, 42, 0.06));
+  background: var(--color-surface, #fff);
+}
+
+.analytics-workspace__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.analytics-workspace__subtitle {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--color-text-muted, #9ca3af);
+  line-height: 1.4;
+}
+
+.analytics-workspace__actions {
+  display: flex;
+  gap: var(--space-half, 4px);
+  flex-shrink: 0;
+}
+
+.analytics-workspace__tabs {
+  flex-shrink: 0;
+  display: flex;
+  gap: 2px;
+  padding: var(--space-1, 8px) var(--space-2, 16px);
+  background: var(--color-surface, #fff);
+  border-bottom: 1px solid var(--color-border, rgba(15, 23, 42, 0.06));
+  overflow-x: auto;
+}
+
+.analytics-workspace__tab {
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted, #9ca3af);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm, 8px);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+
+.analytics-workspace__tab:hover {
+  color: var(--color-text-secondary, #4b5563);
+  background: var(--color-surface-muted, #f9fafb);
+}
+
+.analytics-workspace__tab.is-active {
+  background: var(--color-primary-muted, #eff6ff);
+  color: var(--color-primary, #2563eb);
+}
+
+.analytics-workspace__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-2, 16px);
+}
+
+.analytics-kpi-strip {
+  flex-shrink: 0;
+  padding: var(--space-1, 8px) var(--space-2, 16px);
+  background: var(--color-surface, #fff);
+  border-bottom: 1px solid var(--color-border, rgba(15, 23, 42, 0.06));
+}
+
+.analytics-kpi-strip__status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-1, 8px);
+}
+
+.analytics-live-pill {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted, #9ca3af);
+  padding: 2px 8px;
+  border-radius: var(--radius-full, 999px);
+  background: var(--color-surface-muted, #f3f4f6);
+}
+
+.analytics-live-pill.is-on {
+  color: #15803d;
+  background: #f0fdf4;
+}
+
+.analytics-kpi-strip__updated {
+  font-size: 10px;
+  color: var(--color-text-muted, #9ca3af);
+  font-variant-numeric: tabular-nums;
+}
+
+.analytics-dash__metrics--strip {
+  margin-bottom: 0;
+}
+
+.editor-shell--saas .mc-sidebar-panel--analytics {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-shell--saas .mc-sidebar-panel--analytics .analytics-workspace {
+  border-radius: 0;
+}

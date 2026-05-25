@@ -1,9 +1,10 @@
 import React from 'react';
+import { getProductUiLabels, productTerms } from '../../copy/productCopy.js';
 
-function VarTable({ variables }) {
+function VarTable({ variables, emptyLabel }) {
   const entries = Object.entries(variables || {});
   if (!entries.length) {
-    return <p className="chat-sim__debug-empty">Нет переменных</p>;
+    return <p className="chat-sim__debug-empty">{emptyLabel}</p>;
   }
   return (
     <table className="chat-sim__var-table">
@@ -19,25 +20,32 @@ function VarTable({ variables }) {
   );
 }
 
-function SubscriberCard({ snapshot }) {
+function SubscriberCard({ snapshot, lang }) {
+  const p = getProductUiLabels(lang);
   const sub = snapshot?.subscriber;
-  if (!sub) return <p className="chat-sim__debug-empty">Загрузка…</p>;
+  if (!sub) return <p className="chat-sim__debug-empty">{lang === 'en' ? 'Loading…' : lang === 'uk' ? 'Завантаження…' : 'Загрузка…'}</p>;
   const tags = Array.isArray(sub.tags) ? sub.tags : [];
   const fields = sub.customFields && typeof sub.customFields === 'object'
     ? Object.entries(sub.customFields)
     : [];
+  const nameLabel = lang === 'en' ? 'Name' : lang === 'uk' ? 'Імʼя' : 'Имя';
+  const tagsLabel = lang === 'en' ? 'Tags' : lang === 'uk' ? 'Теги' : 'Теги';
+  const channelLabel = lang === 'en' ? 'Channel' : lang === 'uk' ? 'Канал' : 'Канал';
   return (
     <div className="chat-sim__sub-card">
       <div><span className="chat-sim__sub-label">ID</span> {sub.externalUserId ?? sub.id}</div>
-      <div><span className="chat-sim__sub-label">Имя</span> {sub.displayName ?? '—'}</div>
-      <div><span className="chat-sim__sub-label">Теги</span> {tags.length ? tags.join(', ') : '—'}</div>
-      <div><span className="chat-sim__sub-label">Канал</span> {sub.channel ?? 'telegram'}</div>
+      <div><span className="chat-sim__sub-label">{nameLabel}</span> {sub.displayName ?? '—'}</div>
+      <div><span className="chat-sim__sub-label">{tagsLabel}</span> {tags.length ? tags.join(', ') : '—'}</div>
+      <div><span className="chat-sim__sub-label">{channelLabel}</span> {sub.channel ?? 'telegram'}</div>
       {fields.length > 0 && (
         <div className="chat-sim__sub-fields">
           {fields.map(([k, v]) => (
             <div key={k}><span className="chat-sim__sub-label">{k}</span> {String(v ?? '')}</div>
           ))}
         </div>
+      )}
+      {!fields.length && (
+        <p className="chat-sim__debug-empty" style={{ marginTop: 8 }}>{p.subscriberData}</p>
       )}
     </div>
   );
@@ -64,18 +72,23 @@ export default function SimulatorDebugPanel({
   onTestModeChange,
   liveMode,
   onLiveModeChange,
+  lang = 'ru',
 }) {
+  const p = getProductUiLabels(lang);
+  const t = productTerms(lang);
+  const stepsLabel = lang === 'en' ? t.steps : lang === 'uk' ? t.steps : t.steps;
+
   const tabs = [
-    { id: 'path', label: 'Путь' },
-    { id: 'vars', label: 'Данные' },
-    { id: 'sub', label: 'Подписчик' },
-    { id: 'replay', label: 'Повтор' },
+    { id: 'path', label: p.pathTab },
+    { id: 'vars', label: p.dataTab },
+    { id: 'sub', label: p.subscriberTab },
+    { id: 'replay', label: p.replayTab },
   ];
 
   return (
     <aside className={`chat-sim__debug ${open ? 'chat-sim__debug--open' : ''}`}>
       <div className="chat-sim__debug-head">
-        <span className="chat-sim__debug-title">Данные подписчика</span>
+        <span className="chat-sim__debug-title">{p.subscriberData}</span>
         <button type="button" className="chat-sim__debug-toggle" onClick={onToggle}>
           {open ? '◂' : '▸'}
         </button>
@@ -101,7 +114,7 @@ export default function SimulatorDebugPanel({
               checked={testMode}
               onChange={(e) => onTestModeChange?.(e.target.checked)}
             />
-            Тестовый режим (печатает… и паузы)
+            {p.testMode}
           </label>
           <label className="chat-sim__test-mode">
             <input
@@ -109,11 +122,11 @@ export default function SimulatorDebugPanel({
               checked={liveMode !== false}
               onChange={(e) => onLiveModeChange?.(e.target.checked)}
             />
-            Обновления в реальном времени
+            {p.liveUpdates}
           </label>
           {lastBranchPort && (
             <div className={`chat-sim__debug-branch chat-sim__debug-branch--${lastBranchPort}`}>
-              Ветка: {lastBranchPort}
+              {p.branch}: {lastBranchPort}
             </div>
           )}
 
@@ -121,12 +134,12 @@ export default function SimulatorDebugPanel({
             {tab === 'path' && (
               <>
                 <div className="chat-sim__active-node">
-                  <span className="chat-sim__sub-label">Текущий шаг</span>
+                  <span className="chat-sim__sub-label">{p.currentStep}</span>
                   <code>{activeNodeId || '—'}</code>
                 </div>
                 {lastTraceId && (
                   <div className="chat-sim__trace-id">
-                    сессия: <code>{lastTraceId.slice(0, 12)}…</code>
+                    {p.session}: <code>{lastTraceId.slice(0, 12)}…</code>
                   </div>
                 )}
                 <ol className="chat-sim__path-list">
@@ -142,18 +155,22 @@ export default function SimulatorDebugPanel({
                           {step.branchPort}
                         </span>
                       )}
-                      <span className="chat-sim__path-meta">{step.outboundCount} effects</span>
+                      <span className="chat-sim__path-meta">
+                        {step.outboundCount} {p.effects}
+                      </span>
                     </li>
                   ))}
                 </ol>
               </>
             )}
-            {tab === 'vars' && <VarTable variables={variables} />}
-            {tab === 'sub' && <SubscriberCard snapshot={subscriberSnapshot} />}
+            {tab === 'vars' && <VarTable variables={variables} emptyLabel={p.noCustomerFields} />}
+            {tab === 'sub' && <SubscriberCard snapshot={subscriberSnapshot} lang={lang} />}
             {tab === 'replay' && (
               <div className="chat-sim__replay">
                 <p className="chat-sim__replay-hint">
-                  Шагов: {snapshotCount || messageCount}. Перемотка восстанавливает чат и переменные.
+                  {lang === 'en'
+                    ? `${capitalize(stepsLabel)}: ${snapshotCount || messageCount}. ${p.replayHint}`
+                    : `${capitalize(stepsLabel)}: ${snapshotCount || messageCount}. ${p.replayHint}`}
                 </p>
                 <input
                   type="range"
@@ -192,4 +209,9 @@ export default function SimulatorDebugPanel({
       )}
     </aside>
   );
+}
+
+function capitalize(s) {
+  if (!s) return s;
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }

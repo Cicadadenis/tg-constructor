@@ -1,5 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import {
+  paletteBackdropVariants,
+  paletteSheetVariants,
+  staggerContainer,
+  staggerItem,
+} from '../motion/index.js';
 import { filterCommands } from './buildCommandPaletteCommands.js';
 
 /**
@@ -74,10 +80,10 @@ export default function CommandPalette({
       {open && (
         <motion.div
           className="ux-palette-backdrop"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.14 }}
+          variants={paletteBackdropVariants}
+          initial="initial"
+          animate="animate"
+          exit="exit"
           onClick={onClose}
           role="presentation"
         >
@@ -86,10 +92,10 @@ export default function CommandPalette({
             role="dialog"
             aria-modal="true"
             aria-label={lang === 'en' ? 'Command palette' : 'Палитра команд'}
-            initial={{ opacity: 0, scale: 0.96, y: -8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.98, y: -4 }}
-            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+            variants={paletteSheetVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="ux-palette__search">
@@ -105,12 +111,24 @@ export default function CommandPalette({
                 spellCheck={false}
               />
             </div>
-            <ul className="ux-palette__list" role="listbox">
+            <motion.ul
+              className="ux-palette__list"
+              role="listbox"
+              variants={staggerContainer}
+              initial="hidden"
+              animate="show"
+            >
               {filtered.length === 0 && (
                 <li className="ux-palette__empty">{emptyLabel}</li>
               )}
               {filtered.map((cmd, i) => (
-                <li key={cmd.id} role="option" aria-selected={i === activeIndex}>
+                <motion.li
+                  key={cmd.id}
+                  role="option"
+                  aria-selected={i === activeIndex}
+                  variants={staggerItem}
+                  layout
+                >
                   <button
                     type="button"
                     className={`ux-palette__item${i === activeIndex ? ' ux-palette__item--active' : ''}`}
@@ -122,9 +140,9 @@ export default function CommandPalette({
                       <kbd className="ux-palette__item-kbd">{cmd.shortcut}</kbd>
                     )}
                   </button>
-                </li>
+                </motion.li>
               ))}
-            </ul>
+            </motion.ul>
           </motion.div>
         </motion.div>
       )}

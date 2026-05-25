@@ -1,8 +1,10 @@
 import React, { useMemo } from 'react';
+import { getProductUiLabels } from '../../copy/productCopy.js';
 import BarChart from '../components/BarChart.jsx';
 import HeatmapGrid from '../components/HeatmapGrid.jsx';
 
-export default function NodeAnalyticsDashboard({ snapshot, nodeLabel, onNodeClick }) {
+export default function NodeAnalyticsDashboard({ snapshot, nodeLabel, onNodeClick, lang = 'ru' }) {
+  const p = getProductUiLabels(lang);
   const nodePerf = useMemo(() => {
     const stats = snapshot?.nodeStats || {};
     return Object.entries(stats)
@@ -29,7 +31,7 @@ export default function NodeAnalyticsDashboard({ snapshot, nodeLabel, onNodeClic
   return (
     <div className="analytics-dash">
       <section className="analytics-panel analytics-panel--wide">
-        <h3 className="analytics-panel__title">Node heatmap</h3>
+        <h3 className="analytics-panel__title">{p.nodeHeatmap}</h3>
         <HeatmapGrid
           cells={snapshot?.heatmap || []}
           nodeLabel={nodeLabel}
@@ -38,11 +40,11 @@ export default function NodeAnalyticsDashboard({ snapshot, nodeLabel, onNodeClic
       </section>
       <div className="analytics-dash__grid">
         <section className="analytics-panel">
-          <h3 className="analytics-panel__title">Node volume (enters)</h3>
+          <h3 className="analytics-panel__title">{p.stepVolume}</h3>
           <BarChart items={nodeVolume} />
         </section>
         <section className="analytics-panel">
-          <h3 className="analytics-panel__title">Runtime per node (avg ms)</h3>
+          <h3 className="analytics-panel__title">{p.slowestSteps}</h3>
           <BarChart items={nodePerf} />
         </section>
       </div>

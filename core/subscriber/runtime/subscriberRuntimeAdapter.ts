@@ -49,6 +49,7 @@ export class SubscriberRuntimeAdapter {
     const prior = base.onEmitEvent;
     return {
       ...base,
+      subscriberStateManager: base.subscriberStateManager ?? manager,
       onEmitEvent: async (effect: EmitEventEffect) => {
         if (prior) await prior(effect);
         if (!isSubscriberDomainEvent(effect.eventType)) return;
