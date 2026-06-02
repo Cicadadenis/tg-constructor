@@ -63,6 +63,7 @@ export default function McSidebar({
   activeFlowName = '',
 }) {
   const {
+    isMobile,
     section: rawSection,
     setSection,
     listSearch,
@@ -88,7 +89,9 @@ export default function McSidebar({
 
   const listItems = sectionListItems[section] ?? sectionListItems.flows ?? [];
   const flowListItems = sectionListItems.flows ?? sectionListItems.automations ?? [];
-  const showContent = !sidebarCompact || sidebarPinned;
+  const compactMode = !isMobile && sidebarCompact;
+  const showContent = isMobile || !sidebarCompact || sidebarPinned;
+  const mobileBlocksMode = isMobile && canvasFirst;
 
   useEffect(() => {
     setListFilter(section === 'automations' ? 'active' : 'all');
@@ -150,14 +153,14 @@ export default function McSidebar({
 
   const showBlockPalette = Boolean(
     palette
-    && (canvasFirst
+    && (mobileBlocksMode || (canvasFirst
       ? isEditorSection
       : (section === 'templates'
-        || ((section === 'flows' || section === 'automations') && activeListId))),
+        || ((section === 'flows' || section === 'automations') && activeListId)))),
   );
 
   const showFlowsListInline = (section === 'flows' || section === 'automations') && !canvasFirst;
-  const showCanvasFirstFlows = canvasFirst && (section === 'flows' || section === 'automations');
+  const showCanvasFirstFlows = !mobileBlocksMode && canvasFirst && (section === 'flows' || section === 'automations');
 
   const genericEmpty = useMemo(() => {
     if (section === 'broadcasts') {
@@ -186,7 +189,7 @@ export default function McSidebar({
       className={[
         'mc-sidebar tw-flex tw-h-full tw-min-h-0 tw-overflow-hidden',
         canvasFirst ? 'mc-sidebar--canvas-first' : '',
-        sidebarCompact ? 'mc-sidebar--compact' : '',
+        compactMode ? 'mc-sidebar--compact' : '',
         showContent ? 'mc-sidebar--expanded' : '',
       ].filter(Boolean).join(' ')}
       data-zone="left"
@@ -196,7 +199,7 @@ export default function McSidebar({
         lang={lang}
         section={section}
         onSectionChange={handleSectionChange}
-        compact={sidebarCompact && !sidebarPinned}
+        compact={compactMode && !sidebarPinned}
         counts={navCounts}
       />
 
@@ -219,26 +222,28 @@ export default function McSidebar({
               </h2>
               <div className="mc-sidebar__head-actions">
                 <Tooltip.Provider delayDuration={200}>
-                  <Tooltip.Root>
-                    <Tooltip.Trigger asChild>
-                      <button
-                        type="button"
-                        className="mc-sidebar-icon-btn"
-                        aria-pressed={sidebarCompact}
-                        onClick={() => {
-                          setSidebarCompact(!sidebarCompact);
-                          if (sidebarCompact) setSidebarPinned(true);
-                        }}
-                      >
-                        {SidebarIcons.panel}
-                      </button>
-                    </Tooltip.Trigger>
-                    <Tooltip.Portal>
-                      <Tooltip.Content side="bottom" className="mc-sidebar-tooltip">
-                        {lang === 'en' ? 'Compact sidebar' : 'Компактная панель'}
-                      </Tooltip.Content>
-                    </Tooltip.Portal>
-                  </Tooltip.Root>
+                  {!isMobile && (
+                    <Tooltip.Root>
+                      <Tooltip.Trigger asChild>
+                        <button
+                          type="button"
+                          className="mc-sidebar-icon-btn"
+                          aria-pressed={sidebarCompact}
+                          onClick={() => {
+                            setSidebarCompact(!sidebarCompact);
+                            if (sidebarCompact) setSidebarPinned(true);
+                          }}
+                        >
+                          {SidebarIcons.panel}
+                        </button>
+                      </Tooltip.Trigger>
+                      <Tooltip.Portal>
+                        <Tooltip.Content side="bottom" className="mc-sidebar-tooltip">
+                          {lang === 'en' ? 'Compact sidebar' : 'Компактная панель'}
+                        </Tooltip.Content>
+                      </Tooltip.Portal>
+                    </Tooltip.Root>
+                  )}
                 </Tooltip.Provider>
               </div>
             </header>
@@ -296,7 +301,7 @@ export default function McSidebar({
                 ].filter(Boolean).join(' ')}
                 data-tour="block-palette"
               >
-                {!hintDismissed && section === 'templates' && (
+                {!mobileBlocksMode && !hintDismissed && section === 'templates' && (
                   <div className="mc-sidebar-hint">
                     <ContextualHint
                       icon="📋"
@@ -317,7 +322,7 @@ export default function McSidebar({
                     />
                   </div>
                 )}
-                {(section === 'flows' || section === 'automations') && activeListId && (
+                {!mobileBlocksMode && (section === 'flows' || section === 'automations') && activeListId && (
                   <div className="mc-sidebar-blocks-label">
                     {p.blocksPalette}
                   </div>

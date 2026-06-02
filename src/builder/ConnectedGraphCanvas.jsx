@@ -27,6 +27,7 @@ export default function ConnectedGraphCanvas({
   const draggingPaletteEntry = useSelectionStore((s) => s.draggingPaletteEntry);
   const highlight = useSelectionStore(selectActiveRepairHighlight);
   const graphStrict = useUiStore((s) => s.graphStrictMode);
+  const isMobile = useUiStore((s) => s.isMobileView);
   void graphStrict;
 
   const handleSelect = useCallback((id) => {
@@ -55,6 +56,7 @@ export default function ConnectedGraphCanvas({
       canvasUxRef={canvasUxRef}
       canvasQuickAdd={canvasQuickAdd}
       showTemplateEmptyOverlay={showTemplateEmptyOverlay}
+      isMobile={isMobile}
     />
   );
 }

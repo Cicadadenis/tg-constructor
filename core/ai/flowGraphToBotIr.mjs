@@ -51,6 +51,12 @@ function nextUiId(label = 'ui') {
   return `${slug(label, 'ui')}_${uiSeq}`;
 }
 
+function scenarioStepName(task, fallback = 'step') {
+  const goalSlug = slug(task?.goal, '');
+  if (!goalSlug) return fallback;
+  return goalSlug === 'main' ? 'entry' : goalSlug;
+}
+
 function nodeToActions(node, uiStateIds) {
   if (!node) return [];
   const type = node.type;
@@ -249,12 +255,17 @@ export function compileFlowGraphToBotIr(flowGraph, semantic, capabilityPlan, det
     const linear = linearizeSubgraph(subNodes, subEdges, subStart, uiStateIds);
 
     if (linear.scenarioSteps.length || linear.actions.some((a) => a.type === 'ask')) {
+      const scenarioName = slug(task.goal, task.id);
       const scenario = {
         id: nextScenarioId(task.goal),
-        name: slug(task.goal, task.id),
+        name: scenarioName,
         steps: linear.scenarioSteps.length
           ? linear.scenarioSteps
-          : [{ id: 'step_1', name: 'main', actions: [...linear.actions, { type: 'stop' }] }],
+          : [{
+            id: 'step_1',
+            name: scenarioStepName(task, scenarioName === 'main' ? 'entry' : 'step'),
+            actions: [...linear.actions, { type: 'stop' }],
+          }],
       };
       scenarios.push(scenario);
 

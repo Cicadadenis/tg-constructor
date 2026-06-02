@@ -392,3 +392,1752 @@
     animation: none;
   }
 }
+
+/* ——— ManyChat finish pass ——— */
+.editor-shell--saas {
+  --pp-accent: #2f6bff;
+  --pp-accent-hover: #2559d6;
+  --pp-accent-muted: #edf4ff;
+  --pp-accent-border: #cfe0ff;
+  --pp-bg: #eef2f6;
+  --pp-surface: #ffffff;
+  --pp-surface-muted: #f7f9fc;
+  --pp-surface-sunken: #eff3f8;
+  --pp-border: rgba(15, 23, 42, 0.075);
+  --pp-border-strong: rgba(15, 23, 42, 0.12);
+  --pp-text: #172033;
+  --pp-text-secondary: #52607a;
+  --pp-text-muted: #8793ab;
+  --pp-radius-sm: 10px;
+  --pp-radius-md: 12px;
+  --pp-radius-lg: 16px;
+  --pp-radius-panel: 18px;
+  --pp-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --pp-shadow-sm: 0 8px 20px rgba(15, 23, 42, 0.06);
+  --pp-shadow-md: 0 16px 32px rgba(15, 23, 42, 0.08);
+  --pp-shadow-float: 0 22px 44px rgba(15, 23, 42, 0.10), 0 0 0 1px rgba(15, 23, 42, 0.06);
+  --color-canvas-bg: #eef2f7;
+  --color-canvas-dot: rgba(113, 129, 154, 0.18);
+}
+
+.editor-shell--saas .mc-editor-topbar,
+.editor-shell--saas .editor-topbar.editor-shell__topbar {
+  height: 50px;
+  min-height: 50px;
+  padding: 0 14px;
+  background: rgba(255, 255, 255, 0.94) !important;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06) !important;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) inset !important;
+  backdrop-filter: blur(18px) saturate(1.05);
+}
+
+.editor-shell--saas .editor-brand-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+}
+
+.editor-shell--saas .editor-brand-word {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.editor-shell--saas .editor-shell__stage {
+  background-color: var(--color-canvas-bg);
+  background-image:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.72), transparent 28%),
+    radial-gradient(circle, var(--color-canvas-dot) 0.65px, transparent 0.75px);
+  background-size: auto, 18px 18px;
+}
+
+.editor-shell--saas .mc-floating-rail,
+.editor-shell--saas .mc-floating-inspector {
+  top: 14px;
+  bottom: 14px;
+  border-radius: var(--pp-radius-panel);
+  border-color: rgba(15, 23, 42, 0.06);
+  box-shadow: var(--pp-shadow-float);
+}
+
+.editor-shell--saas .mc-floating-rail {
+  left: 14px;
+}
+
+.editor-shell--saas .mc-floating-inspector {
+  right: 14px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(250, 252, 255, 0.98) 100%);
+}
+
+.editor-shell--saas .mc-sidebar {
+  background: linear-gradient(180deg, #fbfcfe 0%, #f6f8fb 100%);
+}
+
+.editor-shell--saas .mc-sidebar-nav {
+  width: 124px;
+  padding: 10px 8px;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.editor-shell--saas .mc-sidebar-nav--compact {
+  width: 56px;
+  padding: 10px 6px;
+}
+
+.editor-shell--saas .mc-sidebar-nav__item {
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.editor-shell--saas .mc-sidebar-nav__item--active {
+  background: linear-gradient(180deg, #f2f7ff 0%, #eaf2ff 100%);
+  color: var(--pp-accent);
+}
+
+.editor-shell--saas .mc-sidebar-nav__indicator {
+  left: 6px;
+  top: 10px;
+  bottom: 10px;
+  width: 4px;
+  border-radius: 999px;
+}
+
+.editor-shell--saas .mc-sidebar__main {
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+}
+
+.editor-shell--saas .mc-sidebar__head {
+  padding: 14px 14px 10px;
+}
+
+.editor-shell--saas .mc-sidebar-search {
+  min-height: 38px;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 12px;
+  background: #f5f8fc;
+}
+
+.editor-shell--saas .mc-sidebar-search__input {
+  min-height: 38px;
+  background: transparent;
+  border: none;
+  padding-left: 0;
+}
+
+.editor-shell--saas .mc-sidebar-panel__create,
+.editor-shell--saas .mc-sidebar-btn--primary {
+  border-radius: 12px;
+  background: linear-gradient(180deg, #3776ff 0%, #2f6bff 100%);
+  box-shadow: 0 10px 18px rgba(47, 107, 255, 0.22);
+}
+
+.editor-shell--saas .mc-flow-card {
+  border-radius: 16px;
+  border-color: rgba(15, 23, 42, 0.06);
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+}
+
+.editor-shell--saas .mc-flow-card:hover {
+  border-color: rgba(47, 107, 255, 0.18);
+  box-shadow: 0 10px 18px rgba(15, 23, 42, 0.06);
+}
+
+.editor-shell--saas .mc-flow-card--active {
+  border-color: rgba(47, 107, 255, 0.22);
+  background: linear-gradient(180deg, #f6faff 0%, #eef5ff 100%);
+  box-shadow: 0 8px 18px rgba(47, 107, 255, 0.08);
+}
+
+.editor-shell--saas .mc-flow-card__icon {
+  border-radius: 14px;
+  background: #eff4fb;
+}
+
+.editor-shell--saas .mc-flow-card--active .mc-flow-card__icon {
+  background: #dfeaff;
+}
+
+.editor-shell--saas .vn-card__surface {
+  border-radius: 18px;
+  border-color: rgba(15, 23, 42, 0.07);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+}
+
+.editor-shell--saas .fi-shell__chrome {
+  padding: 10px 10px 0;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+}
+
+.editor-shell--saas .fi-tabs {
+  gap: 6px;
+  padding-bottom: 8px;
+}
+
+.editor-shell--saas .fi-tabs__tab {
+  min-height: 40px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.editor-shell--saas .fi-tabs__tab:hover {
+  background: #f4f7fb;
+}
+
+.editor-shell--saas .fi-tabs__tab--active {
+  background: #eef4ff;
+  color: var(--pp-accent);
+}
+
+.editor-shell--saas .fi-tabs__indicator {
+  left: 10px;
+  right: 10px;
+  bottom: 6px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--pp-accent);
+}
+
+.editor-shell--saas .fe-toolbar,
+.editor-shell--saas .cf-floating-controls {
+  border-radius: 16px;
+  border-color: rgba(15, 23, 42, 0.06);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.10);
+  backdrop-filter: blur(16px);
+}
+
+.editor-shell--saas .fe-toolbar__btn,
+.editor-shell--saas .cf-floating-controls__btn {
+  border-radius: 11px;
+}
+
+.editor-shell--saas .cf-quick-add__chip {
+  min-height: 34px;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--pp-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: var(--pp-shadow-xs);
+}
+
+.editor-shell--saas .cf-quick-add__chip:hover {
+  border-color: rgba(47, 107, 255, 0.18);
+  background: #f4f8ff;
+  color: var(--pp-accent);
+}
+
+.editor-shell--saas .mc-panel-toggle,
+.editor-shell--saas .mc-focus-toggle {
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.10);
+}
+
+.editor-shell--saas .cf-empty-quick {
+  max-width: min(560px, 92vw);
+  width: min(560px, 100%);
+  max-height: min(640px, calc(100vh - 120px));
+  overflow: auto;
+  padding: 18px 20px 20px;
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.97) 0%, rgba(248, 251, 255, 0.97) 100%);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  box-shadow: 0 30px 60px rgba(15, 23, 42, 0.12);
+  text-align: left;
+  backdrop-filter: blur(16px);
+}
+
+.editor-shell--saas .cf-empty-quick__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  margin-bottom: 12px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #edf4ff;
+  color: var(--pp-accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.editor-shell--saas .cf-empty-quick__title {
+  margin-bottom: 6px;
+  font-size: 24px;
+  line-height: 1.15;
+}
+
+.editor-shell--saas .cf-empty-quick__sub {
+  max-width: 480px;
+  margin-bottom: 14px;
+  font-size: 14px;
+  color: var(--pp-text-secondary);
+  line-height: 1.45;
+}
+
+.editor-shell--saas .cf-empty-quick__hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.editor-shell--saas .cf-empty-quick__hint {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--pp-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.editor-shell--saas .cf-empty-quick__actions {
+  justify-content: flex-start;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.editor-shell--saas .cf-empty-quick__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.editor-shell--saas .cf-empty-quick__btn:focus-visible {
+  outline-offset: 3px;
+  box-shadow: var(--shadow-focus);
+}
+
+.editor-shell--saas .cf-empty-quick__btn--primary {
+  background: linear-gradient(180deg, #3776ff 0%, #2f6bff 100%);
+  box-shadow: 0 12px 24px rgba(47, 107, 255, 0.24);
+}
+
+.editor-shell--saas .cf-empty-quick__btn--ghost {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.editor-shell--saas .cf-empty-quick__btn--ghost:hover {
+  background: var(--pp-surface-muted);
+  border-color: rgba(15, 23, 42, 0.12);
+  color: var(--pp-text);
+}
+
+.editor-shell--saas .vn-card {
+  font-family: var(--font-sans);
+}
+
+.editor-shell--saas .vn-card__surface {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.99) 0%, rgba(250, 252, 255, 0.99) 100%);
+}
+
+.editor-shell--saas .vn-card__accent {
+  width: 5px;
+}
+
+.editor-shell--saas .vn-card__header {
+  gap: 12px;
+  padding: 14px 16px 8px 18px;
+}
+
+.editor-shell--saas .vn-card__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  border-color: rgba(15, 23, 42, 0.06);
+}
+
+.editor-shell--saas .vn-card__type {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.editor-shell--saas .vn-card__title {
+  margin-top: 3px;
+  color: #1b2437;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.editor-shell--saas .vn-card__analytics {
+  min-height: 28px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #f3f7ff;
+}
+
+.editor-shell--saas .vn-card__content {
+  padding: 2px 16px 14px 18px;
+}
+
+.editor-shell--saas .vn-card__preview {
+  font-size: 15px;
+  line-height: 1.45;
+  color: #243148;
+}
+
+.editor-shell--saas .vn-card__content-compact {
+  font-size: 13px;
+  color: #66748b;
+}
+
+.editor-shell--saas .vn-card__footer {
+  padding: 12px 16px 14px 18px;
+  background: rgba(246, 249, 252, 0.92);
+  border-top-color: rgba(15, 23, 42, 0.04);
+}
+
+.editor-shell--saas .vn-card__chip {
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.editor-shell--saas .vn-card__status {
+  min-height: 26px;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+
+.editor-shell--saas .vn-toolbar {
+  top: -48px;
+  gap: 6px;
+  padding: 5px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.97);
+  border-color: rgba(15, 23, 42, 0.06);
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.14);
+}
+
+.editor-shell--saas .vn-toolbar__btn {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.editor-shell--saas .vn-toolbar__btn--primary {
+  background: linear-gradient(180deg, #3776ff 0%, #2f6bff 100%);
+}
+
+.editor-shell--saas .vn-port__label {
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.editor-shell--saas .vn-insert {
+  width: 30px;
+  height: 30px;
+  box-shadow: 0 10px 18px rgba(47, 107, 255, 0.28);
+}
+
+@media (max-width: 767px) {
+  .editor-shell--saas .cf-empty-quick {
+    width: min(100%, calc(100vw - 24px));
+    max-height: calc(100vh - 96px);
+    padding: 16px;
+    border-radius: 20px;
+  }
+
+  .editor-shell--saas .cf-empty-quick__title {
+    font-size: 20px;
+  }
+
+  .editor-shell--saas .cf-empty-quick__actions {
+    gap: 8px;
+  }
+
+  .editor-shell--saas .cf-empty-quick__btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-height: 760px) {
+  .editor-shell--saas .cf-empty-quick {
+    max-height: calc(100vh - 88px);
+    padding: 16px 18px 18px;
+  }
+
+  .editor-shell--saas .cf-empty-quick__hints {
+    margin-bottom: 12px;
+  }
+}
+
+@media (max-height: 680px) {
+  .editor-shell--saas .cf-empty-quick__hints {
+    display: none;
+  }
+
+  .editor-shell--saas .cf-empty-quick__sub {
+    margin-bottom: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editor-shell--saas .cf-empty-quick {
+    backdrop-filter: none;
+  }
+}
+
+/* ManyChat alignment pass */
+.editor-shell--saas {
+  --pp-surface-0: #f4f6fb;
+  --pp-surface-1: #ffffff;
+  --pp-surface-2: #f7f9fc;
+  --pp-surface-muted: #eef3f9;
+  --pp-border-soft: rgba(148, 163, 184, 0.2);
+  --pp-border-strong: rgba(148, 163, 184, 0.28);
+  --pp-shadow-panel: 0 10px 24px rgba(15, 23, 42, 0.08);
+  --pp-shadow-soft: 0 6px 16px rgba(15, 23, 42, 0.05);
+  --pp-primary: #2f6bff;
+  --pp-primary-strong: #1f5af6;
+}
+
+.editor-shell--saas .mc-editor-topbar,
+.editor-shell--saas .editor-topbar.editor-shell__topbar {
+  background: rgba(255, 255, 255, 0.96);
+  border-bottom: 1px solid var(--pp-border-soft);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.editor-shell--saas .editor-shell__stage {
+  background-color: #f4f6fb;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(148, 163, 184, 0.24) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+
+.editor-shell--saas .mc-floating-rail,
+.editor-shell--saas .mc-floating-inspector,
+.editor-shell--saas .mc-sidebar,
+.editor-shell--saas .mc-sidebar__main,
+.editor-shell--saas .fi-shell__chrome {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid var(--pp-border-soft);
+  box-shadow: var(--pp-shadow-panel);
+}
+
+.editor-shell--saas .mc-floating-rail,
+.editor-shell--saas .mc-floating-inspector,
+.editor-shell--saas .mc-sidebar,
+.editor-shell--saas .fi-shell__chrome,
+.editor-shell--saas .vn-card__surface,
+.editor-shell--saas .mc-flow-card,
+.editor-shell--saas .cf-empty-quick {
+  border-radius: 16px;
+}
+
+.editor-shell--saas .mc-sidebar-nav {
+  width: 88px;
+  padding: 16px 10px;
+  gap: 8px;
+  background: linear-gradient(180deg, #fbfcff 0%, #f5f8fd 100%);
+  border-right: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.editor-shell--saas .mc-sidebar-nav__item {
+  min-height: 68px;
+  padding: 10px 8px;
+  border-radius: 14px;
+  color: #64748b;
+}
+
+.editor-shell--saas .mc-sidebar-nav__item:hover {
+  background: rgba(47, 107, 255, 0.06);
+  color: #334155;
+}
+
+.editor-shell--saas .mc-sidebar-nav__item--active {
+  background: #eaf1ff;
+  color: #2157de;
+  box-shadow: none;
+}
+
+.editor-shell--saas .mc-sidebar-nav__indicator {
+  width: 4px;
+  border-radius: 999px;
+  background: var(--pp-primary);
+}
+
+.editor-shell--saas .mc-sidebar__head,
+.editor-shell--saas .mc-sidebar-search,
+.editor-shell--saas .mc-sidebar-search__input {
+  background: transparent;
+}
+
+.editor-shell--saas .mc-sidebar-search__input {
+  border: 1px solid var(--pp-border-soft);
+  box-shadow: none;
+}
+
+.editor-shell--saas .mc-flow-card,
+.editor-shell--saas .vn-card__surface,
+.editor-shell--saas .cf-empty-quick,
+.editor-shell--saas .flow-canvas-empty__card,
+.editor-shell--saas .flow-canvas-empty__template,
+.editor-shell--saas .ds-empty,
+.editor-shell--saas .fi-empty {
+  background: #ffffff;
+  border: 1px solid var(--pp-border-soft);
+  box-shadow: var(--pp-shadow-soft);
+}
+
+.editor-shell--saas .mc-flow-card:hover,
+.editor-shell--saas .flow-canvas-empty__template:hover {
+  border-color: rgba(47, 107, 255, 0.24);
+  box-shadow: 0 10px 22px rgba(47, 107, 255, 0.08);
+  transform: translateY(-1px);
+}
+
+.editor-shell--saas .mc-flow-card--active,
+.editor-shell--saas .vn-card--selected .vn-card__surface {
+  border-color: rgba(47, 107, 255, 0.34);
+  box-shadow: 0 0 0 1px rgba(47, 107, 255, 0.12), 0 12px 28px rgba(47, 107, 255, 0.12);
+}
+
+.editor-shell--saas .vn-card__surface,
+.editor-shell--saas .vn-card__footer,
+.editor-shell--saas .vn-card__analytics,
+.editor-shell--saas .vn-card__chip {
+  background-image: none;
+}
+
+.editor-shell--saas .vn-card__header {
+  padding: 12px 14px 8px 16px;
+}
+
+.editor-shell--saas .vn-card__icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.editor-shell--saas .vn-card__title {
+  font-size: 14px;
+}
+
+.editor-shell--saas .vn-toolbar {
+  top: -42px;
+  padding: 4px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.98);
+  border-color: var(--pp-border-soft);
+  box-shadow: var(--pp-shadow-panel);
+}
+
+.editor-shell--saas .vn-toolbar__btn,
+.editor-shell--saas .tb-btn-run,
+.editor-shell--saas .ds-btn--primary,
+.editor-shell--saas .mc-sidebar-panel__create,
+.editor-shell--saas .mc-sidebar-btn--primary,
+.editor-shell--saas .cf-empty-quick__btn--primary {
+  background: var(--pp-primary);
+  border-color: var(--pp-primary);
+  box-shadow: none;
+}
+
+.editor-shell--saas .vn-toolbar__btn--primary:hover,
+.editor-shell--saas .tb-btn-run:hover:not(:disabled),
+.editor-shell--saas .ds-btn--primary:hover,
+.editor-shell--saas .mc-sidebar-panel__create:hover,
+.editor-shell--saas .mc-sidebar-btn--primary:hover,
+.editor-shell--saas .cf-empty-quick__btn--primary:hover {
+  background: var(--pp-primary-strong);
+  border-color: var(--pp-primary-strong);
+}
+
+.editor-shell--saas .tb-btn-ghost,
+.editor-shell--saas .tb-btn-ai,
+.editor-shell--saas .tb-btn-danger,
+.editor-shell--saas .cf-empty-quick__btn--ghost,
+.editor-shell--saas .fi-tabs__tab,
+.editor-shell--saas .app-inspector-tab {
+  background: #ffffff;
+  border: 1px solid var(--pp-border-soft);
+  box-shadow: none;
+}
+
+.editor-shell--saas .fi-tabs__tab--active,
+.editor-shell--saas .app-inspector-tab.active {
+  background: #eaf1ff;
+  border-color: rgba(47, 107, 255, 0.22);
+  color: #2157de;
+}
+
+.editor-shell--saas .cf-empty-quick {
+  max-width: 560px;
+  padding: 24px 24px 20px;
+  backdrop-filter: none;
+}
+
+.editor-shell--saas .cf-empty-quick__eyebrow,
+.editor-shell--saas .cf-empty-quick__sub,
+.editor-shell--saas .cf-empty-quick__hint {
+  color: #64748b;
+}
+
+.editor-shell--saas .cf-empty-quick__hints {
+  gap: 8px;
+}
+
+.editor-shell--saas .cf-empty-quick__hint {
+  background: #f8fafc;
+  border-color: var(--pp-border-soft);
+}
+
+.editor-shell--saas .cf-empty-quick__btn,
+.editor-shell--saas .tb-btn-run,
+.editor-shell--saas .tb-btn-ghost,
+.editor-shell--saas .tb-btn-ai,
+.editor-shell--saas .tb-btn-danger {
+  min-height: 36px;
+  border-radius: 10px;
+}
+
+.editor-shell--saas .mobile-zone-nav {
+  background: rgba(255, 255, 255, 0.98);
+  border-top: 1px solid var(--pp-border-soft);
+  box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.06);
+}
+
+.editor-shell--saas .mobile-zone-nav__item {
+  color: #64748b;
+}
+
+.editor-shell--saas .mobile-zone-nav__item--active {
+  color: #2157de;
+}
+
+@media (max-width: 767px) {
+  .editor-shell--saas .mc-sidebar-nav {
+    width: 76px;
+    padding: 14px 8px;
+  }
+
+  .editor-shell--saas .mc-sidebar-nav__item {
+    min-height: 62px;
+    border-radius: 12px;
+  }
+
+  .editor-shell--saas .mc-floating-rail,
+  .editor-shell--saas .mc-floating-inspector,
+  .editor-shell--saas .mc-sidebar,
+  .editor-shell--saas .fi-shell__chrome,
+  .editor-shell--saas .cf-empty-quick {
+    border-radius: 14px;
+  }
+}
+
+/* ManyChat reference pass */
+.editor-shell--saas {
+  --pp-shell-radius: 12px;
+  --pp-card-radius: 10px;
+  --pp-chip-radius: 999px;
+  --pp-panel-shadow: 0 8px 24px rgba(15, 23, 42, 0.07);
+  --pp-card-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+}
+
+.editor-shell--saas .mc-editor-topbar,
+.editor-shell--saas .editor-topbar.editor-shell__topbar {
+  height: 48px;
+  min-height: 48px;
+  padding: 0 12px;
+  gap: 8px;
+  background: #ffffff;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.editor-shell--saas .editor-brand-logo {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+}
+
+.editor-shell--saas .editor-brand-word {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.editor-shell--saas .editor-brand-suffix {
+  font-size: 13px;
+}
+
+.editor-shell--saas .tb-btn,
+.editor-shell--saas .tb-btn-run,
+.editor-shell--saas .tb-btn-ghost,
+.editor-shell--saas .tb-btn-ai,
+.editor-shell--saas .tb-btn-danger {
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.editor-shell--saas .tb-btn-ghost,
+.editor-shell--saas .tb-btn-ai,
+.editor-shell--saas .tb-btn-danger {
+  color: #475569;
+  background: #ffffff;
+  border-color: rgba(148, 163, 184, 0.22);
+}
+
+.editor-shell--saas .tb-btn-ghost:hover,
+.editor-shell--saas .tb-btn-ai:hover,
+.editor-shell--saas .tb-btn-danger:hover {
+  background: #f8fafc;
+}
+
+.editor-shell--saas .tb-btn-run {
+  background: #2f6bff;
+  border-color: #2f6bff;
+}
+
+.editor-shell--saas .editor-shell__stage {
+  background-color: #eef2f7;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(100, 116, 139, 0.18) 1px, transparent 0);
+  background-size: 22px 22px;
+}
+
+.editor-shell--saas .mc-floating-rail,
+.editor-shell--saas .mc-floating-inspector,
+.editor-shell--saas .mc-sidebar,
+.editor-shell--saas .mc-sidebar__main,
+.editor-shell--saas .fi-shell__chrome,
+.editor-shell--saas .fi-shell__body {
+  border-radius: var(--pp-shell-radius);
+  box-shadow: var(--pp-panel-shadow);
+}
+
+.editor-shell--saas .mc-floating-rail {
+  width: min(360px, calc(100vw - 32px));
+  max-width: 360px;
+}
+
+.editor-shell--saas .mc-floating-inspector {
+  width: min(380px, calc(100% - 32px));
+  max-width: min(380px, calc(100% - 32px));
+}
+
+.editor-shell--saas .mc-sidebar-nav {
+  width: 82px;
+  padding: 12px 8px;
+  gap: 6px;
+  background: #f8fafc;
+}
+
+.editor-shell--saas .mc-sidebar-nav__list {
+  gap: 6px;
+}
+
+.editor-shell--saas .mc-sidebar-nav__item {
+  min-height: 58px;
+  padding: 8px 6px;
+  border-radius: 10px;
+  gap: 6px;
+  flex-direction: column;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.editor-shell--saas .mc-sidebar-nav__label {
+  flex: none;
+  white-space: normal;
+  line-height: 1.15;
+}
+
+.editor-shell--saas .mc-sidebar-nav__badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  min-width: 16px;
+  line-height: 16px;
+  padding: 0 4px;
+  font-size: 9px;
+}
+
+.editor-shell--saas .mc-sidebar-nav__indicator {
+  left: auto;
+  top: auto;
+  bottom: 6px;
+  width: 20px;
+  height: 3px;
+  border-radius: 999px;
+  align-self: center;
+}
+
+.editor-shell--saas .mc-sidebar__head {
+  padding: 12px 12px 10px;
+}
+
+.editor-shell--saas .mc-sidebar__title {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.editor-shell--saas .mc-sidebar-search {
+  height: 32px;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.editor-shell--saas .mc-sidebar-search__input {
+  font-size: 12px;
+}
+
+.editor-shell--saas .mc-sidebar-panel__toolbar,
+.editor-shell--saas .mc-sidebar-filters {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.editor-shell--saas .mc-sidebar-panel__scroll {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.editor-shell--saas .mc-flow-card {
+  border-radius: var(--pp-card-radius);
+  padding: 10px 12px;
+  min-height: 0;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.editor-shell--saas .mc-flow-card__name {
+  font-size: 13px;
+  font-weight: 650;
+  color: #0f172a;
+}
+
+.editor-shell--saas .mc-flow-card__meta {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.editor-shell--saas .mc-flow-card__icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.editor-shell--saas .vn-card {
+  min-width: 0;
+}
+
+.editor-shell--saas .vn-card__surface {
+  border-radius: var(--pp-card-radius);
+  border-color: rgba(148, 163, 184, 0.22);
+  box-shadow: var(--pp-card-shadow);
+}
+
+.editor-shell--saas .vn-card__accent {
+  width: 3px;
+  border-radius: var(--pp-card-radius) 0 0 var(--pp-card-radius);
+}
+
+.editor-shell--saas .vn-card__header {
+  gap: 10px;
+  padding: 12px 14px 8px 16px;
+}
+
+.editor-shell--saas .vn-card__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border-color: rgba(148, 163, 184, 0.22);
+}
+
+.editor-shell--saas .vn-card__icon-emoji {
+  font-size: 19px;
+}
+
+.editor-shell--saas .vn-card__type {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+}
+
+.editor-shell--saas .vn-card__title {
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.editor-shell--saas .vn-card__analytics {
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 8px;
+  font-size: 10px;
+  border-color: rgba(148, 163, 184, 0.22);
+  background: #f8fbff;
+}
+
+.editor-shell--saas .vn-card__content {
+  padding: 0 14px 12px 16px;
+}
+
+.editor-shell--saas .vn-card__preview,
+.editor-shell--saas .vn-card__content-input {
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.editor-shell--saas .vn-card__content-input {
+  min-height: 58px;
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+
+.editor-shell--saas .vn-card__footer {
+  padding: 10px 14px 12px 16px;
+  background: #f8fafc;
+}
+
+.editor-shell--saas .vn-card__chip,
+.editor-shell--saas .vn-card__status {
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: var(--pp-chip-radius);
+  font-size: 10px;
+}
+
+.editor-shell--saas .vn-toolbar {
+  top: -38px;
+  border-radius: 10px;
+}
+
+.editor-shell--saas .vn-toolbar__btn {
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 8px;
+  font-size: 10px;
+}
+
+.editor-shell--saas .mc-inspector-panel__chrome {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.editor-shell--saas .app-inspector-tabs,
+.editor-shell--saas .fi-tabs {
+  padding: 8px 10px 0;
+  gap: 6px;
+}
+
+.editor-shell--saas .app-inspector-tab,
+.editor-shell--saas .fi-tabs__tab {
+  border-radius: 8px 8px 0 0;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.editor-shell--saas .app-inspector-tab.active,
+.editor-shell--saas .fi-tabs__tab--active {
+  background: #f8fbff;
+  color: #2157de;
+  border-bottom: 2px solid #2f6bff;
+}
+
+.editor-shell--saas .mc-inspector-panel,
+.editor-shell--saas .entity-inspector__section,
+.editor-shell--saas .mc-inspector-panel__props {
+  background: #ffffff;
+}
+
+.editor-shell--saas .entity-inspector__section,
+.editor-shell--saas .fi-section,
+.editor-shell--saas .mc-inspector-panel .ds-card,
+.editor-shell--saas .mc-inspector-panel .editor-sidebar-block {
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow: none;
+}
+
+.editor-shell--saas .mc-inspector-panel input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='hidden']),
+.editor-shell--saas .mc-inspector-panel textarea,
+.editor-shell--saas .mc-inspector-panel select {
+  min-height: 36px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.editor-shell--saas .mc-canvas-dock {
+  padding: 3px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: var(--pp-panel-shadow);
+  backdrop-filter: none;
+}
+
+.editor-shell--saas .flow-history-toolbar__btn,
+.editor-shell--saas .flow-layout-toolbar__mode,
+.editor-shell--saas .flow-layout-toolbar__relayout {
+  min-height: 30px;
+  border-radius: 8px;
+  font-size: 11px;
+}
+
+.editor-shell--saas .cf-empty-quick {
+  max-width: 500px;
+  padding: 20px;
+  border-radius: 12px;
+}
+
+.editor-shell--saas .cf-empty-quick__title {
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.editor-shell--saas .cf-empty-quick__sub {
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+@media (max-width: 767px) {
+  .editor-shell--saas .mc-floating-rail,
+  .editor-shell--saas .mc-floating-inspector {
+    top: 12px;
+    bottom: 12px;
+  }
+
+  .editor-shell--saas .mc-sidebar-nav {
+    width: 72px;
+    padding: 10px 6px;
+  }
+
+  .editor-shell--saas .mc-sidebar-nav__item {
+    min-height: 54px;
+    font-size: 10px;
+  }
+}
+
+/* ManyChat desktop + mobile refinement */
+.editor-shell--saas .mc-editor-topbar__cluster {
+  gap: 6px;
+}
+
+.editor-shell--saas .mc-editor-topbar__cluster--grow {
+  justify-content: flex-start;
+}
+
+.editor-shell--saas .mc-status-cluster {
+  gap: 6px;
+}
+
+.editor-shell--saas .mc-floating-rail,
+.editor-shell--saas .mc-floating-inspector {
+  background: #ffffff;
+}
+
+.editor-shell--saas .mc-sidebar {
+  background: #ffffff;
+}
+
+.editor-shell--saas .mc-sidebar-panel__create,
+.editor-shell--saas .mc-sidebar-btn--primary {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.editor-shell--saas .mc-sidebar-filter {
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.editor-shell--saas .mc-sidebar-filter--active {
+  background: #eaf1ff;
+  color: #2157de;
+}
+
+.editor-shell--saas .mc-sidebar-group__head {
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+}
+
+.editor-shell--saas .mc-sidebar-group__title {
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.editor-shell--saas .mc-sidebar-group__count {
+  min-width: 18px;
+  padding: 0 5px;
+  line-height: 18px;
+  font-size: 10px;
+}
+
+.editor-shell--saas .mc-sidebar-panel--blocks .editor-sidebar-block,
+.editor-shell--saas .mc-sidebar-panel--templates .editor-sidebar-block {
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow: none;
+}
+
+.editor-shell--saas .mc-sidebar-panel--blocks .editor-sidebar-block:hover,
+.editor-shell--saas .mc-sidebar-panel--templates .editor-sidebar-block:hover {
+  border-color: rgba(47, 107, 255, 0.22);
+  background: #f8fbff;
+}
+
+.editor-shell--saas .mc-inspector-panel__icon-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+}
+
+.editor-shell--saas .entity-inspector__section-title,
+.editor-shell--saas .entity-inspector__field-label {
+  font-size: 12px;
+  font-weight: 650;
+  color: #334155;
+}
+
+.editor-shell--saas .app-mobile-nav {
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  height: 62px;
+  padding: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.1);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.editor-shell--saas .app-mobile-nav__zone {
+  gap: 4px;
+  border-top: none;
+  border-radius: 10px;
+  min-width: 0;
+  color: #64748b;
+}
+
+.editor-shell--saas .app-mobile-nav__zone.active {
+  background: #eef4ff;
+  box-shadow: inset 0 0 0 1px rgba(47, 107, 255, 0.12);
+}
+
+.editor-shell--saas .app-mobile-nav__zone .tab-icon {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  color: currentColor;
+}
+
+.editor-shell--saas .app-mobile-nav__zone .tab-icon::before,
+.editor-shell--saas .app-mobile-nav__zone .tab-icon::after {
+  content: '';
+  position: absolute;
+}
+
+.editor-shell--saas .app-mobile-nav__zone[data-zone='left'] .tab-icon::before {
+  inset: 1px;
+  background:
+    linear-gradient(currentColor 0 0) 0 0 / 6px 6px no-repeat,
+    linear-gradient(currentColor 0 0) 10px 0 / 6px 6px no-repeat,
+    linear-gradient(currentColor 0 0) 0 10px / 6px 6px no-repeat,
+    linear-gradient(currentColor 0 0) 10px 10px / 6px 6px no-repeat;
+  opacity: 0.9;
+}
+
+.editor-shell--saas .app-mobile-nav__zone[data-zone='canvas'] .tab-icon::before {
+  left: 1px;
+  right: 1px;
+  top: 2px;
+  bottom: 2px;
+  border: 1.5px solid currentColor;
+  border-radius: 4px;
+}
+
+.editor-shell--saas .app-mobile-nav__zone[data-zone='canvas'] .tab-icon::after {
+  left: 5px;
+  right: 5px;
+  top: 6px;
+  height: 1.5px;
+  background: currentColor;
+  box-shadow: 0 4px 0 currentColor;
+  opacity: 0.9;
+}
+
+.editor-shell--saas .app-mobile-nav__zone[data-zone='right'] .tab-icon::before {
+  left: 1px;
+  right: 1px;
+  top: 3px;
+  height: 2px;
+  background: currentColor;
+  box-shadow: 0 4px 0 currentColor, 0 8px 0 currentColor;
+}
+
+.editor-shell--saas .app-mobile-nav__zone[data-zone='right'] .tab-icon::after {
+  width: 4px;
+  height: 4px;
+  left: 9px;
+  top: 2px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow:
+    -6px 4px 0 0 #ffffff,
+    2px 8px 0 0 #ffffff,
+    0 0 0 1.5px currentColor,
+    -6px 4px 0 1.5px currentColor,
+    2px 8px 0 1.5px currentColor;
+}
+
+.editor-shell--saas .app-mobile-nav__zone .tab-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: inherit;
+}
+
+.editor-shell--saas .app-mobile-nav__zone.active .tab-label,
+.editor-shell--saas .app-mobile-nav__zone.active .tab-icon {
+  color: #2157de;
+}
+
+@media (max-width: 767px) {
+  .editor-shell--saas .editor-shell__body {
+    padding-bottom: 78px;
+  }
+
+  .editor-shell--saas .mc-editor-topbar,
+  .editor-shell--saas .editor-topbar.editor-shell__topbar {
+    height: 50px;
+    min-height: 50px;
+    padding: 0 10px;
+  }
+
+  .editor-shell--saas .mc-editor-topbar__cluster.editor-topbar__brand {
+    max-width: 46vw;
+  }
+
+  .editor-shell--saas .tb-btn,
+  .editor-shell--saas .tb-btn-run,
+  .editor-shell--saas .tb-btn-ghost,
+  .editor-shell--saas .tb-btn-ai,
+  .editor-shell--saas .tb-btn-danger {
+    min-height: 30px;
+    padding: 0 8px;
+    font-size: 11px;
+  }
+
+  .editor-shell--saas .mc-floating-rail,
+  .editor-shell--saas .mc-floating-inspector {
+    left: 8px;
+    right: 8px;
+    top: 58px;
+    bottom: 78px;
+    width: auto;
+    max-width: none;
+    border-radius: 12px;
+  }
+
+  .editor-shell--saas .mc-sidebar {
+    flex-direction: column;
+  }
+
+  .editor-shell--saas .mc-sidebar-nav {
+    width: 100%;
+    padding: 10px 10px 0;
+    border-right: none;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+    background: #ffffff;
+  }
+
+  .editor-shell--saas .mc-sidebar-nav__list {
+    flex-direction: row;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 10px;
+    scrollbar-width: none;
+  }
+
+  .editor-shell--saas .mc-sidebar-nav__list::-webkit-scrollbar {
+    display: none;
+  }
+
+  .editor-shell--saas .mc-sidebar-nav__item {
+    min-width: 92px;
+    min-height: 36px;
+    padding: 0 12px;
+    flex-direction: row;
+    gap: 8px;
+    justify-content: center;
+    border-radius: 999px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .editor-shell--saas .mc-sidebar-nav__label {
+    white-space: nowrap;
+  }
+
+  .editor-shell--saas .mc-sidebar-nav__badge {
+    position: static;
+    min-width: 16px;
+    line-height: 16px;
+  }
+
+  .editor-shell--saas .mc-sidebar-nav__indicator {
+    display: none;
+  }
+
+  .editor-shell--saas .mc-sidebar__main {
+    border-radius: 0 0 12px 12px;
+  }
+
+  .editor-shell--saas .mc-sidebar__head {
+    padding-top: 10px;
+  }
+
+  .editor-shell--saas .mc-sidebar-panel__scroll {
+    padding-bottom: 16px;
+  }
+
+  .editor-shell--saas .mc-inspector-panel__chrome {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #ffffff;
+  }
+
+  .editor-shell--saas .app-inspector-tabs,
+  .editor-shell--saas .fi-tabs {
+    position: sticky;
+    top: 47px;
+    z-index: 2;
+    background: #ffffff;
+  }
+
+  .editor-shell--saas .vn-card__surface {
+    border-radius: 10px;
+  }
+
+  .editor-shell--saas .cf-empty-quick {
+    width: min(100%, calc(100vw - 32px));
+    padding: 18px;
+  }
+}
+
+/* Final ManyChat details */
+.editor-shell--saas .editor-topbar__brand {
+  gap: 8px !important;
+}
+
+.editor-shell--saas .mc-editor-topbar__cluster--end {
+  gap: 6px;
+}
+
+.editor-shell--saas .editor-brand-suffix {
+  color: #94a3b8;
+}
+
+.editor-shell--saas .mc-flow-card,
+.editor-shell--saas .editor-sidebar-block {
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.editor-shell--saas .editor-sidebar-block {
+  gap: 10px;
+  padding: 9px 10px;
+  margin: 0;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-left: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.editor-shell--saas .editor-sidebar-block + .editor-sidebar-block {
+  margin-top: 6px;
+}
+
+.editor-shell--saas .editor-sidebar-block__icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  box-shadow: none !important;
+}
+
+.editor-shell--saas .editor-sidebar-block__label {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: #0f172a;
+}
+
+.editor-shell--saas .editor-sidebar-block__add {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #f8fafc;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  font-size: 13px;
+  font-weight: 700;
+  color: #64748b;
+  opacity: 1;
+}
+
+.editor-shell--saas .editor-sidebar-block:hover {
+  background: #f8fbff !important;
+  border-color: rgba(47, 107, 255, 0.22) !important;
+  border-left-color: rgba(47, 107, 255, 0.22) !important;
+  box-shadow: 0 4px 12px rgba(47, 107, 255, 0.07);
+}
+
+.editor-shell--saas .editor-group-header,
+.editor-shell--saas .mc-sidebar-blocks-label {
+  padding: 10px 12px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+}
+
+.editor-shell--saas .mc-inspector-panel__props,
+.editor-shell--saas .fi-shell__body {
+  background: #ffffff;
+}
+
+.editor-shell--saas .entity-inspector__section,
+.editor-shell--saas .fi-section {
+  overflow: hidden;
+}
+
+.editor-shell--saas .entity-inspector__section-head,
+.editor-shell--saas .fi-section__head {
+  min-height: 38px;
+  padding: 0 12px;
+  background: #ffffff;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.editor-shell--saas .fi-section__head:hover,
+.editor-shell--saas .entity-inspector__section-head:hover {
+  background: #f8fafc;
+}
+
+.editor-shell--saas .entity-inspector__section-title,
+.editor-shell--saas .fi-section__title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.editor-shell--saas .entity-inspector__section-hint,
+.editor-shell--saas .fi-section__hint {
+  font-size: 10px;
+  color: #94a3b8;
+}
+
+.editor-shell--saas .entity-inspector__section-body,
+.editor-shell--saas .fi-section__inner {
+  padding: 12px;
+}
+
+.editor-shell--saas .entity-inspector__field {
+  gap: 5px;
+  margin-bottom: 12px;
+}
+
+.editor-shell--saas .entity-inspector__field-label,
+.editor-shell--saas .fi-field__label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.editor-shell--saas .entity-inspector__input,
+.editor-shell--saas .entity-inspector__textarea,
+.editor-shell--saas .mc-inspector-panel input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='hidden']),
+.editor-shell--saas .mc-inspector-panel textarea,
+.editor-shell--saas .mc-inspector-panel select {
+  font-family: inherit;
+  background: #ffffff !important;
+}
+
+.editor-shell--saas .vn-card__status,
+.editor-shell--saas .vn-card__chip {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.editor-shell--saas .vn-card__status {
+  background: #f8fafc;
+}
+
+.editor-shell--saas .vn-card--selected .vn-card__surface {
+  box-shadow: 0 0 0 1px rgba(47, 107, 255, 0.18), 0 8px 20px rgba(47, 107, 255, 0.12);
+}
+
+@media (max-width: 767px) {
+  .editor-shell--saas .app-mobile-nav {
+    height: 58px;
+    padding: 5px;
+    border-radius: 12px;
+  }
+
+  .editor-shell--saas .app-mobile-nav__zone {
+    gap: 3px;
+    border-radius: 9px;
+  }
+
+  .editor-shell--saas .app-mobile-nav__zone .tab-label {
+    font-size: 9px;
+  }
+
+  .editor-shell--saas .mc-sidebar-panel__toolbar,
+  .editor-shell--saas .mc-sidebar-filters,
+  .editor-shell--saas .mc-sidebar-panel__scroll {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .editor-shell--saas .editor-sidebar-block {
+    padding: 10px;
+  }
+
+  .editor-shell--saas .mc-inspector-panel__chrome {
+    min-height: 44px;
+  }
+
+  .editor-shell--saas .app-inspector-tab,
+  .editor-shell--saas .fi-tabs__tab {
+    padding: 8px 8px;
+    font-size: 11px;
+  }
+}
+
+/* Editor chrome finish */
+.editor-shell--saas .editor-brand-logo {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+}
+
+.editor-shell--saas .editor-brand-word {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+
+.editor-shell--saas .editor-brand-suffix {
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.editor-shell--saas .mc-editor-topbar__cluster--primary {
+  gap: 6px;
+}
+
+.editor-shell--saas .tb-btn-run,
+.editor-shell--saas .tb-btn-stop {
+  min-width: 96px;
+}
+
+.editor-shell--saas .vn-toolbar {
+  top: -34px;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 9px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+}
+
+.editor-shell--saas .vn-toolbar__btn {
+  height: 26px;
+  min-width: 26px;
+  padding: 0 7px;
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.editor-shell--saas .vn-insert {
+  width: 26px;
+  height: 26px;
+  box-shadow: 0 6px 14px rgba(47, 107, 255, 0.18);
+}
+
+.editor-shell--saas .vn-port__label {
+  min-height: 18px;
+  padding: 0 6px;
+  font-size: 8px;
+  letter-spacing: 0.04em;
+}
+
+@media (max-width: 767px) {
+  .editor-shell--saas .editor-brand-logo {
+    width: 20px;
+    height: 20px;
+    border-radius: 5px;
+  }
+
+  .editor-shell--saas .editor-brand-word {
+    font-size: 12px;
+  }
+
+  .editor-shell--saas .vn-toolbar {
+    top: -32px;
+  }
+}

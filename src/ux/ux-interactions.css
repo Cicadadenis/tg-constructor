@@ -230,10 +230,11 @@
   min-width: 180px;
   padding: 4px;
   border-radius: var(--radius-md, 10px);
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-md);
-  animation: ux-menu-in 0.14s var(--motion-ease-out);
+  border: 1px solid var(--color-border, rgba(15, 23, 42, 0.12));
+  background: var(--color-surface, #ffffff);
+  color: var(--color-text, #0f172a);
+  box-shadow: var(--shadow-md, 0 12px 28px rgba(15, 23, 42, 0.16));
+  animation: ux-menu-in 0.14s var(--motion-ease-out, cubic-bezier(0.22, 1, 0.36, 1));
 }
 
 @keyframes ux-menu-in {
@@ -248,28 +249,37 @@
 }
 
 .mc-floating-menu__item {
+  display: flex;
+  align-items: center;
   padding: 8px 10px;
   border-radius: 8px;
   font-size: 13px;
+  line-height: 1.35;
+  background: transparent;
+  color: var(--color-text, #0f172a);
   cursor: pointer;
   outline: none;
-  transition: var(--motion-transition-hover);
+  transition: var(--motion-transition-hover, background-color 0.15s ease, color 0.15s ease);
 }
 
 .mc-floating-menu__item[data-highlighted] {
-  background: var(--color-primary-muted);
-  color: var(--color-primary);
+  background: var(--color-primary-muted, #eff6ff);
+  color: var(--color-primary, #2563eb);
+}
+
+.canvas-context-menu__danger {
+  color: var(--color-danger, #dc2626);
 }
 
 .mc-floating-menu__separator {
   height: 1px;
   margin: 4px 6px;
-  background: var(--color-border);
+  background: var(--color-border, rgba(15, 23, 42, 0.08));
 }
 
 .canvas-context-menu__danger[data-highlighted] {
-  background: var(--color-danger-muted) !important;
-  color: var(--color-danger) !important;
+  background: var(--color-danger-muted, rgba(220, 38, 38, 0.08)) !important;
+  color: var(--color-danger, #dc2626) !important;
 }
 
 /* Node hover intelligence */

@@ -7,13 +7,14 @@ import { useAppLayout } from './AppLayoutContext.jsx';
 export default function MobileZoneNav({
   labels = {},
   runSlot = null,
+  onZoneChange = null,
 }) {
   const { mobileZone, setMobileZone } = useAppLayout();
 
   const tabs = [
-    { key: 'canvas', icon: '🎨', label: labels.canvas || 'Canvas' },
-    { key: 'left', icon: '📋', label: labels.list || 'List' },
-    { key: 'right', icon: '✏️', label: labels.inspector || 'Inspector' },
+    { key: 'left', label: labels.list || 'List' },
+    { key: 'canvas', label: labels.canvas || 'Canvas' },
+    { key: 'right', label: labels.inspector || 'Inspector' },
   ];
 
   return (
@@ -23,10 +24,14 @@ export default function MobileZoneNav({
           key={tab.key}
           type="button"
           className={`app-mobile-nav__zone editor-mobile-tab${mobileZone === tab.key ? ' active' : ''}`}
-          onClick={() => setMobileZone(tab.key)}
+          data-zone={tab.key}
+          onClick={() => {
+            setMobileZone(tab.key);
+            onZoneChange?.(tab.key);
+          }}
           data-tour={tab.key === 'canvas' ? 'mobile-tab-canvas' : tab.key === 'left' ? 'mobile-tab-blocks' : 'mobile-tab-props'}
         >
-          <span className="tab-icon">{tab.icon}</span>
+          <span className="tab-icon" aria-hidden />
           <span className="tab-label">{tab.label}</span>
         </button>
       ))}

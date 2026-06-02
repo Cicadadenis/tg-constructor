@@ -181,6 +181,7 @@ function GraphFlowInner({
   canvasUxRef = null,
   canvasQuickAdd = null,
   showTemplateEmptyOverlay = false,
+  isMobile = false,
 }) {
   const graphCanvasActions = useGraphCanvasActions();
   const edgePicker = useFlowEdgePicker();
@@ -855,6 +856,7 @@ function GraphFlowInner({
         menu={contextMenu}
         onClose={closeContextMenu}
         lang={lang}
+        isMobile={isMobile}
         onFitFlow={fitToFlow}
         onGroupSelection={groupSelectedNodes}
         onRemoveEdge={removeEdgeById}

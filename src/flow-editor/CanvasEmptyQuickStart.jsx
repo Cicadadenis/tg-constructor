@@ -1,6 +1,6 @@
 import React from 'react';
 import { Panel } from '@xyflow/react';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { MC_SPRING } from '../motion/index.js';
 import '../layout/canvas-first/canvas-first.css';
 
@@ -14,6 +14,13 @@ export default function CanvasEmptyQuickStart({
   onApplyTemplate,
   onOpenAi,
 }) {
+  const prefersReducedMotion = useReducedMotion();
+  const eyebrow = lang === 'en'
+    ? 'Flow Builder'
+    : lang === 'uk'
+      ? 'Конструктор сценарію'
+      : 'Конструктор сценария';
+
   const title = lang === 'en'
     ? 'Build your flow visually'
     : lang === 'uk'
@@ -30,17 +37,28 @@ export default function CanvasEmptyQuickStart({
   const msgLabel = lang === 'en' ? 'Add Reply' : lang === 'uk' ? 'Додати Відповідь' : 'Добавить Ответ';
   const tplLabel = lang === 'en' ? 'Use template' : lang === 'uk' ? 'Шаблон' : 'Шаблон';
   const aiLabel = lang === 'en' ? 'Create with AI' : lang === 'uk' ? 'Через AI' : 'Через AI';
+  const hints = lang === 'en'
+    ? ['Drag blocks', 'Connect steps', 'Launch fast']
+    : lang === 'uk'
+      ? ['Перетягуйте блоки', 'Зʼєднуйте кроки', 'Запускайте швидко']
+      : ['Перетаскивайте блоки', 'Соединяйте шаги', 'Запускайте быстро'];
 
   return (
     <Panel position="top-center" className="cf-empty-quick-panel">
       <motion.div
         className="cf-empty-quick"
-        initial={{ opacity: 0, y: 16, scale: 0.96 }}
+        initial={prefersReducedMotion ? false : { opacity: 0, y: 16, scale: 0.96 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={MC_SPRING.gentle}
+        transition={prefersReducedMotion ? { duration: 0 } : MC_SPRING.gentle}
       >
+        <div className="cf-empty-quick__eyebrow">{eyebrow}</div>
         <h2 className="cf-empty-quick__title">{title}</h2>
         <p className="cf-empty-quick__sub">{sub}</p>
+        <div className="cf-empty-quick__hints" aria-hidden>
+          {hints.map((hint) => (
+            <span key={hint} className="cf-empty-quick__hint">{hint}</span>
+          ))}
+        </div>
         <div className="cf-empty-quick__actions">
           {onQuickAddStart && (
             <button

@@ -1430,6 +1430,23 @@ export default function App() {
   }, [currentUser?.id, appSection, mobileZone, setMobileZone]);
 
   useEffect(() => {
+    if (!currentUser || !isMobileView || mobileZone !== 'canvas' || graphNodeCount <= 0) return undefined;
+
+    let raf1 = 0;
+    let raf2 = 0;
+    raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        canvasUxRef.current?.fit?.();
+      });
+    });
+
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+  }, [currentUser?.id, isMobileView, mobileZone, graphNodeCount]);
+
+  useEffect(() => {
     const handler = () => setIsMobileView(isMobileBuilderViewport());
     window.addEventListener('resize', handler);
     window.addEventListener('orientationchange', handler);
@@ -2687,7 +2704,7 @@ export default function App() {
   // ── Info panel helpers ────────────────────────────────────────────────────────
   const focusMobileAddedBlock = useCallback((blockId) => {
     if (!isMobileView || !blockId) return;
-    setSelectedBlockId(null);
+    setSelectedBlockId(blockId);
     setMobileAttentionBlockId(blockId);
     setMobileZone('canvas');
   }, [isMobileView]);
@@ -4814,7 +4831,7 @@ export default function App() {
           <img src={cicadaLogo} alt="" className="editor-brand-logo" />
           <div style={{ display:'flex', alignItems:'baseline', lineHeight:1 }}>
             <span className="editor-brand-word">Cicada</span>
-            {!isMobileView && <span className="editor-brand-suffix">Studio</span>}
+            {!isMobileView && <span className="editor-brand-suffix">Flow Builder</span>}
           </div>
         </div>
         {/* Mobile Examples Button */}
@@ -4826,8 +4843,9 @@ export default function App() {
               data-tour="mobile-examples"
               title={builderUi.examplesOpen}
               onClick={() => setShowExamples(!showExamples)}
-              style={{ width: 36, height: 34, display:'flex', alignItems:'center', justifyContent:'center', gap:2, background:'transparent', color:'var(--text3)', padding:0, border:'1px solid var(--border2)', borderRadius:10, fontSize:15, whiteSpace: 'nowrap', flexShrink: 0 }}
-            >{builderUi.examplesOpen}</button>
+              aria-label={builderUi.examplesOpen}
+              style={{ width: 34, height: 32, display:'flex', alignItems:'center', justifyContent:'center', gap:2, background:'transparent', color:'var(--text3)', padding:0, border:'1px solid var(--border2)', borderRadius:9, fontSize:18, lineHeight:1, whiteSpace: 'nowrap', flexShrink: 0 }}
+            >⋯</button>
           </div>
         )}
         {!isMobileView && <div className="tb-divider" />}
@@ -5847,8 +5865,32 @@ export default function App() {
             <MobileZoneNav
               labels={{
                 canvas: builderUi.mobileTabCanvas,
-                list: builderUi.mobileTabBlocks,
+                list: builderUi.blocksPalette || builderUi.mobileTabBlocks,
                 inspector: builderUi.mobileTabProps,
+              }}
+              onZoneChange={(zone) => {
+                if (zone === 'left') {
+                  if (!isCanvasSection(appSection)) setAppSection('flows');
+                  setMobileZone('left');
+                  return;
+                }
+
+                if (zone === 'right') {
+                  const docNodes = graph.getGraphDocument().nodes || {};
+                  if (!selectedBlockId) {
+                    const fallbackNodeId = mobileAttentionBlockId || Object.keys(docNodes).slice(-1)[0];
+                    if (fallbackNodeId) {
+                      useSelectionStore.getState().selectNode(fallbackNodeId);
+                    }
+                  }
+                  setMobileZone('right');
+                  return;
+                }
+
+                if (zone === 'canvas') {
+                  if (!isCanvasSection(appSection)) setAppSection('flows');
+                  setMobileZone('canvas');
+                }
               }}
               runSlot={(() => {
                 const _canRun = graphHasRunnableBot(graph, currentUser);

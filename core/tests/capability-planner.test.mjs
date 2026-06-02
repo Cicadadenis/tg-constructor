@@ -109,3 +109,31 @@ test('compileSemanticIntentToBotIr is deterministic from semantic intent', () =>
   assert.ok(ir.handlers?.length);
   assert.equal(ir.intent?.plannedFrom, 'capability_flow_graph');
 });
+
+test('compileSemanticIntentToBotIr avoids generic main step names for simple scenarios', () => {
+  const intent = {
+    intentPlanVersion: 2,
+    summary: 'Dual menu',
+    primaryGoal: 'menu',
+    tasks: [
+      {
+        id: 't_catalog',
+        goal: 'catalog',
+        operations: [{ kind: 'notify', text: 'Каталог' }, { kind: 'end' }],
+      },
+      {
+        id: 't_help',
+        goal: 'help',
+        operations: [{ kind: 'notify', text: 'Помощь' }, { kind: 'end' }],
+      },
+    ],
+    interactions: [
+      { id: 'ix_catalog', trigger: { type: 'button', value: 'Каталог' }, taskId: 't_catalog' },
+      { id: 'ix_help', trigger: { type: 'button', value: 'Помощь' }, taskId: 't_help' },
+    ],
+  };
+  const ir = compileSemanticIntentToBotIr(intent, intentPlanner('бот меню'));
+  const stepNames = ir.scenarios.flatMap((scenario) => scenario.steps.map((step) => step.name));
+  assert.deepEqual(stepNames, ['catalog', 'help']);
+  assert.equal(stepNames.includes('main'), false);
+});

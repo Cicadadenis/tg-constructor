@@ -290,13 +290,10 @@
 .cf-empty-quick {
   pointer-events: auto;
   max-width: min(520px, 92vw);
+  width: min(520px, 100%);
   padding: 28px 32px;
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.94);
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
   text-align: center;
-  backdrop-filter: blur(16px);
 }
 
 .cf-empty-quick__title {
