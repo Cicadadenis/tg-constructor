@@ -3,12 +3,52 @@
  */
 
 .vn-card {
-  --vn-accent: #2563eb;
-  --vn-muted: #eff6ff;
-  --vn-border: #bfdbfe;
+  --vn-accent: var(--color-primary, #2f6bff);
+  --vn-muted: var(--color-primary-muted, #edf3ff);
+  --vn-border: var(--color-primary-border, #c9d9ff);
+  --vn-accent-strong: color-mix(in srgb, var(--vn-accent) 82%, #0f172a 18%);
+  --vn-badge-bg: color-mix(in srgb, var(--vn-accent) 10%, #ffffff 90%);
+  --vn-badge-border: color-mix(in srgb, var(--vn-accent) 16%, #e2e8f0 84%);
   position: relative;
   font-family: var(--font-sans, Inter, system-ui, sans-serif);
   user-select: none;
+}
+
+/* ——— ManyChat-style flavor accents ——— */
+.vn-card--flavor-message {
+  --vn-accent: #2563eb;
+  --vn-muted: #eff6ff;
+  --vn-border: #bfdbfe;
+}
+
+.vn-card--flavor-condition {
+  --vn-accent: #7c3aed;
+  --vn-muted: #f5f3ff;
+  --vn-border: #ddd6fe;
+}
+
+.vn-card--flavor-buttons {
+  --vn-accent: #4f46e5;
+  --vn-muted: #eef2ff;
+  --vn-border: #c7d2fe;
+}
+
+.vn-card--flavor-media {
+  --vn-accent: #d97706;
+  --vn-muted: #fffbeb;
+  --vn-border: #fde68a;
+}
+
+.vn-card--flavor-action {
+  --vn-accent: #059669;
+  --vn-muted: #ecfdf5;
+  --vn-border: #a7f3d0;
+}
+
+.vn-card--invalid {
+  --vn-accent: #ef4444;
+  --vn-muted: #fef2f2;
+  --vn-border: #fecaca;
 }
 
 /* ——— Hit target ——— */
@@ -17,7 +57,7 @@
   inset: 0;
   z-index: 1;
   cursor: grab;
-  border-radius: var(--radius-lg, 12px);
+  border-radius: var(--radius-xl, 16px);
 }
 
 .vn-card__hit:active {
@@ -31,14 +71,18 @@
   flex-direction: column;
   width: 100%;
   min-height: 100%;
-  background: #ffffff;
-  border: 1px solid var(--color-border, rgba(15, 23, 42, 0.06));
-  border-radius: var(--radius-lg, 12px);
-  box-shadow: var(--shadow-xs, 0 1px 2px rgba(15, 23, 42, 0.04));
+  background: var(--color-surface, #fff);
+  border: 1px solid color-mix(in srgb, #0f172a 10%, transparent);
+  border-radius: var(--radius-xl, 16px);
+  box-shadow:
+    0 10px 22px rgba(15, 23, 42, 0.06),
+    0 2px 6px rgba(15, 23, 42, 0.04);
   overflow: hidden;
   transition:
     box-shadow 0.24s cubic-bezier(0.22, 1, 0.36, 1),
-    border-color 0.2s ease;
+    border-color 0.2s ease,
+    transform 0.2s ease,
+    background 0.2s ease;
 }
 
 .vn-card__accent {
@@ -46,21 +90,35 @@
   left: 0;
   top: 0;
   bottom: 0;
-  width: 4px;
+  width: 3px;
   background: var(--vn-accent);
-  border-radius: var(--radius-lg, 12px) 0 0 var(--radius-lg, 12px);
+  border-radius: var(--radius-xl, 16px) 0 0 var(--radius-xl, 16px);
   pointer-events: none;
 }
 
 .vn-card--hover .vn-card__surface,
 .vn-card--selected .vn-card__surface {
   border-color: var(--vn-border);
-  box-shadow: var(--shadow-sm, 0 2px 6px rgba(15, 23, 42, 0.05));
+  box-shadow:
+    0 16px 36px rgba(15, 23, 42, 0.09),
+    0 3px 8px rgba(15, 23, 42, 0.05),
+    0 0 0 1px color-mix(in srgb, var(--vn-accent) 10%, transparent);
+  transform: translateY(-2px);
 }
 
 .vn-card--selected .vn-card__surface {
   border-color: var(--vn-accent);
-  box-shadow: var(--shadow-sm), 0 0 0 2px var(--vn-muted);
+  box-shadow:
+    0 20px 42px rgba(15, 23, 42, 0.1),
+    0 4px 10px rgba(15, 23, 42, 0.06),
+    0 0 0 3px color-mix(in srgb, var(--vn-accent) 16%, transparent);
+}
+
+.vn-card--invalid .vn-card__surface {
+  border-color: var(--vn-border);
+  box-shadow:
+    0 16px 32px rgba(239, 68, 68, 0.09),
+    0 0 0 3px rgba(239, 68, 68, 0.12);
 }
 
 .vn-card__surface--lazy {
@@ -71,50 +129,84 @@
 .vn-card__header {
   display: flex;
   align-items: flex-start;
-  gap: 14px;
-  padding: 16px 18px 10px 20px;
+  gap: 12px;
+  padding: 16px 18px 8px 18px;
 }
 
 .vn-card__icon {
   flex-shrink: 0;
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
+  color: var(--vn-accent-strong);
   background: var(--vn-muted);
   border: 1px solid var(--vn-border);
-  box-shadow: none;
+  box-shadow: 0 8px 16px color-mix(in srgb, var(--vn-accent) 10%, transparent);
 }
 
-.vn-card__icon-emoji {
-  font-size: 24px;
-  line-height: 1;
+.vn-card__icon svg {
+  display: block;
 }
 
 .vn-card__meta {
   flex: 1;
   min-width: 0;
-  padding-top: 2px;
+  padding-top: 1px;
+}
+
+.vn-card__meta-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .vn-card__type {
-  display: block;
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.vn-card__badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid var(--vn-badge-border);
+  background: var(--vn-badge-bg);
+  color: var(--vn-accent-strong);
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--vn-accent);
-  line-height: 1.2;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 .vn-card__title {
+  margin: 8px 0 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.vn-card__subtitle {
   margin: 4px 0 0;
-  font-size: 14px;
-  font-weight: 650;
-  color: #64748b;
+  font-size: 12px;
   line-height: 1.35;
+  color: #64748b;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -125,23 +217,26 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 5px 10px;
-  border-radius: 10px;
-  font-size: 12px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11px;
   font-weight: 700;
-  background: var(--vn-muted);
-  color: var(--vn-accent);
-  border: 1px solid var(--vn-border);
+  background: rgba(248, 250, 252, 0.96);
+  color: #475569;
+  border: 1px solid rgba(148, 163, 184, 0.2);
   box-shadow: none;
 }
 
 .vn-card__analytics-icon {
-  font-size: 11px;
+  font-size: 16px;
+  line-height: 0.8;
+  color: var(--vn-accent);
 }
 
 /* ——— Content (hero) ——— */
 .vn-card__content {
-  padding: 4px 18px 14px 20px;
+  padding: 8px 18px 14px 18px;
   flex: 1;
 }
 
@@ -156,18 +251,18 @@
 
 .vn-card__preview {
   margin: 0;
-  font-size: 17px;
+  font-size: 13px;
   font-weight: 500;
-  line-height: 1.5;
-  color: #0f172a;
-  letter-spacing: -0.01em;
+  line-height: 1.55;
+  color: #475569;
+  letter-spacing: -0.006em;
   white-space: pre-wrap;
   word-break: break-word;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   overflow: hidden;
   cursor: text;
-  min-height: 1.5em;
+  min-height: 3.1em;
 }
 
 .vn-card__content-input {
@@ -178,7 +273,7 @@
   font-weight: 500;
   color: #0f172a;
   border: 2px solid var(--vn-border);
-  border-radius: 14px;
+  border-radius: 12px;
   padding: 12px 14px;
   resize: vertical;
   font-family: inherit;
@@ -198,9 +293,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 12px 18px 14px 20px;
-  border-top: 1px solid rgba(15, 23, 42, 0.05);
-  background: var(--color-surface-muted, #f9fafb);
+  padding: 12px 18px 14px 18px;
+  border-top: 1px solid rgba(226, 232, 240, 0.85);
+  background: linear-gradient(180deg, rgba(250, 251, 253, 0.98) 0%, rgba(248, 250, 252, 0.98) 100%);
 }
 
 .vn-card__chips {
@@ -222,9 +317,9 @@
 }
 
 .vn-card__chip--accent {
-  background: var(--vn-muted);
-  border-color: var(--vn-border);
-  color: var(--vn-accent);
+  background: var(--vn-badge-bg);
+  border-color: var(--vn-badge-border);
+  color: var(--vn-accent-strong);
 }
 
 .vn-card__status {
@@ -236,7 +331,7 @@
   font-weight: 700;
   padding: 4px 10px;
   border-radius: 999px;
-  background: #f1f5f9;
+  background: #f8fafc;
   color: #475569;
 }
 
@@ -269,6 +364,7 @@
 .vn-card__status--error {
   background: #fef2f2;
   color: #b91c1c;
+  border: 1px solid rgba(248, 113, 113, 0.22);
 }
 
 .vn-card__status--error .vn-card__status-dot {
@@ -286,10 +382,10 @@
   align-items: center;
   gap: 4px;
   padding: 4px;
-  border-radius: 12px;
-  background: #fff;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.98);
   border: 1px solid rgba(15, 23, 42, 0.08);
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.12);
   pointer-events: auto;
 }
 
@@ -490,8 +586,8 @@
 
 .graph-flow-host.flow-editor-canvas .react-flow__node.selected .vn-card__surface {
   box-shadow:
-    0 8px 28px rgba(15, 23, 42, 0.12),
-    0 0 0 2px var(--color-primary, #2563eb);
+    0 16px 34px rgba(15, 23, 42, 0.1),
+    0 0 0 3px color-mix(in srgb, var(--color-primary, #2563eb) 18%, transparent);
 }
 
 .graph-flow-host--premium .react-flow__node.is-hovered .vn-card__surface {
@@ -499,13 +595,42 @@
 }
 
 .react-flow__node.cicada-node .vn-card__surface {
-  border-radius: 20px;
+  border-radius: 18px;
 }
 
-/* Per-type subtle icon tints */
-.vn-card--message .vn-card__icon { background: linear-gradient(145deg, #fff, #eff6ff); }
-.vn-card--input .vn-card__icon { background: linear-gradient(145deg, #fff, #f0fdfa); }
-.vn-card--condition .vn-card__icon { background: linear-gradient(145deg, #fff, #f5f3ff); }
-.vn-card--delay .vn-card__icon { background: linear-gradient(145deg, #fff, #fffbeb); }
-.vn-card--action .vn-card__icon { background: linear-gradient(145deg, #fff, #fef2f2); }
-.vn-card--goal .vn-card__icon { background: linear-gradient(145deg, #fff, #ecfdf5); }
+/* Per-type ManyChat accents */
+.vn-card--flavor-message {
+  --vn-accent: #2563eb;
+  --vn-muted: #eff6ff;
+  --vn-border: #bfdbfe;
+}
+
+.vn-card--flavor-condition {
+  --vn-accent: #7c3aed;
+  --vn-muted: #f5f3ff;
+  --vn-border: #ddd6fe;
+}
+
+.vn-card--flavor-buttons {
+  --vn-accent: #0f766e;
+  --vn-muted: #ecfeff;
+  --vn-border: #a5f3fc;
+}
+
+.vn-card--flavor-media {
+  --vn-accent: #ea580c;
+  --vn-muted: #fff7ed;
+  --vn-border: #fed7aa;
+}
+
+.vn-card--flavor-action {
+  --vn-accent: #dc2626;
+  --vn-muted: #fef2f2;
+  --vn-border: #fecaca;
+}
+
+.vn-card--flavor-message .vn-card__icon { background: linear-gradient(145deg, #ffffff, #eff6ff); }
+.vn-card--flavor-condition .vn-card__icon { background: linear-gradient(145deg, #ffffff, #f5f3ff); }
+.vn-card--flavor-buttons .vn-card__icon { background: linear-gradient(145deg, #ffffff, #ecfeff); }
+.vn-card--flavor-media .vn-card__icon { background: linear-gradient(145deg, #ffffff, #fff7ed); }
+.vn-card--flavor-action .vn-card__icon { background: linear-gradient(145deg, #ffffff, #fef2f2); }

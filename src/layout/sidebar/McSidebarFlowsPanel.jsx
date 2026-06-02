@@ -81,7 +81,7 @@ export default function McSidebarFlowsPanel({
   const searchPh = lang === 'en' ? 'Search flows…' : lang === 'uk' ? 'Пошук…' : 'Поиск сценариев…';
   const sortLabel = lang === 'en' ? 'Sort' : lang === 'uk' ? 'Сортування' : 'Сортировка';
 
-  const createLabel = lang === 'en' ? 'New flow' : lang === 'uk' ? 'Новий flow' : 'Новый сценарий';
+  const createLabel = lang === 'en' ? 'New bot' : lang === 'uk' ? 'Новий бот' : 'Новый бот';
   const templateLabel = lang === 'en' ? 'From template' : 'Из шаблона';
   const aiLabel = lang === 'en' ? 'AI generate' : 'Через AI';
   const editingLabel = lang === 'en' ? 'Editing on canvas' : 'Редактирование на холсте';
@@ -146,7 +146,7 @@ export default function McSidebarFlowsPanel({
           <DropdownMenu.Root open={templatesOpen} onOpenChange={setTemplatesOpen}>
             <DropdownMenu.Trigger asChild>
               <button type="button" className="mc-flows-panel__create-secondary">
-                📋 {templateLabel}
+                {SidebarIcons.templates} {templateLabel}
               </button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
@@ -178,7 +178,7 @@ export default function McSidebarFlowsPanel({
             className="mc-flows-panel__create-secondary mc-flows-panel__create-secondary--ai"
             onClick={onOpenAi}
           >
-            ✨ {aiLabel}
+            {SidebarIcons.sparkles} {aiLabel}
           </button>
         </div>
       </div>

@@ -64,7 +64,7 @@
   width: 140px;
   height: 100px;
   margin: 0;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-xl);
   border: 1px solid var(--color-border);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
@@ -72,7 +72,7 @@
 }
 
 .graph-flow-host .canvas-minimap .react-flow__minimap-mask {
-  fill: rgba(37, 99, 235, 0.08);
+  fill: rgba(47, 107, 255, 0.08);
 }
 
 .graph-flow-host .canvas-minimap .react-flow__minimap-node {
@@ -83,10 +83,12 @@
 /* Bezier flow edges */
 .flow-bezier-edge__path {
   fill: none;
-  stroke: var(--color-border-strong);
-  stroke-width: 1.5;
+  stroke: #94a3b8;
+  stroke-width: 1.6;
   transition: stroke var(--motion-duration-base) var(--motion-ease-out),
-    stroke-width var(--motion-duration-base) var(--motion-ease-out);
+    stroke-width var(--motion-duration-base) var(--motion-ease-out),
+    opacity var(--motion-duration-base) var(--motion-ease-out);
+  opacity: 0.92;
 }
 
 .flow-bezier-edge__hit {
@@ -99,13 +101,13 @@
 .flow-bezier-edge--hover .flow-bezier-edge__path,
 .flow-bezier-edge--selected .flow-bezier-edge__path {
   stroke: var(--color-primary);
-  stroke-width: 2;
+  stroke-width: 2.2;
 }
 
 .flow-bezier-edge--execution .flow-bezier-edge__path {
   stroke: var(--color-primary);
-  stroke-width: 2.5;
-  filter: drop-shadow(0 0 4px rgba(37, 99, 235, 0.35));
+  stroke-width: 2.4;
+  filter: drop-shadow(0 0 6px rgba(47, 107, 255, 0.24));
 }
 
 .flow-bezier-edge--repair .flow-bezier-edge__path {
@@ -129,7 +131,7 @@
 
 .flow-add-step-edge--execution .flow-add-step-edge__path {
   stroke: var(--color-primary);
-  stroke-width: 2.5;
+  stroke-width: 2.4;
 }
 
 /* Node highlight rings (projection-driven) */

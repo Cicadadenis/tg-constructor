@@ -20,6 +20,11 @@ export default function McSidebarNav({
         className={`mc-sidebar-nav tw-flex-shrink-0${compact ? ' mc-sidebar-nav--compact' : ''}`}
         aria-label={lang === 'en' ? 'Workspace' : 'Рабочая область'}
       >
+        {!compact && (
+          <div className="mc-sidebar-nav__section-label">
+            {lang === 'en' ? 'Sections' : lang === 'uk' ? 'Секції' : 'Разделы'}
+          </div>
+        )}
         <ul className="mc-sidebar-nav__list">
           {NAV_SECTIONS.map((entry) => {
             const active = section === entry.id;
@@ -34,7 +39,9 @@ export default function McSidebarNav({
                 onClick={() => onSectionChange(entry.id)}
                 aria-current={active ? 'page' : undefined}
               >
-                <span className="mc-sidebar-nav__icon">{Icon}</span>
+                <span className="mc-sidebar-nav__icon-wrap">
+                  <span className="mc-sidebar-nav__icon">{Icon}</span>
+                </span>
                 {!compact && (
                   <span className="mc-sidebar-nav__label">{label}</span>
                 )}

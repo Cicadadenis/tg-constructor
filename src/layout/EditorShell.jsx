@@ -51,7 +51,7 @@ export default function EditorShell({
   const showRightDesktop = !isMobile && !focusMode && inspectorOpen;
   const showLeftMobile = isMobile && mobileZone === 'left';
   const showRightMobile = isMobile && mobileZone === 'right';
-  const showCenter = !isMobile || mobileZone === 'canvas';
+  const showCenter = !isMobile || mobileZone === 'canvas' || mobileZone === 'test';
 
   const focusLabel = lang === 'en'
     ? (focusMode ? 'Exit focus' : 'Focus mode')
@@ -76,72 +76,124 @@ export default function EditorShell({
       ].filter(Boolean).join(' ')}
     >
       <div className="editor-shell__stage">
-        <div className="editor-shell__canvas-layer">
-          {showCenter && center}
-          {!focusMode && canvasControls}
-        </div>
+        {!isMobile ? (
+          <div className="editor-shell__desktop-grid">
+            <AnimatePresence initial={false}>
+              {showLeftDesktop && left && (
+                <motion.aside
+                  key="left-rail"
+                  className="editor-shell__desktop-panel editor-shell__desktop-panel--left mc-floating-rail"
+                  variants={railPanelVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  transition={MC_SPRING.panel}
+                  aria-label={lang === 'en' ? 'Elements and flows' : lang === 'uk' ? 'Елементи та сценарії' : 'Элементы и сценарии'}
+                >
+                  {left}
+                </motion.aside>
+              )}
+            </AnimatePresence>
 
-        <AnimatePresence>
-          {(showLeftDesktop || showLeftMobile) && left && (
-            <motion.aside
-              key="left-rail"
-              className="mc-floating-rail"
-              variants={railPanelVariants}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-              transition={MC_SPRING.panel}
-              aria-label={lang === 'en' ? 'Elements and flows' : lang === 'uk' ? 'Елементи та сценарії' : 'Элементы и сценарии'}
-            >
-              {left}
-            </motion.aside>
-          )}
-        </AnimatePresence>
+            <div className="editor-shell__desktop-center">
+              <div className="editor-shell__canvas-layer">
+                {showCenter && center}
+                {!focusMode && canvasControls}
+              </div>
+            </div>
 
-        <AnimatePresence>
-          {(showRightDesktop || showRightMobile) && right && (
-            <motion.aside
-              key="inspector"
-              className={[
-                'mc-floating-inspector',
-                inspectorCollapsed ? 'mc-floating-inspector--collapsed' : '',
-              ].filter(Boolean).join(' ')}
-              variants={inspectorPanelVariants}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-              transition={MC_SPRING.panel}
-              aria-label={lang === 'en' ? 'Inspector' : 'Инспектор'}
-            >
-              {right}
-            </motion.aside>
-          )}
-        </AnimatePresence>
+            <AnimatePresence initial={false}>
+              {showRightDesktop && right && (
+                <motion.aside
+                  key="inspector"
+                  className={[
+                    'editor-shell__desktop-panel',
+                    'editor-shell__desktop-panel--right',
+                    'mc-floating-inspector',
+                    inspectorCollapsed ? 'mc-floating-inspector--collapsed' : '',
+                  ].filter(Boolean).join(' ')}
+                  variants={inspectorPanelVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  transition={MC_SPRING.panel}
+                  aria-label={lang === 'en' ? 'Inspector' : 'Инспектор'}
+                >
+                  {right}
+                </motion.aside>
+              )}
+            </AnimatePresence>
 
-        {!isMobile && !focusMode && (
+            {!focusMode && (
+              <>
+                {!leftRailOpen && (
+                  <button
+                    type="button"
+                    className="mc-panel-toggle mc-panel-toggle--left"
+                    onClick={toggleLeftRail}
+                    aria-label={leftToggleLabel}
+                    title={leftToggleLabel}
+                  >
+                    ▶
+                  </button>
+                )}
+                {!inspectorOpen && (
+                  <button
+                    type="button"
+                    className="mc-panel-toggle mc-panel-toggle--right"
+                    onClick={toggleInspector}
+                    aria-label={inspectorToggleLabel}
+                    title={inspectorToggleLabel}
+                  >
+                    ◀
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        ) : (
           <>
-            {!leftRailOpen && (
-              <button
-                type="button"
-                className="mc-panel-toggle mc-panel-toggle--left"
-                onClick={toggleLeftRail}
-                aria-label={leftToggleLabel}
-                title={leftToggleLabel}
-              >
-                ▶
-              </button>
-            )}
-            {!inspectorOpen && (
-              <button
-                type="button"
-                className="mc-panel-toggle mc-panel-toggle--right"
-                onClick={toggleInspector}
-                aria-label={inspectorToggleLabel}
-                title={inspectorToggleLabel}
-              >
-                ◀
-              </button>
-            )}
+            <div className="editor-shell__canvas-layer">
+              {showCenter && center}
+              {!focusMode && canvasControls}
+            </div>
+
+            <AnimatePresence>
+              {showLeftMobile && left && (
+                <motion.aside
+                  key="left-rail"
+                  className="mc-floating-rail"
+                  variants={railPanelVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  transition={MC_SPRING.panel}
+                  aria-label={lang === 'en' ? 'Elements and flows' : lang === 'uk' ? 'Елементи та сценарії' : 'Элементы и сценарии'}
+                >
+                  {left}
+                </motion.aside>
+              )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+              {showRightMobile && right && (
+                <motion.aside
+                  key="inspector"
+                  className={[
+                    'mc-floating-inspector',
+                    inspectorCollapsed ? 'mc-floating-inspector--collapsed' : '',
+                  ].filter(Boolean).join(' ')}
+                  variants={inspectorPanelVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  transition={MC_SPRING.panel}
+                  aria-label={lang === 'en' ? 'Inspector' : 'Инспектор'}
+                >
+                  {right}
+                </motion.aside>
+              )}
+            </AnimatePresence>
           </>
         )}
 

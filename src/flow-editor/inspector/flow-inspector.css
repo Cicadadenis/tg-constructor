@@ -5,14 +5,14 @@
 .fi-shell {
   --fi-bg: #ffffff;
   --fi-bg-muted: #f8fafc;
-  --fi-border: rgba(15, 23, 42, 0.06);
+  --fi-border: rgba(15, 23, 42, 0.08);
   --fi-text: #0f172a;
   --fi-text-muted: #64748b;
-  --fi-primary: #2563eb;
-  --fi-primary-muted: #eff6ff;
+  --fi-primary: var(--color-primary, #2f6bff);
+  --fi-primary-muted: var(--color-primary-muted, #edf3ff);
   --fi-danger: #dc2626;
   --fi-danger-muted: #fef2f2;
-  --fi-radius: 12px;
+  --fi-radius: 16px;
   --fi-font: var(--font-sans, Inter, system-ui, sans-serif);
 
   display: flex;
@@ -29,7 +29,7 @@
   display: flex;
   align-items: flex-end;
   gap: 4px;
-  padding: 8px 8px 0;
+  padding: 10px 10px 0;
   border-bottom: 1px solid var(--fi-border);
   flex-shrink: 0;
   background: var(--fi-bg);
@@ -47,7 +47,7 @@
   width: 28px;
   height: 28px;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   background: transparent;
   color: var(--fi-text-muted);
   cursor: pointer;
@@ -140,7 +140,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--fi-bg-muted);
+  background: #fbfcfe;
 }
 
 .fi-shell__props-pane--idle {
@@ -174,7 +174,7 @@
 .fi-shell__props-idle-btn {
   margin-top: 8px;
   padding: 6px 12px;
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1px solid var(--fi-border);
   background: #fff;
   font-size: 12px;
@@ -222,7 +222,7 @@
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  padding: 8px 6px 10px;
+  padding: 9px 8px 11px;
   border: none;
   background: transparent;
   color: var(--fi-text-muted);
@@ -230,7 +230,7 @@
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
-  border-radius: 10px 10px 0 0;
+  border-radius: 12px 12px 0 0;
   transition: color 0.12s ease;
 }
 
@@ -267,7 +267,7 @@
 
 /* Header */
 .fi-header {
-  padding: 14px 14px 10px;
+  padding: 20px;
   border-bottom: 1px solid var(--fi-border);
   background: var(--fi-bg);
   flex-shrink: 0;
@@ -283,7 +283,7 @@
 .fi-header__icon {
   width: 40px;
   height: 40px;
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--fi-bg-muted);
   border: 1px solid var(--fi-border);
   display: flex;
@@ -331,12 +331,13 @@
 }
 
 .fi-quick-actions__btn {
-  padding: 6px 10px;
-  border-radius: 8px;
+  min-height: 36px;
+  padding: 8px 12px;
+  border-radius: 12px;
   border: 1px solid var(--fi-border);
   background: var(--fi-bg);
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 700;
   color: var(--fi-text);
   cursor: pointer;
   font-family: inherit;
@@ -348,12 +349,29 @@
   border-color: rgba(15, 23, 42, 0.12);
 }
 
-.fi-quick-actions__btn--ai {
-  flex: 1;
-  min-width: 120px;
-  background: var(--fi-primary-muted, #eff6ff);
-  border-color: rgba(37, 99, 235, 0.2);
-  color: var(--fi-primary);
+.fi-quick-actions__btn--primary {
+  background: var(--fi-primary);
+  border-color: var(--fi-primary);
+  color: #fff;
+}
+
+.fi-quick-actions__btn--primary:hover {
+  filter: brightness(0.98);
+  border-color: rgba(37, 99, 235, 0.8);
+}
+
+.fi-header__type {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--fi-bg-muted);
+  border: 1px solid var(--fi-border);
+  color: rgba(15, 23, 42, 0.72);
 }
 
 .fi-quick-actions__btn--danger:hover {

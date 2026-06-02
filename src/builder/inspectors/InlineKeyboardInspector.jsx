@@ -150,7 +150,9 @@ export default function InlineKeyboardInspector({
             <span style={{ display: 'flex', gap: 4 }}>
               <button type="button" style={BTN_STYLE} onClick={() => commit(moveRow(model, ri, -1))}>↑</button>
               <button type="button" style={BTN_STYLE} onClick={() => commit(moveRow(model, ri, 1))}>↓</button>
-              <button type="button" style={BTN_STYLE} onClick={() => commit(addButton(model, ri, nodeType))}>+ кн.</button>
+              <button type="button" style={BTN_STYLE} onClick={() => commit(addButton(model, ri, nodeType))}>
+                {lang === 'en' ? '+ Add button' : lang === 'uk' ? '+ Додати кнопку' : '+ Добавить кнопку'}
+              </button>
             </span>
           </div>
 

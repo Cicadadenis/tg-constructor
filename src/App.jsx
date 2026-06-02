@@ -90,6 +90,7 @@ import { usePersistenceStore } from './stores/persistenceStore.js';
 import MobileZoneNav from './layout/MobileZoneNav.jsx';
 import { StoreProvider } from './app/StoreProvider.jsx';
 import { useEditorStoreBindings } from './app/editorStoreBindings.js';
+import MobileFlowBuilder from './mobile/MobileFlowBuilder.jsx';
 import ConnectedGraphCanvas from './builder/ConnectedGraphCanvas.jsx';
 import { useGraphStore } from './stores/graphStore.js';
 import { useUiStore } from './stores/uiStore.js';
@@ -4834,6 +4835,19 @@ export default function App() {
             {!isMobileView && <span className="editor-brand-suffix">Flow Builder</span>}
           </div>
         </div>
+        {!isMobileView && (
+          <div className="mc-editor-topbar__cluster mc-editor-topbar__cluster--flow">
+            <div className="mc-current-flow">
+              <span className="mc-current-flow__eyebrow">
+                {uiLang === 'en' ? 'Current flow' : uiLang === 'uk' ? 'Поточний flow' : 'Текущий flow'}
+              </span>
+              <strong className="mc-current-flow__name" title={projectName.trim() || 'Untitled'}>
+                {projectName.trim()
+                  || (uiLang === 'en' ? 'Untitled bot' : uiLang === 'uk' ? 'Бот без назви' : 'Бот без названия')}
+              </strong>
+            </div>
+          </div>
+        )}
         {/* Mobile Examples Button */}
         {isMobileView && (
           <div style={{ position: 'relative', flexShrink: 0 }}>
@@ -4848,122 +4862,33 @@ export default function App() {
             >⋯</button>
           </div>
         )}
-        {!isMobileView && <div className="tb-divider" />}
         {!isMobileView && currentUser && (
-          <div className="mc-status-cluster">
-            <button
-              type="button"
-              className="prod-hub-trigger"
-              data-tour="production-hub"
-              onClick={() => useProductionStore.getState().openHub('overview')}
-              title={productionLabels.openHub}
-            >
-              {productionLabels.openHub}
-            </button>
+          <div className="mc-editor-topbar__cluster mc-editor-topbar__cluster--editor">
+            <div className="mc-status-cluster mc-status-cluster--toolbar">
             <SaveStatusIndicator lang={uiLang} />
-            <PublishStatusIndicator
-              lang={uiLang}
-              busy={publishBusy}
-              success={publishSuccess}
-              onPublish={handleGlobalPublish}
-            />
-          </div>
-        )}
-        {!isMobileView && <div className="tb-divider" />}
-        {/* Desktop: secondary actions in overflow (primary bar = run + ···) */}
-        {!isMobileView && (
-          <div className="mc-editor-topbar__cluster mc-editor-topbar__legacy-tools">
-            <div style={{ position: 'relative' }}>
+            </div>
+            <div className="mc-toolbar-actions">
               <button
-                ref={examplesToggleRef}
+                type="button"
+                className="tb-btn tb-btn-ghost mc-toolbar-action"
+                title={uiLang === 'en' ? 'Undo (Ctrl+Z)' : 'Отменить (Ctrl+Z)'}
+                onClick={handleGraphUndo}
+                disabled={!graphHistory.canUndo}
+                aria-label={uiLang === 'en' ? 'Undo' : 'Отменить'}
+              >↶ <span>Undo</span></button>
+              <button
                 type="button"
                 className="tb-btn tb-btn-ghost"
-                data-tour="top-examples-desktop"
-                onClick={() => setShowExamples(!showExamples)}
-              >{builderUi.examplesOpen}</button>
+                title={uiLang === 'en' ? 'Redo (Ctrl+Y)' : 'Повторить (Ctrl+Y)'}
+                onClick={handleGraphRedo}
+                disabled={!graphHistory.canRedo}
+                aria-label={uiLang === 'en' ? 'Redo' : 'Повторить'}
+              >↷ <span>Redo</span></button>
             </div>
-            <button
-              className={`tb-btn tb-btn-ai${canUseAiGenerator ? '' : ' locked-premium'}`}
-              data-tour="top-ai-desktop"
-              title={canUseAiGenerator ? builderUi.aiTitle : builderUi.aiTitleDisabled}
-              onClick={openAiGeneratorModal}
-            >{canUseAiGenerator ? '✨ AI' : '🔒 AI'}</button>
-            <button
-              className="tb-btn tb-btn-danger"
-              data-tour="top-clear-desktop"
-              title={builderUi.clearCanvas}
-              onClick={handleClearCanvas}
-            >✕</button>
-            <button
-              type="button"
-              className="tb-btn tb-btn-ghost"
-              title={uiLang === 'en' ? 'Undo (Ctrl+Z)' : 'Отменить (Ctrl+Z)'}
-              onClick={handleGraphUndo}
-              disabled={!graphHistory.canUndo}
-              aria-label={uiLang === 'en' ? 'Undo' : 'Отменить'}
-            >↶</button>
-            <button
-              type="button"
-              className="tb-btn tb-btn-ghost"
-              title={uiLang === 'en' ? 'Redo (Ctrl+Y)' : 'Повторить (Ctrl+Y)'}
-              onClick={handleGraphRedo}
-              disabled={!graphHistory.canRedo}
-              aria-label={uiLang === 'en' ? 'Redo' : 'Повторить'}
-            >↷</button>
-            <div className="tb-divider" />
-            <div style={{ position: 'relative' }}>
-            <button
-              ref={filesMenuToggleRef}
-              className="tb-btn tb-btn-ghost"
-              data-tour="top-files-desktop"
-              title={showFilesMenu ? undefined : builderUi.filesMenuTitle}
-              aria-expanded={showFilesMenu}
-              aria-haspopup="menu"
-              onClick={() => setShowFilesMenu(v => !v)}
-            >📁 <span style={{ opacity: 0.5, fontSize: 10 }}>▼</span></button>
-            </div>
-            <button
-              className="tb-btn tb-btn-ghost"
-              data-tour="bot-preview"
-              title={builderUi.previewTitle}
-              type="button"
-              onClick={() => setPreviewPanelOpen((v) => !v)}
-              style={previewPanelOpen ? { outline: '1px solid rgba(56,189,248,0.55)', borderRadius: 8 } : undefined}
-            >💬</button>
-            <button
-              className="tb-btn tb-btn-ghost"
-              data-tour="analytics-hub"
-              title={uiLang === 'en' ? 'Analytics' : 'Аналитика'}
-              type="button"
-              onClick={() => setAnalyticsPanelOpen((v) => !v)}
-              style={analyticsPanelOpen ? { outline: '1px solid rgba(99,102,241,0.45)', borderRadius: 8 } : undefined}
-            >📊</button>
-            <button
-              className="tb-btn tb-btn-ghost"
-              data-tour="top-debug-desktop"
-              title={builderUi.debugTitle}
-              type="button"
-              onClick={() => setBotDebugOpen(v => !v)}
-              style={botDebugOpen ? { outline: '1px solid rgba(250,204,21,0.45)', borderRadius: 8 } : undefined}
-            >🧾</button>
-            <div className="tb-divider" />
-            {isProjectMode && (
-              <div
-                title={builderUi.projectFilesNote}
-                style={{
-                  fontSize: 10, fontWeight: 700, padding: '5px 10px', borderRadius: 8,
-                  color: '#3ecf8e', background: 'rgba(62,207,142,0.1)',
-                  border: '1px solid rgba(62,207,142,0.25)', maxWidth: 180,
-                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}
-              >
-                {builderUi.projectBadge(projectName.trim() || '…')}
-              </div>
-            )}
           </div>
         )}
         {!isMobileView && currentUser && (
-          <div className="mc-editor-topbar__cluster">
+          <div className="mc-editor-topbar__cluster mc-editor-topbar__cluster--utility">
             <EditorOverflowMenu lang={uiLang}>
               <EditorOverflowItem onSelect={() => setShowExamples(true)}>
                 {builderUi.examplesOpen}
@@ -4999,55 +4924,33 @@ export default function App() {
           </div>
         )}
         {!isMobileView && (
-          <div className="mc-editor-topbar__cluster mc-editor-topbar__cluster--primary">
-            {!isSandboxRunning ? (
-              <>
-                <button
-                  className="tb-btn tb-btn-run"
-                  data-tour="run-desktop"
-                  onClick={startBot}
-                  disabled={
-                    isStartingSandbox
-                    || !graphHasRunnableBot(graph, currentUser)
-                  }
-                  title={
-                    !graphHasBotBlock(graph)
-                      ? builderUi.addBotTokenTitle
-                      : !graphHasRunnableBot(graph, currentUser)
-                        ? builderUi.needBotToken
-                        : builderUi.start
-                  }
-                >{builderUi.start}</button>
-                {isServerRunning && (
-                  <span style={{ fontSize:10, color:'#38bdf8', fontFamily:'var(--mono)' }} title={builderUi.serverRunningParallel}>
-                    ☁ {builderUi.serverRunning}
-                  </span>
-                )}
-              </>
-            ) : (
-              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                <div style={{ display:'flex', alignItems:'center', gap:6, background:'rgba(62,207,142,0.08)', border:'1px solid rgba(62,207,142,0.2)', borderRadius:8, padding:'5px 10px' }}>
-                  <div style={{
-                    width:7, height:7, borderRadius:'50%', background:'#3ecf8e',
-                    boxShadow:'0 0 7px #3ecf8e',
-                    animation:'botPulse 1.5s ease-in-out infinite',
-                    flexShrink:0,
-                  }} />
-                  <span style={{ fontSize:11, color:'#3ecf8e', fontFamily:'var(--mono)', letterSpacing:'0.02em' }}>
-                    {sandboxSecondsLeft !== null
-                      ? builderUi.autoStop(Math.floor(sandboxSecondsLeft/60), String(sandboxSecondsLeft%60).padStart(2,'0'))
-                      : builderUi.running}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  className="tb-btn tb-btn-stop"
-                  data-tour="run-desktop"
-                  disabled={isStoppingSandbox}
-                  onClick={stopSandboxBot}
-                >{isStoppingSandbox ? '…' : builderUi.stop}</button>
-              </div>
+          <div className="mc-editor-topbar__cluster mc-editor-topbar__cluster--publish">
+            <button
+              type="button"
+              className="tb-btn tb-btn-ghost mc-toolbar-test-btn"
+              onClick={() => { void handleTestFlow(activeProjectId); }}
+              disabled={!activeProjectId}
+              title={uiLang === 'en' ? 'Test current flow' : 'Тестировать текущий сценарий'}
+            >
+              ▶ {uiLang === 'en' ? 'Test' : uiLang === 'uk' ? 'Тест' : 'Тест'}
+            </button>
+            {currentUser && (
+              <button
+                type="button"
+                className="tb-btn tb-btn-ghost"
+                data-tour="bot-preview"
+                onClick={() => setPreviewPanelOpen(true)}
+                title={uiLang === 'en' ? 'Preview' : uiLang === 'uk' ? 'Превʼю' : 'Превью'}
+              >
+                👁 {uiLang === 'en' ? 'Preview' : uiLang === 'uk' ? 'Превʼю' : 'Превью'}
+              </button>
             )}
+            <PublishStatusIndicator
+              lang={uiLang}
+              busy={publishBusy}
+              success={publishSuccess}
+              onPublish={handleGlobalPublish}
+            />
           </div>
         )}
 
@@ -5702,39 +5605,95 @@ export default function App() {
             />
           )}
           center={currentUser ? (
-            <FlowEditorCenter
-              canvasRef={canvasRef}
-              canvasUxRef={canvasUxRef}
-              graphCanvasActions={graphCanvasActions}
-              uiLang={uiLang}
-              graphHistory={graphHistory}
-              flowLayoutMode={flowLayoutMode}
-              handleGraphUndo={handleGraphUndo}
-              handleGraphRedo={handleGraphRedo}
-              handleFlowLayoutModeChange={handleFlowLayoutModeChange}
-              applyCanvasLayout={applyCanvasLayout}
-              handleSelectNode={handleSelectNode}
-              handleInspectNode={handleInspectNode}
-              handleConnectFeedback={handleConnectFeedback}
-              handleCanvasDrop={handleCanvasDrop}
-              handleInsertNodeOnEdge={handleInsertNodeOnEdge}
-              handleRequestDeleteNodes={handleRequestDeleteNodes}
-              graph={graph}
-              graphRevision={graphRevision}
-              handleHighlightCompileNodes={handleHighlightCompileNodes}
-              handleFitAllCanvasNodes={handleFitAllCanvasNodes}
-              handleResetCorruptedGraph={handleResetCorruptedGraph}
-              guidedCanvasActions={guidedCanvasActions}
-              mobileZone={mobileZone}
-              showCanvasOnboarding={showCanvasOnboarding}
-              canUseAiGenerator={canUseAiGenerator}
-              handleApplyFlowTemplate={handleApplyFlowTemplate}
-              openAiGeneratorModal={openAiGeneratorModal}
-              setTourStep={setTourStep}
-              setTourActive={setTourActive}
-              aiGlobalLoading={aiGlobalLoading}
-              canvasQuickAdd={canvasQuickAdd}
-            />
+            isMobileView ? (
+              mobileZone === 'test' ? (
+                <div style={{ height: '100%' }}>
+                  <ChatSimulatorPanel
+                    open
+                    variant="floating"
+                    onClose={() => setMobileZone('canvas')}
+                    isMobileView
+                    panelPos={null}
+                    onPanelPosChange={null}
+                    generateCodegenSnapshot={generateBotPythonSnapshot}
+                    getGraphDocument={() => graph.getGraphDocument()}
+                    graphRevision={graphRevision}
+                    graphPalette={graphPalette}
+                    paletteOptions={{ lang: uiLang, blockTypes: builderBlockTypes }}
+                    onHighlightNodes={(ids) => handleTraceHighlightChange({ active: ids })}
+                    onTraceId={(id) => {
+                      if (id) {
+                        setDebugTraceId(id);
+                        setDebugTraceOpen(true);
+                      }
+                    }}
+                    onDebugSnapshot={setDebugCodegenSnapshot}
+                    botName={projectName || 'Test Bot'}
+                    flowId={analyticsFlowId}
+                    lang={uiLang}
+                  />
+                </div>
+              ) : (
+                <MobileFlowBuilder
+                  lang={uiLang}
+                  graph={graph}
+                  graphRevision={graphRevision}
+                  blockTypes={builderBlockTypes}
+                  selectedBlockId={selectedBlockId}
+                  onSelectNode={(id) => {
+                    if (id) useSelectionStore.getState().selectNode(id);
+                  }}
+                  onOpenAi={openAiGeneratorModal}
+                  onOpenSettings={() => setMobileZone('right')}
+                  onInsertAfter={(anchorId, type) => {
+                    const docNodes = graph.getGraphDocument().nodes || {};
+                    const fallback = anchorId || selectedBlockId || Object.keys(docNodes)[0] || null;
+                    if (!fallback) return;
+                    const nodeId = `m_${type}_${Date.now()}`;
+                    const props = graphMakePropsForNewBlock(type, { nodeId: fallback });
+                    const res = insertNodeAfter(fallback, nodeId, type, props);
+                    if (res?.ok) {
+                      useSelectionStore.getState().selectNode(res.nodeId);
+                      setMobileZone('right');
+                    }
+                  }}
+                />
+              )
+            ) : (
+              <FlowEditorCenter
+                canvasRef={canvasRef}
+                canvasUxRef={canvasUxRef}
+                graphCanvasActions={graphCanvasActions}
+                uiLang={uiLang}
+                graphHistory={graphHistory}
+                flowLayoutMode={flowLayoutMode}
+                handleGraphUndo={handleGraphUndo}
+                handleGraphRedo={handleGraphRedo}
+                handleFlowLayoutModeChange={handleFlowLayoutModeChange}
+                applyCanvasLayout={applyCanvasLayout}
+                handleSelectNode={handleSelectNode}
+                handleInspectNode={handleInspectNode}
+                handleConnectFeedback={handleConnectFeedback}
+                handleCanvasDrop={handleCanvasDrop}
+                handleInsertNodeOnEdge={handleInsertNodeOnEdge}
+                handleRequestDeleteNodes={handleRequestDeleteNodes}
+                graph={graph}
+                graphRevision={graphRevision}
+                handleHighlightCompileNodes={handleHighlightCompileNodes}
+                handleFitAllCanvasNodes={handleFitAllCanvasNodes}
+                handleResetCorruptedGraph={handleResetCorruptedGraph}
+                guidedCanvasActions={guidedCanvasActions}
+                mobileZone={mobileZone}
+                showCanvasOnboarding={showCanvasOnboarding}
+                canUseAiGenerator={canUseAiGenerator}
+                handleApplyFlowTemplate={handleApplyFlowTemplate}
+                openAiGeneratorModal={openAiGeneratorModal}
+                setTourStep={setTourStep}
+                setTourActive={setTourActive}
+                aiGlobalLoading={aiGlobalLoading}
+                canvasQuickAdd={canvasQuickAdd}
+              />
+            )
           ) : null}
           right={currentUser ? (
             <RightInspectorPanel
@@ -5766,6 +5725,7 @@ export default function App() {
                   : 'Замените шаг из «Шаблонов» или добавьте новый блок на холсте.',
                 'info',
               )}
+              onSaveProject={saveProject}
               onValidationToast={showToast}
               showToast={showToast}
               onFocusCanvas={() => setMobileZone('canvas')}
@@ -5822,28 +5782,7 @@ export default function App() {
                   onUpgrade={openPremiumPurchase}
                 />
               )}
-              simulatorProps={useInspectorSimulator ? {
-                isMobileView,
-                generateCodegenSnapshot: generateBotPythonSnapshot,
-                getGraphDocument: () => graph.getGraphDocument(),
-                graphRevision,
-                graphPalette,
-                paletteOptions: { lang: uiLang, blockTypes: builderBlockTypes },
-                onHighlightNodes: (ids) => handleTraceHighlightChange({ active: ids }),
-                onTraceId: (id) => {
-                  if (id) {
-                    setDebugTraceId(id);
-                    setDebugTraceOpen(true);
-                  }
-                },
-                onDebugSnapshot: setDebugCodegenSnapshot,
-                botName: projectName || 'Test Bot',
-                flowId: analyticsFlowId,
-              } : null}
-              onUndockSimulator={() => {
-                setSimulatorDocked(false);
-                setPreviewPanelOpen(true);
-              }}
+              simulatorProps={null}
             />
           ) : (
             <RightInspectorPanel
@@ -5864,9 +5803,10 @@ export default function App() {
           mobileNav={isMobileView ? (
             <MobileZoneNav
               labels={{
-                canvas: builderUi.mobileTabCanvas,
-                list: builderUi.blocksPalette || builderUi.mobileTabBlocks,
-                inspector: builderUi.mobileTabProps,
+                canvas: uiLang === 'en' ? 'Flow' : uiLang === 'uk' ? 'Сценарій' : 'Сценарий',
+                list: uiLang === 'en' ? 'Blocks' : uiLang === 'uk' ? 'Блоки' : 'Блоки',
+                inspector: uiLang === 'en' ? 'Settings' : uiLang === 'uk' ? 'Налаштування' : 'Настройки',
+                test: uiLang === 'en' ? 'Test' : uiLang === 'uk' ? 'Тест' : 'Тест',
               }}
               onZoneChange={(zone) => {
                 if (zone === 'left') {
@@ -5890,56 +5830,15 @@ export default function App() {
                 if (zone === 'canvas') {
                   if (!isCanvasSection(appSection)) setAppSection('flows');
                   setMobileZone('canvas');
+                  return;
+                }
+
+                if (zone === 'test') {
+                  if (!isCanvasSection(appSection)) setAppSection('flows');
+                  setPreviewPanelOpen(true);
+                  setMobileZone('test');
                 }
               }}
-              runSlot={(() => {
-                const _canRun = graphHasRunnableBot(graph, currentUser);
-                return (
-                  <button
-                    data-tour="mobile-run"
-                    type="button"
-                    onClick={isSandboxRunning ? stopSandboxBot : (_canRun ? startBot : undefined)}
-                    disabled={!isSandboxRunning && !_canRun}
-                    title={
-                      !isSandboxRunning && !_canRun
-                        ? (!graphHasBotBlock(graph) ? builderUi.addBotTokenTitle : builderUi.needBotToken)
-                        : ''
-                    }
-                    style={{
-                      width: 70, display: 'flex', flexDirection: 'column',
-                      alignItems: 'center', justifyContent: 'center', gap: 1,
-                      background: isSandboxRunning
-                        ? 'linear-gradient(135deg,#ef4444,#dc2626)'
-                        : _canRun ? 'linear-gradient(135deg,#f97316,#dc2626)' : 'rgba(45,55,72,0.6)',
-                      border: 'none', cursor: (!isSandboxRunning && !_canRun) ? 'not-allowed' : 'pointer',
-                      borderTop: `2px solid ${isSandboxRunning ? '#ef4444' : _canRun ? '#f97316' : 'transparent'}`,
-                      borderLeft: '1px solid rgba(99,102,241,0.2)',
-                      flexShrink: 0, position: 'relative', overflow: 'hidden',
-                      opacity: (!isSandboxRunning && !_canRun) ? 0.4 : 1,
-                      transition: 'all 0.2s',
-                      boxShadow: (_canRun || isSandboxRunning) ? '0 0 20px rgba(249,115,22,0.3)' : 'none',
-                    }}
-                  >
-                    {isSandboxRunning && sandboxSecondsLeft !== null && (
-                      <div style={{
-                        position:'absolute', bottom:0, left:0, height:2,
-                        background:'rgba(255,255,255,0.45)',
-                        width:`${(sandboxSecondsLeft/300)*100}%`,
-                        transition:'width 1s linear',
-                      }} />
-                    )}
-                    <span style={{ fontSize: 18 }}>{isSandboxRunning ? '■' : '▶'}</span>
-                    <span style={{ fontSize: 9, color: '#fff', fontFamily: 'Syne, system-ui', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                      {isSandboxRunning ? builderUi.mobileStop : builderUi.mobileRun}
-                    </span>
-                    {isSandboxRunning && sandboxSecondsLeft !== null && (
-                      <span style={{ fontSize: 7, color: 'rgba(255,255,255,0.75)', fontFamily: 'var(--mono)' }}>
-                        {Math.floor(sandboxSecondsLeft/60)}:{String(sandboxSecondsLeft%60).padStart(2,'0')}
-                      </span>
-                    )}
-                  </button>
-                );
-              })()}
             />
           ) : null}
         />

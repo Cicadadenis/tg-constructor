@@ -25,6 +25,7 @@ import {
 import FlowSwitcher from '../canvas-first/FlowSwitcher.jsx';
 import FlowsDrawer from '../canvas-first/FlowsDrawer.jsx';
 import AnalyticsWorkspace from '../../analytics/AnalyticsWorkspace.jsx';
+import cicadaLogo from '../../cicada-logo_1778117072446.jpeg';
 import '../../analytics/analytics-workspace.css';
 import '../canvas-first/canvas-first.css';
 import './mc-sidebar.css';
@@ -148,6 +149,12 @@ export default function McSidebar({
   });
 
   const panelTitle = sectionLabel(lang, section);
+  const brandTitle = 'Cicada';
+  const brandSubtitle = lang === 'en'
+    ? 'Bot Workspace'
+    : lang === 'uk'
+      ? 'Робочий простір'
+      : 'Bot Workspace';
 
   const isEditorSection = section === 'flows' || section === 'automations' || section === 'templates';
 
@@ -213,6 +220,16 @@ export default function McSidebar({
             exit={{ width: 0, opacity: 0 }}
             transition={MC_SPRING.panel}
           >
+            <div className="mc-sidebar__brand">
+              <div className="mc-sidebar__brand-mark">
+                <img src={cicadaLogo} alt="" className="mc-sidebar__brand-logo" />
+              </div>
+              <div className="mc-sidebar__brand-copy">
+                <strong className="mc-sidebar__brand-title">{brandTitle}</strong>
+                <span className="mc-sidebar__brand-subtitle">{brandSubtitle}</span>
+              </div>
+            </div>
+
             {section !== 'analytics' && (
             <header className="mc-sidebar__head">
               <h2 className="mc-sidebar__title">
@@ -220,6 +237,11 @@ export default function McSidebar({
                   ? p.blocksPalette
                   : panelTitle}
               </h2>
+              {(section === 'flows' || section === 'automations') && (
+                <span className="mc-sidebar__section-badge">
+                  {listItems.length || 0}
+                </span>
+              )}
               <div className="mc-sidebar__head-actions">
                 <Tooltip.Provider delayDuration={200}>
                   {!isMobile && (

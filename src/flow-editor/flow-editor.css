@@ -19,7 +19,8 @@
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: var(--fe-canvas-bg, #eef1f6);
+  background:
+    linear-gradient(180deg, #f7f9fc 0%, var(--fe-canvas-bg, var(--color-canvas-bg, #f1f4f8)) 100%);
 }
 
 .fe-canvas-host {
@@ -33,7 +34,9 @@
 .graph-flow-host.flow-editor-canvas {
   width: 100%;
   height: 100%;
-  background: var(--fe-canvas-bg, #eef1f6);
+  background:
+    radial-gradient(circle at top left, rgba(47, 107, 255, 0.05), transparent 24%),
+    linear-gradient(180deg, #f7f9fc 0%, var(--fe-canvas-bg, var(--color-canvas-bg, #f1f4f8)) 100%);
 }
 
 .graph-flow-host.flow-editor-canvas .react-flow {
@@ -41,14 +44,36 @@
 }
 
 .graph-flow-host.flow-editor-canvas .react-flow__background {
-  opacity: 0.55;
+  opacity: 0.92;
 }
 
 /* Edge motion */
+.flow-editor-canvas .react-flow__edges {
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.7));
+}
+
+.flow-editor-canvas .react-flow__edge .react-flow__edge-path,
+.flow-editor-canvas .flow-bezier-edge__path,
+.flow-editor-canvas .flow-add-step-edge__path {
+  stroke: #94a3b8 !important;
+  stroke-width: 1.6px !important;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: stroke 0.16s ease, stroke-width 0.16s ease, opacity 0.16s ease;
+  opacity: 0.95;
+}
+
+.flow-editor-canvas .flow-bezier-edge--hover path.react-flow__edge-path,
+.flow-editor-canvas .flow-bezier-edge--selected path.react-flow__edge-path,
+.flow-editor-canvas .flow-add-step-edge--hover path.react-flow__edge-path {
+  stroke: var(--color-primary) !important;
+  stroke-width: 2.2px !important;
+}
+
 .flow-editor-canvas .flow-bezier-edge--execution path.react-flow__edge-path,
 .flow-editor-canvas .flow-add-step-edge--execution path.react-flow__edge-path {
-  stroke: #2563eb !important;
-  stroke-width: 2px !important;
+  stroke: var(--color-primary) !important;
+  stroke-width: 2.4px !important;
 }
 
 .flow-editor-canvas.fe-edges-animated .flow-bezier-edge--flow path.react-flow__edge-path {
@@ -65,23 +90,30 @@
   width: 10px;
   height: 10px;
   border: 2px solid #fff;
-  background: #64748b;
-  transition: transform 0.12s ease, background 0.12s ease;
+  background: var(--color-primary);
+  transition: transform 0.12s ease, background 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
+  box-shadow: 0 2px 8px rgba(47, 107, 255, 0.14);
 }
 
 .graph-flow-host.flow-editor-canvas .react-flow__handle:hover {
-  transform: scale(1.2);
-  background: #2563eb;
+  transform: scale(1.22);
+  background: var(--color-primary);
 }
 
 .graph-flow-host.flow-editor-canvas .react-flow__handle.connecting {
-  background: #2563eb;
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.2);
+  background: var(--color-primary);
+  box-shadow: 0 0 0 5px rgba(47, 107, 255, 0.18);
 }
 
 /* Selection */
 .graph-flow-host.flow-editor-canvas .react-flow__node.selected .vn-card__surface {
-  box-shadow: var(--shadow-md), 0 0 0 2px var(--color-primary-border);
+  border-color: rgba(47, 107, 255, 0.28);
+  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.08), 0 0 0 3px rgba(47, 107, 255, 0.14);
+  transform: translateY(-2px);
+}
+
+.graph-flow-host.flow-editor-canvas .react-flow__node:hover .vn-card__surface {
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.07), 0 0 0 1px rgba(47, 107, 255, 0.08);
 }
 
 /* Toolbar */
@@ -97,13 +129,13 @@
 .fe-toolbar {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 8px;
-  border-radius: var(--radius-lg, 12px);
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: var(--radius-xl, 16px);
   background: var(--color-surface, #fff);
   border: 1px solid var(--color-border);
   box-shadow: var(--shadow-sm);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(10px);
   transition: var(--motion-transition-hover);
 }
 
@@ -118,13 +150,13 @@
 }
 
 .fe-toolbar__btn {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 10px;
+  border-radius: 12px;
   background: transparent;
   color: #475569;
   font-size: 15px;
@@ -133,7 +165,7 @@
 }
 
 .fe-toolbar__btn:hover:not(:disabled) {
-  background: #f1f5f9;
+  background: #f8fafc;
   color: #0f172a;
 }
 
@@ -143,8 +175,8 @@
 }
 
 .fe-toolbar__btn--active {
-  background: #eff6ff;
-  color: #2563eb;
+  background: var(--color-primary-muted);
+  color: var(--color-primary);
 }
 
 .fe-toolbar__zoom {
@@ -164,9 +196,9 @@
 }
 
 .fe-toolbar__select {
-  height: 32px;
+  height: 34px;
   padding: 0 8px;
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1px solid rgba(15, 23, 42, 0.1);
   font-size: 11px;
   font-family: inherit;
@@ -215,6 +247,6 @@ html.cicada-palette-dragging .cf-empty-quick-panel {
 
 .fe-inspector-hint {
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--color-text-muted);
   padding: 8px;
 }

@@ -18,6 +18,18 @@ export default function FlowCanvasEmptyState({
 }) {
   const copy = useMemo(() => getEmptyCanvasCopy(lang), [lang]);
   const templates = useMemo(() => getFlowStarterTemplates(lang), [lang]);
+  const title = lang === 'en'
+    ? 'Create your first bot'
+    : lang === 'uk'
+      ? 'Створіть першого бота'
+      : 'Создайте первого бота';
+  const subtitle = lang === 'en'
+    ? 'Add your first block or generate a flow with AI'
+    : lang === 'uk'
+      ? 'Додайте перший блок або згенеруйте сценарій через AI'
+      : 'Добавьте первый блок или сгенерируйте сценарий с ИИ';
+  const addBlockLabel = lang === 'en' ? 'Add block' : lang === 'uk' ? 'Додати блок' : 'Добавить блок';
+  const aiLabel = lang === 'en' ? 'Create with AI' : lang === 'uk' ? 'Створити через AI' : 'Создать с ИИ';
 
   if (!show) return null;
 
@@ -30,8 +42,32 @@ export default function FlowCanvasEmptyState({
       transition={MC_SPRING.gentle}
     >
       <div className="flow-canvas-empty__card editor-empty-card">
-        <h2 className="flow-canvas-empty__title">{copy.title}</h2>
-        <p className="flow-canvas-empty__subtitle">{copy.subtitle}</p>
+        <div className="flow-canvas-empty__hero">
+          <div className="flow-canvas-empty__orb" aria-hidden />
+          <div className="flow-canvas-empty__hero-icon" aria-hidden>◈</div>
+          <h2 className="flow-canvas-empty__title">{title}</h2>
+          <p className="flow-canvas-empty__subtitle">{subtitle}</p>
+          <div className="flow-canvas-empty__cta">
+            <button
+              type="button"
+              className="flow-canvas-empty__cta-btn flow-canvas-empty__cta-btn--primary"
+              disabled={busy}
+              onClick={() => window.dispatchEvent(new Event('cicada:open-command-palette'))}
+            >
+              {addBlockLabel}
+            </button>
+            {onOpenAi && (
+              <button
+                type="button"
+                className={`flow-canvas-empty__cta-btn flow-canvas-empty__cta-btn--ai${canUseAiGenerator ? '' : ' is-locked'}`}
+                onClick={onOpenAi}
+                disabled={busy}
+              >
+                {canUseAiGenerator ? `✨ ${aiLabel}` : `🔒 ${aiLabel}`}
+              </button>
+            )}
+          </div>
+        </div>
 
         <motion.div
           className="flow-canvas-empty__grid"
@@ -63,16 +99,6 @@ export default function FlowCanvasEmptyState({
         </motion.div>
 
         <div className="flow-canvas-empty__footer">
-          {onOpenAi && (
-            <button
-              type="button"
-              className={`ds-btn ${canUseAiGenerator ? 'ds-btn--primary' : 'ds-btn--secondary'} ds-btn--sm`}
-              onClick={onOpenAi}
-              disabled={busy}
-            >
-              {canUseAiGenerator ? `✨ ${copy.createWithAi}` : `🔒 ${copy.createWithAi}`}
-            </button>
-          )}
           {onStartTour && (
             <button
               type="button"

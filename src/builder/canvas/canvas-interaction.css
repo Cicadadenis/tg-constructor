@@ -18,15 +18,15 @@
 
 /* Selection marquee */
 .graph-flow-host--premium .react-flow__selection {
-  background: rgba(37, 99, 235, 0.08);
-  border: 1px solid rgba(37, 99, 235, 0.35);
-  border-radius: 10px;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6) inset;
+  background: rgba(47, 107, 255, 0.08);
+  border: 1px solid rgba(47, 107, 255, 0.28);
+  border-radius: 12px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.72) inset;
 }
 
 .graph-flow-host--premium .react-flow__nodesselection-rect {
-  background: rgba(37, 99, 235, 0.06);
-  border: 1px dashed rgba(37, 99, 235, 0.45);
+  background: rgba(47, 107, 255, 0.06);
+  border: 1px dashed rgba(47, 107, 255, 0.32);
   border-radius: 12px;
 }
 
@@ -46,7 +46,7 @@
 
 .graph-flow-host--premium .react-flow__connection-path {
   stroke-linecap: round;
-  filter: drop-shadow(0 0 6px rgba(37, 99, 235, 0.25));
+  filter: drop-shadow(0 0 6px rgba(47, 107, 255, 0.18));
 }
 
 /* Animated flow edges */
@@ -136,10 +136,10 @@
 .graph-flow-host .canvas-minimap--enhanced.react-flow__minimap {
   width: 168px;
   height: 112px;
-  border-radius: 14px;
+  border-radius: 16px;
   border: 1px solid rgba(15, 23, 42, 0.08);
-  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.1);
-  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(12px);
   overflow: hidden;
 }

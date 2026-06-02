@@ -2552,6 +2552,17 @@ function PropsPanel({
     ? (hasActiveProSubscription ? ui.mediaProjectNote : ui.startServerNeedsPremium)
     : ui.mediaEphemeralNote;
 
+  const buttonsRowsEditorLabels = React.useMemo(() => ({
+    add: lang === 'en' ? '+ Add button' : lang === 'uk' ? '+ Додати кнопку' : '+ Добавить кнопку',
+    newRow: lang === 'en' ? 'New row' : lang === 'uk' ? 'Новий ряд' : 'Новый ряд',
+    placeholder: lang === 'en' ? 'Button text' : lang === 'uk' ? 'Текст кнопки' : 'Текст кнопки',
+    hint: lang === 'en'
+      ? 'Comma = same row, new line = new row'
+      : lang === 'uk'
+        ? 'Кома = в один ряд, новий рядок = новий ряд'
+        : 'Запятая = в один ряд, Enter = новый ряд',
+  }), [lang]);
+
   const hasSectionContent = fields.length > 0
     || (showCustomInspector && CustomInspector)
     || (showMapUi)
@@ -2677,6 +2688,26 @@ function PropsPanel({
       {fields.map(f => {
         if (CustomInspector) return null;
         if (showMapUi && (f.key === 'lat' || f.key === 'lon' || f.key === 'latitude' || f.key === 'longitude')) return null;
+        if (block.type === 'buttons' && f.key === 'rows' && f.tag === 'textarea') {
+          return (
+            <div key={f.key} style={{ marginBottom: 10 }}>
+              <div style={{
+                fontSize: 9, color: 'var(--text3)', marginBottom: 6,
+                textTransform: 'uppercase', letterSpacing: '.08em',
+              }}>
+                {String(f.label || '').split('\n')[0] || 'Кнопки'}
+              </div>
+              <ButtonsRowsEditor
+                value={String(props.rows || '')}
+                onChange={(next) => onChange('rows', next)}
+                labels={buttonsRowsEditorLabels}
+              />
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6, lineHeight: 1.4 }}>
+                {buttonsRowsEditorLabels.hint}
+              </div>
+            </div>
+          );
+        }
         const smartCfg = getSmartRefFieldConfig(block.type, f.key);
         if (block.type === 'callback' && smartCfg?.hideRaw && !callbackAdvancedOpen
           && ['data', 'label', 'callbackPrefix'].includes(f.key)) {
@@ -2793,6 +2824,130 @@ function PropsPanel({
           />
         </>
       )}
+    </div>
+  );
+}
+
+function ButtonsRowsEditor({ value, onChange, labels }) {
+  const parse = React.useCallback((raw) => (
+    String(raw || '')
+      .split('\n')
+      .map((row) => row.split(',').map((s) => s.trim()).filter(Boolean))
+      .filter((r) => r.length > 0)
+  ), []);
+
+  const rows = React.useMemo(() => parse(value), [value, parse]);
+
+  const serialize = React.useCallback((nextRows) => (
+    (nextRows || [])
+      .map((r) => (r || []).map((s) => String(s || '').trim()).filter(Boolean).join(', '))
+      .filter(Boolean)
+      .join('\n')
+  ), []);
+
+  const commit = (next) => {
+    onChange?.(serialize(next));
+  };
+
+  const update = (ri, bi, nextText) => {
+    const next = rows.map((r) => [...r]);
+    if (!next[ri]) next[ri] = [];
+    next[ri][bi] = nextText;
+    commit(next);
+  };
+
+  const remove = (ri, bi) => {
+    const next = rows.map((r) => [...r]);
+    if (!next[ri]) return;
+    next[ri].splice(bi, 1);
+    commit(next.filter((r) => r.length > 0));
+  };
+
+  const addButton = () => {
+    const next = rows.length ? rows.map((r) => [...r]) : [[]];
+    next[next.length - 1].push('');
+    commit(next);
+  };
+
+  const addRow = () => {
+    const next = rows.map((r) => [...r]);
+    next.push(['']);
+    commit(next);
+  };
+
+  const safeRows = rows.length ? rows : [['']];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          onClick={addButton}
+          style={{
+            padding: '9px 12px',
+            borderRadius: 10,
+            border: '1px solid rgba(15,23,42,0.1)',
+            background: '#fff',
+            fontWeight: 700,
+            cursor: 'pointer',
+          }}
+        >
+          {labels?.add || '+ Добавить кнопку'}
+        </button>
+        <button
+          type="button"
+          onClick={addRow}
+          style={{
+            padding: '9px 12px',
+            borderRadius: 10,
+            border: '1px solid rgba(15,23,42,0.1)',
+            background: '#fff',
+            cursor: 'pointer',
+          }}
+        >
+          {labels?.newRow || 'Новый ряд'}
+        </button>
+      </div>
+      {safeRows.map((row, ri) => (
+        <div
+          key={`row-${ri}`}
+          style={{
+            padding: 10,
+            borderRadius: 12,
+            border: '1px solid rgba(15,23,42,0.08)',
+            background: 'rgba(248,250,252,0.9)',
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {row.map((btn, bi) => (
+              <div key={`b-${ri}-${bi}`} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input
+                  value={btn}
+                  onChange={(e) => update(ri, bi, e.target.value)}
+                  placeholder={labels?.placeholder || 'Текст кнопки'}
+                />
+                <button
+                  type="button"
+                  onClick={() => remove(ri, bi)}
+                  aria-label="Remove"
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: 10,
+                    border: '1px solid rgba(15,23,42,0.1)',
+                    background: '#fff',
+                    cursor: 'pointer',
+                    color: '#ef4444',
+                    fontWeight: 900,
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

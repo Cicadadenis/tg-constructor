@@ -91,4 +91,10 @@ export const SidebarIcons = {
       <path d="M12 5v14M5 12h14" />
     </Icon>
   ),
+  sparkles: (
+    <Icon className="mc-sidebar-icon mc-sidebar-icon--sm">
+      <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z" />
+      <path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z" />
+    </Icon>
+  ),
 };

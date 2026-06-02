@@ -1,36 +1,36 @@
 /**
- * Cicada Studio — unified design tokens (ManyChat-inspired).
- * Single brand accent, neutral surfaces, 8px spacing grid.
+ * Cicada Studio — unified light SaaS tokens.
+ * Single accent, white panels, soft borders, 8px spacing grid.
  */
 
 :root {
   /* Brand */
-  --color-primary: #2563eb;
-  --color-primary-hover: #1d4ed8;
-  --color-primary-active: #1e40af;
-  --color-primary-muted: #eff6ff;
-  --color-primary-border: #bfdbfe;
+  --color-primary: #2f6bff;
+  --color-primary-hover: #1f5cff;
+  --color-primary-active: #184ee4;
+  --color-primary-muted: #edf3ff;
+  --color-primary-border: #c9d9ff;
 
-  /* Surfaces — soft neutral (ManyChat) */
-  --color-bg: #f3f4f6;
+  /* Surfaces */
+  --color-bg: #f5f7fb;
   --color-surface: #ffffff;
-  --color-surface-muted: #f9fafb;
+  --color-surface-muted: #f8fafc;
   --color-surface-elevated: #ffffff;
-  --color-overlay: rgba(17, 24, 39, 0.36);
+  --color-overlay: rgba(15, 23, 42, 0.14);
 
-  /* Borders — hairline */
-  --color-border: rgba(15, 23, 42, 0.06);
-  --color-border-strong: rgba(15, 23, 42, 0.1);
+  /* Borders */
+  --color-border: rgba(15, 23, 42, 0.08);
+  --color-border-strong: rgba(15, 23, 42, 0.12);
   --border-width: 1px;
   --color-border-focus: var(--color-primary);
 
-  /* Text — readable hierarchy */
+  /* Text */
   --color-text: #0f172a;
-  --color-text-secondary: #475569;
-  --color-text-muted: #9ca3af;
+  --color-text-secondary: #4b5563;
+  --color-text-muted: #94a3b8;
   --color-text-inverse: #ffffff;
 
-  /* Semantic (minimal — status only) */
+  /* Semantic */
   --color-danger: #dc2626;
   --color-danger-muted: #fef2f2;
   --color-success: #16a34a;
@@ -39,7 +39,7 @@
   --color-warning-muted: #fffbeb;
 
   /* Typography */
-  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
   --font-size-h1: 24px;
@@ -53,7 +53,7 @@
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
 
-  --line-height-tight: 1.25;
+  --line-height-tight: 1.3;
   --line-height-body: 1.5;
   --line-height-relaxed: 1.6;
 
@@ -64,32 +64,32 @@
   --space-4: 32px;
   --space-half: 4px;
 
-  /* Radius — 8px system */
-  --radius-sm: 8px;
-  --radius-md: 8px;
+  /* Radius */
+  --radius-sm: 10px;
+  --radius-md: 12px;
   --radius-lg: 12px;
-  --radius-xl: 12px;
-  --radius-panel: 12px;
+  --radius-xl: 16px;
+  --radius-panel: 16px;
   --radius-full: 999px;
 
-  /* Shadows — soft elevation only */
-  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-sm: 0 2px 6px rgba(15, 23, 42, 0.05);
-  --shadow-md: 0 4px 16px rgba(15, 23, 42, 0.07);
-  --shadow-lg: 0 8px 24px rgba(15, 23, 42, 0.08);
-  --shadow-floating: 0 8px 24px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.06);
-  --shadow-focus: 0 0 0 3px var(--color-primary-muted);
+  /* Shadows */
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.03);
+  --shadow-sm: 0 8px 20px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 12px 30px rgba(15, 23, 42, 0.07);
+  --shadow-lg: 0 16px 44px rgba(15, 23, 42, 0.09);
+  --shadow-floating: 0 14px 36px rgba(15, 23, 42, 0.08), 0 1px 0 rgba(255, 255, 255, 0.6) inset;
+  --shadow-focus: 0 0 0 3px rgba(47, 107, 255, 0.14);
 
   /* Layout */
-  --layout-left-w: 300px;
+  --layout-left-w: 316px;
   --layout-right-w: 420px;
-  --layout-top-h: 56px;
+  --layout-top-h: 60px;
   --layout-mobile-nav-h: 56px;
 
   /* Canvas */
-  --color-canvas-bg: #eef0f3;
-  --color-canvas-grid: #e5e7eb;
-  --color-canvas-dot: rgba(107, 114, 128, 0.18);
+  --color-canvas-bg: #f3f6fb;
+  --color-canvas-grid: #dce6f7;
+  --color-canvas-dot: rgba(148, 163, 184, 0.28);
 
   /* Legacy aliases — keep existing var() references working */
   --bg: var(--color-bg);

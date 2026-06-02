@@ -21,12 +21,16 @@ const TIPS = {
 
 export default function FlowInspectorEmpty({ lang = 'ru', onFocusCanvas }) {
   const tips = TIPS[lang] || TIPS.ru;
-  const title = lang === 'en' ? 'Nothing selected' : lang === 'uk' ? 'Нічого не обрано' : 'Шаг не выбран';
-  const subtitle = lang === 'en'
-    ? 'Pick any block on the canvas to edit its content, logic, and settings here.'
+  const title = lang === 'en'
+    ? 'Select a block on the flow'
     : lang === 'uk'
-      ? 'Оберіть блок на полотні, щоб редагувати контент, логіку та налаштування.'
-      : 'Выберите шаг на холсте — здесь появятся контент, логика и настройки.';
+      ? 'Оберіть блок у сценарії'
+      : 'Выберите блок на сценарии';
+  const subtitle = lang === 'en'
+    ? 'Settings will appear here.'
+    : lang === 'uk'
+      ? 'Налаштування зʼявляться тут.'
+      : 'Настройки появятся здесь';
 
   return (
     <motion.div
